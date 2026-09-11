@@ -472,9 +472,9 @@ SAMPLE_EXAM_ROOMS = pd.DataFrame([
 ])
 
 SAMPLE_EXAM_SUBJECTS = pd.DataFrame([
-    {"Môn thi": "Toán", "Khối áp dụng": 10, "Ngày thi": "15/09/2026", "Ca thi": "Sáng",
+    {"Môn thi": "Toán", "Lớp áp dụng": "10A1,11A1", "Ngày thi": "15/09/2026", "Ca thi": "Sáng",
      "Chế độ xếp": "Trộn theo khối (xáo giữa các lớp)"},
-    {"Môn thi": "Ngữ văn", "Khối áp dụng": 11, "Ngày thi": "15/09/2026", "Ca thi": "Chiều",
+    {"Môn thi": "Ngữ văn", "Lớp áp dụng": "11A1", "Ngày thi": "15/09/2026", "Ca thi": "Chiều",
      "Chế độ xếp": "Theo lớp (giữ nguyên lớp)"},
 ])
 
@@ -1233,10 +1233,12 @@ elif module == "🪑 Xếp Phòng Thi":
     st.markdown('<div class="section-card">', unsafe_allow_html=True)
     section_header(
         "3", "Môn thi & chế độ xếp phòng",
-        "<b>Khối áp dụng</b>: chỉ học sinh thuộc khối này (theo Lớp ở mục 1) mới được xếp cho môn "
-        "thi này. <b>Chế độ xếp</b>: \"Theo lớp\" giữ nguyên từng lớp (chỉ tách khi 1 lớp đông hơn "
-        "sức chứa 1 phòng); \"Trộn theo khối\" xáo học sinh từ các lớp khác nhau ngồi xen kẽ nhau "
-        "trong cùng phòng (hạn chế quay cóp).",
+        "<b>Lớp áp dụng</b>: liệt kê đúng các lớp thi môn này, cách nhau dấu phẩy (VD "
+        "<code>10A1,10A2,11CV</code>) — các lớp cùng khối vẫn có thể thi môn khác nhau (lớp "
+        "chuyên, lớp chọn môn...), nên ghi rõ lớp thay vì chỉ chọn khối. <b>Chế độ xếp</b>: "
+        "\"Theo lớp\" giữ nguyên từng lớp (chỉ tách khi 1 lớp đông hơn sức chứa 1 phòng); "
+        "\"Trộn theo khối\" xáo học sinh từ các lớp khác nhau ngồi xen kẽ nhau trong cùng phòng "
+        "(hạn chế quay cóp).",
     )
     excel_io_row("exam_subjects", "Mon_thi")
     st.session_state.exam_subjects = st.data_editor(
@@ -1244,7 +1246,9 @@ elif module == "🪑 Xếp Phòng Thi":
         key="editor_exam_subjects",
         column_config={
             "Môn thi": st.column_config.TextColumn(required=True),
-            "Khối áp dụng": st.column_config.NumberColumn(min_value=1, max_value=12, step=1, required=True),
+            "Lớp áp dụng": st.column_config.TextColumn(
+                required=True, help="Các lớp thi môn này, cách nhau dấu phẩy. VD: 10A1,10A2,11CV",
+            ),
             "Ngày thi": st.column_config.TextColumn(help="VD: 15/09/2026", required=True),
             "Ca thi": st.column_config.SelectboxColumn(options=["Sáng", "Chiều", "Tối"], required=True),
             "Chế độ xếp": st.column_config.SelectboxColumn(
@@ -1269,27 +1273,36 @@ elif module == "🪑 Xếp Phòng Thi":
             loi_xep_phong.append("Chưa khai báo phòng thi nào ở mục 2.")
 
         subjects_df = st.session_state.exam_subjects.dropna(
-            subset=["Môn thi", "Khối áp dụng", "Ngày thi", "Ca thi", "Chế độ xếp"]
+            subset=["Môn thi", "Lớp áp dụng", "Ngày thi", "Ca thi", "Chế độ xếp"]
         )
         if subjects_df.empty:
             loi_xep_phong.append("Chưa khai báo môn thi nào ở mục 3.")
 
         for _, mon in subjects_df.iterrows():
-            khoi_ap_dung = int(mon["Khối áp dụng"])
+            lop_ap_dung = [l.strip() for l in str(mon["Lớp áp dụng"]).split(",") if l.strip()]
             che_do = "tron_khoi" if "Trộn" in str(mon["Chế độ xếp"]) else "theo_lop"
 
-            hs_cua_khoi = []
+            lop_khong_ton_tai = [l for l in lop_ap_dung if l not in class_names_for_exam]
+            if lop_khong_ton_tai:
+                loi_xep_phong.append(
+                    f"Môn '{mon['Môn thi']}': lớp {lop_khong_ton_tai} chưa khai báo ở bảng "
+                    f"Lớp học (tab 🏢) — kiểm tra lại tên lớp cho đúng."
+                )
+                continue
+
+            hs_dang_ky = []
             for _, hs in students_df.iterrows():
                 lop = hs["Lớp"]
-                if class_to_grade.get(lop) == khoi_ap_dung:
-                    hs_cua_khoi.append({
+                if lop in lop_ap_dung:
+                    hs_dang_ky.append({
                         "ma_hs": str(hs.get("Mã HS (không bắt buộc)") or "").strip(),
                         "ho_ten": hs["Họ và tên"], "lop": lop,
+                        "khoi": int(class_to_grade.get(lop) or 0),
                     })
 
-            if not hs_cua_khoi:
+            if not hs_dang_ky:
                 loi_xep_phong.append(
-                    f"Môn '{mon['Môn thi']}': không có học sinh nào thuộc Khối {khoi_ap_dung} "
+                    f"Môn '{mon['Môn thi']}': không có học sinh nào thuộc lớp {lop_ap_dung} "
                     f"trong danh sách dự thi."
                 )
                 continue
@@ -1297,10 +1310,10 @@ elif module == "🪑 Xếp Phòng Thi":
             if not rooms_list_all:
                 continue
 
-            ket_qua, thieu = er.xep_phong_thi(hs_cua_khoi, rooms_list_all, khoi_ap_dung, che_do)
+            ket_qua, thieu = er.xep_phong_thi(hs_dang_ky, rooms_list_all, che_do)
             ket_qua_moi[mon["Môn thi"]] = {
                 "rooms": ket_qua, "thieu": thieu,
-                "ngay": mon["Ngày thi"], "ca": mon["Ca thi"], "khoi": khoi_ap_dung,
+                "ngay": mon["Ngày thi"], "ca": mon["Ca thi"], "lop_ap_dung": lop_ap_dung,
             }
 
         if loi_xep_phong:
@@ -1316,6 +1329,10 @@ elif module == "🪑 Xếp Phòng Thi":
 
         mon_chon = st.selectbox("Chọn môn thi để xem", options=list(st.session_state.exam_results.keys()))
         entry = st.session_state.exam_results[mon_chon]
+        st.caption(
+            f"📚 Môn: **{mon_chon}** · Áp dụng lớp: **{', '.join(entry['lop_ap_dung'])}** · "
+            f"Ngày thi: {entry['ngay']} · Ca: {entry['ca']}"
+        )
 
         if entry["thieu"]:
             st.warning(
