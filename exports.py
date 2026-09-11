@@ -382,3 +382,79 @@ def exam_rooms_to_pdf_bytes(
 
     doc.build(elements)
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------
+# PDF — bảng phân công dạy thay
+# ---------------------------------------------------------------------
+def substitution_to_pdf_bytes(
+    ngay_hien_thi: str, ds_phan_cong: list[dict], school_name: str = "",
+) -> bytes:
+    """ds_phan_cong: list[dict] {"tiet", "lop", "mon", "gv_nghi", "gv_thay"}"""
+    _ensure_fonts()
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        leftMargin=1.6 * cm, rightMargin=1.6 * cm, topMargin=1.4 * cm, bottomMargin=1.4 * cm,
+    )
+    usable_width = doc.width
+    base_styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        "TitleVN3", parent=base_styles["Title"], fontName="VN-Bold",
+        fontSize=17, textColor=NAVY_HEX, spaceAfter=2, alignment=1,
+    )
+    sub_style = ParagraphStyle(
+        "SubVN3", parent=base_styles["Normal"], fontName="VN",
+        fontSize=10.5, textColor=TEXT_GRAY_HEX, spaceAfter=10, alignment=1,
+    )
+    cell_style = ParagraphStyle(
+        "CellVN3", parent=base_styles["Normal"], fontName="VN",
+        fontSize=9.5, leading=12, textColor=TEXT_GRAY_HEX,
+    )
+    header_cell_style = ParagraphStyle(
+        "HeaderCellVN3", parent=cell_style, fontName="VN-Bold",
+        textColor=colors.white, alignment=1,
+    )
+
+    elements = []
+    if school_name:
+        elements.append(Paragraph(school_name, sub_style))
+    elements.append(Paragraph("BẢNG PHÂN CÔNG DẠY THAY", title_style))
+    elements.append(Paragraph(f"Ngày: {ngay_hien_thi}", sub_style))
+
+    header_row = [
+        Paragraph("Tiết", header_cell_style),
+        Paragraph("Lớp", header_cell_style),
+        Paragraph("Môn", header_cell_style),
+        Paragraph("GV nghỉ", header_cell_style),
+        Paragraph("GV dạy thay", header_cell_style),
+    ]
+    data_rows = [header_row]
+    for pc in ds_phan_cong:
+        data_rows.append([
+            Paragraph(str(pc["tiet"]), cell_style),
+            Paragraph(pc["lop"], cell_style),
+            Paragraph(pc["mon"], cell_style),
+            Paragraph(pc["gv_nghi"], cell_style),
+            Paragraph(pc.get("gv_thay") or "— (chưa phân công) —", cell_style),
+        ])
+
+    col_widths = [
+        usable_width * 0.10, usable_width * 0.16, usable_width * 0.20,
+        usable_width * 0.27, usable_width * 0.27,
+    ]
+    table = Table(data_rows, colWidths=col_widths, repeatRows=1)
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), NAVY_HEX),
+        ("GRID", (0, 0), (-1, -1), 0.6, MID_GRAY_HEX),
+        ("BOX", (0, 0), (-1, -1), 1.0, NAVY_HEX),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, LIGHT_GRAY_HEX]),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    elements.append(table)
+
+    doc.build(elements)
+    return buf.getvalue()
