@@ -222,7 +222,7 @@ def exam_rooms_to_excel_bytes(mon_thi: str, ngay_thi: str, ca_thi: str, ket_qua:
         tong_hop_rows = []
         for phong in ket_qua:
             df = pd.DataFrame([
-                {"SBD": hs["sbd"], "Họ và tên": hs["ho_ten"], "Lớp": hs["lop"]}
+                {"SBD": hs["sbd"], "Họ và tên": hs["ho_ten"], "Lớp": hs["lop"], "Môn thi": mon_thi}
                 for hs in phong["hoc_sinh"]
             ])
             sheet_name = str(phong["ten_phong"])[:31]
@@ -237,10 +237,11 @@ def exam_rooms_to_excel_bytes(mon_thi: str, ngay_thi: str, ca_thi: str, ket_qua:
             ws.column_dimensions["A"].width = 14
             ws.column_dimensions["B"].width = 28
             ws.column_dimensions["C"].width = 14
+            ws.column_dimensions["D"].width = 18
             for hs in phong["hoc_sinh"]:
                 tong_hop_rows.append({
                     "Phòng thi": phong["ten_phong"], "SBD": hs["sbd"],
-                    "Họ và tên": hs["ho_ten"], "Lớp": hs["lop"],
+                    "Họ và tên": hs["ho_ten"], "Lớp": hs["lop"], "Môn thi": mon_thi,
                 })
 
         if tong_hop_rows:
@@ -251,7 +252,7 @@ def exam_rooms_to_excel_bytes(mon_thi: str, ngay_thi: str, ca_thi: str, ket_qua:
                 cell.fill = header_fill
                 cell.font = header_font
                 cell.alignment = Alignment(horizontal="center")
-            for col, w in zip("ABCD", [16, 14, 28, 14]):
+            for col, w in zip("ABCDE", [16, 14, 28, 14, 18]):
                 ws2.column_dimensions[col].width = w
     return buf.getvalue()
 
