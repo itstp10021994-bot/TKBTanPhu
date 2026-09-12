@@ -260,6 +260,19 @@ def exam_rooms_to_excel_bytes(mon_thi: str, ngay_thi: str, ca_thi: str, ket_qua:
 # ---------------------------------------------------------------------
 # PDF — danh sách theo phòng thi + thẻ báo danh
 # ---------------------------------------------------------------------
+def _sap_xep_luoi(hoc_sinh_trong_phong: list[dict], so_cot: int) -> list[list]:
+    """Bản sao nhỏ gọn của exam_rooms.sap_xep_so_do_cho_ngoi — tách riêng ở
+    đây để exports.py không cần phụ thuộc chéo vào module exam_rooms."""
+    so_cot = max(int(so_cot), 1)
+    hang_ghe = []
+    for i in range(0, len(hoc_sinh_trong_phong), so_cot):
+        nhom = list(hoc_sinh_trong_phong[i:i + so_cot])
+        while len(nhom) < so_cot:
+            nhom.append(None)
+        hang_ghe.append(nhom)
+    return hang_ghe
+
+
 def exam_rooms_to_pdf_bytes(
     mon_thi: str, ngay_thi: str, ca_thi: str, ket_qua: list[dict], school_name: str = "",
 ) -> bytes:
@@ -338,6 +351,56 @@ def exam_rooms_to_pdf_bytes(
             ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
         ]))
         elements.append(table)
+
+        # ---------------- Sơ đồ chỗ ngồi ----------------
+        so_cot = int(phong.get("so_cot") or 4)
+        hang_ghe = _sap_xep_luoi(phong["hoc_sinh"], so_cot)
+        if hang_ghe:
+            elements.append(Spacer(1, 12))
+            elements.append(Paragraph("Sơ đồ chỗ ngồi", room_title_style))
+
+            board_style = ParagraphStyle(
+                "BoardVN", parent=base_styles["Normal"], fontName="VN-Bold",
+                fontSize=10, textColor=colors.white, alignment=1,
+            )
+            seat_sbd_style = ParagraphStyle(
+                "SeatSbdVN", parent=base_styles["Normal"], fontName="VN-Bold",
+                fontSize=10.5, textColor=NAVY_HEX, alignment=1,
+            )
+            seat_name_style = ParagraphStyle(
+                "SeatNameVN", parent=base_styles["Normal"], fontName="VN",
+                fontSize=7.5, textColor=TEXT_GRAY_HEX, alignment=1, leading=9,
+            )
+
+            board_row = [Paragraph("BẢNG / BỤC GIẢNG", board_style)]
+            seat_rows = [board_row]
+            for hang in hang_ghe:
+                row_cells = []
+                for o in hang:
+                    if o is None:
+                        row_cells.append(Paragraph("", seat_name_style))
+                    else:
+                        noi_dung = f'<b>{o["sbd"]}</b><br/><font size=7.5>{o["ho_ten"]}</font>'
+                        row_cells.append(Paragraph(noi_dung, seat_sbd_style))
+                seat_rows.append(row_cells)
+
+            seat_col_w = usable_width / so_cot
+            seat_table = Table(
+                seat_rows, colWidths=[seat_col_w] * so_cot,
+                rowHeights=[0.8 * cm] + [1.35 * cm] * len(hang_ghe),
+            )
+            seat_style_cmds = [
+                ("SPAN", (0, 0), (-1, 0)),
+                ("BACKGROUND", (0, 0), (-1, 0), NAVY_HEX),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("BOX", (0, 1), (-1, -1), 1.0, NAVY_HEX),
+                ("INNERGRID", (0, 1), (-1, -1), 0.75, MID_GRAY_HEX),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]
+            seat_table.setStyle(TableStyle(seat_style_cmds))
+            elements.append(seat_table)
+
         if idx < len(ket_qua) - 1:
             elements.append(PageBreak())
 

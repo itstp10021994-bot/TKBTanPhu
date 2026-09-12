@@ -9,21 +9,25 @@ thuật toán chia đơn giản + round-robin để trộn lớp, không dùng C
 from __future__ import annotations
 
 
-def sinh_sbd_tu_dong(danh_sach_hs: list[dict], khoi: int) -> list[dict]:
+def sinh_sbd_tu_dong(danh_sach_hs: list[dict]) -> list[dict]:
     """Với mỗi học sinh chưa có 'ma_hs' (rỗng/None), sinh SBD dạng
-    {khoi:02d}{stt:04d} — VD khối 10, học sinh thứ 7 -> '100007'.
+    {khoi:02d}{stt:04d} — VD khối 10, học sinh thứ 7 của khối đó -> '100007'.
+    Mỗi học sinh CẦN có sẵn khoá 'khoi' (int) — vì 1 môn thi giờ có thể áp
+    dụng cho các lớp thuộc nhiều khối khác nhau, số đếm STT được đếm RIÊNG
+    cho từng khối để SBD không bị lẫn lộn.
     Học sinh đã có sẵn 'ma_hs' thì dùng luôn mã đó làm SBD.
     Trả về list mới (không sửa list gốc), mỗi phần tử có thêm khoá 'sbd'.
     """
     ket_qua = []
-    stt = 0
+    dem_theo_khoi: dict[int, int] = {}
     for hs in danh_sach_hs:
         ma_hs = (hs.get("ma_hs") or "").strip()
         if ma_hs:
             sbd = ma_hs
         else:
-            stt += 1
-            sbd = f"{khoi:02d}{stt:04d}"
+            khoi = int(hs.get("khoi") or 0)
+            dem_theo_khoi[khoi] = dem_theo_khoi.get(khoi, 0) + 1
+            sbd = f"{khoi:02d}{dem_theo_khoi[khoi]:04d}"
         ket_qua.append({**hs, "sbd": sbd})
     return ket_qua
 
@@ -80,18 +84,35 @@ def chia_vao_phong(danh_sach_hs_theo_thu_tu: list[dict], danh_sach_phong: list[d
     return ket_qua, con_thieu
 
 
-def xep_phong_thi(
-    danh_sach_hs: list[dict], danh_sach_phong: list[dict], khoi: int, che_do: str
-):
+def sap_xep_so_do_cho_ngoi(hoc_sinh_trong_phong: list[dict], so_cot: int) -> list[list]:
+    """Chia danh sách học sinh ĐÃ Ở TRONG 1 PHÒNG thành lưới chỗ ngồi theo
+    số cột bàn, xếp lần lượt trái → phải, hàng trên → hàng dưới (hàng đầu
+    gần bảng/bục giảng nhất).
+
+    Trả về list các hàng ghế; mỗi hàng là list các ô, mỗi ô là dict học
+    sinh hoặc None nếu ô đó trống (phòng không lấp đầy hết lưới).
+    """
+    so_cot = max(int(so_cot), 1)
+    hang_ghe = []
+    for i in range(0, len(hoc_sinh_trong_phong), so_cot):
+        nhom = list(hoc_sinh_trong_phong[i:i + so_cot])
+        while len(nhom) < so_cot:
+            nhom.append(None)
+        hang_ghe.append(nhom)
+    return hang_ghe
+
+
+def xep_phong_thi(danh_sach_hs: list[dict], danh_sach_phong: list[dict], che_do: str):
     """Hàm tổng hợp: sinh SBD -> sắp thứ tự theo chế độ -> chia vào phòng.
 
-    danh_sach_hs: list[dict] mỗi phần tử {"ma_hs": str|"", "ho_ten": str, "lop": str}
+    danh_sach_hs: list[dict] mỗi phần tử {"ma_hs": str|"", "ho_ten": str,
+    "lop": str, "khoi": int} — bắt buộc có "khoi" để sinh SBD đúng khối.
     danh_sach_phong: list[dict] {"ten_phong": str, "suc_chua": int}
     che_do: "theo_lop" | "tron_khoi"
 
     Trả về (ket_qua, con_thieu) — xem chia_vao_phong().
     Mỗi học sinh trong kết quả có thêm 'sbd' và giữ nguyên 'lop'.
     """
-    co_sbd = sinh_sbd_tu_dong(danh_sach_hs, khoi)
+    co_sbd = sinh_sbd_tu_dong(danh_sach_hs)
     da_sap = sap_xep_thu_tu_hoc_sinh(co_sbd, che_do)
     return chia_vao_phong(da_sap, danh_sach_phong)

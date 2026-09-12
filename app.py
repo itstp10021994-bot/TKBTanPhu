@@ -174,6 +174,29 @@ html, body, [class*="css"]{ font-family:"Segoe UI","Helvetica Neue",Arial,sans-s
     box-shadow:0 4px 12px -6px rgba(27,122,69,0.35);
 }
 
+/* ---- Sơ đồ chỗ ngồi ---- */
+.seating-chart{ margin:10px 0 20px 0; }
+.board-label{
+    text-align:center; background:linear-gradient(145deg, var(--navy-800), var(--navy-900));
+    color:#fff !important; padding:10px; border-radius:10px; margin-bottom:16px;
+    font-weight:800; letter-spacing:1.5px; font-size:0.85rem;
+    box-shadow:0 6px 14px -6px rgba(18,41,75,0.4);
+}
+.seat-row{ display:flex; gap:10px; margin-bottom:10px; justify-content:center; flex-wrap:wrap; }
+.seat{
+    width:104px; min-height:64px; border-radius:10px; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; text-align:center; padding:6px;
+}
+.seat.filled{
+    background:linear-gradient(180deg, #FFFFFF 0%, #FBFCFE 100%);
+    border:1.5px solid var(--navy-700);
+    box-shadow:0 4px 10px -4px rgba(18,41,75,0.30), 0 1px 0 rgba(255,255,255,0.7) inset;
+}
+.seat.empty{ background:var(--gray-100); border:1.5px dashed var(--gray-200); }
+.seat-sbd{ font-weight:800; color:var(--navy-800) !important; font-size:0.86rem; }
+.seat-name{ color:var(--text-900) !important; font-size:0.72rem; line-height:1.2; margin-top:2px; }
+.seat-class{ color:var(--gray-500) !important; font-size:0.68rem; margin-top:1px; }
+
 /* ---- Footer ---- */
 .app-footer{
     text-align:center; color:var(--gray-500); font-size:0.82rem;
@@ -308,6 +331,33 @@ def gio_tiet_label(khoi, tiet: int, grade_times_df: pd.DataFrame) -> str:
 def period_label(khoi, tiet: int, grade_times_df: pd.DataFrame) -> str:
     gio = gio_tiet_label(khoi, tiet, grade_times_df)
     return f"Tiết {tiet} ({gio})" if gio else f"Tiết {tiet}"
+
+
+def ve_so_do_cho_ngoi_html(hang_ghe: list[list]) -> str:
+    """hang_ghe: list các hàng ghế, mỗi hàng là list ô (dict hs hoặc None).
+    Trả về chuỗi HTML vẽ sơ đồ lớp học — bảng/bục giảng ở trên cùng, các
+    hàng bàn xếp dần xuống dưới."""
+    hang_html = []
+    for hang in hang_ghe:
+        o_html = []
+        for o in hang:
+            if o is None:
+                o_html.append('<div class="seat empty"></div>')
+            else:
+                o_html.append(
+                    f'<div class="seat filled">'
+                    f'<div class="seat-sbd">{o["sbd"]}</div>'
+                    f'<div class="seat-name">{o["ho_ten"]}</div>'
+                    f'<div class="seat-class">{o.get("lop", "")}</div>'
+                    f'</div>'
+                )
+        hang_html.append(f'<div class="seat-row">{"".join(o_html)}</div>')
+    return (
+        '<div class="seating-chart">'
+        '<div class="board-label">BẢNG / BỤC GIẢNG</div>'
+        + "".join(hang_html) +
+        '</div>'
+    )
 
 
 def ngay_dau_tuan_mac_dinh() -> date:
@@ -466,9 +516,9 @@ SAMPLE_EXAM_STUDENTS = pd.DataFrame([
 ])
 
 SAMPLE_EXAM_ROOMS = pd.DataFrame([
-    {"Tên phòng": "P101", "Sức chứa": 24},
-    {"Tên phòng": "P102", "Sức chứa": 24},
-    {"Tên phòng": "P103", "Sức chứa": 24},
+    {"Tên phòng": "P101", "Sức chứa": 24, "Số cột bàn": 4},
+    {"Tên phòng": "P102", "Sức chứa": 24, "Số cột bàn": 4},
+    {"Tên phòng": "P103", "Sức chứa": 24, "Số cột bàn": 4},
 ])
 
 SAMPLE_EXAM_SUBJECTS = pd.DataFrame([
@@ -1218,7 +1268,11 @@ elif module == "🪑 Xếp Phòng Thi":
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="section-card">', unsafe_allow_html=True)
-    section_header("2", "Danh sách phòng thi")
+    section_header(
+        "2", "Danh sách phòng thi",
+        "<b>Số cột bàn</b>: dùng để vẽ sơ đồ chỗ ngồi (chia học sinh vào lưới theo đúng số cột "
+        "bàn thật của phòng, xếp từ hàng gần bảng xuống dần).",
+    )
     excel_io_row("exam_rooms", "Danh_sach_phong_thi")
     st.session_state.exam_rooms = st.data_editor(
         st.session_state.exam_rooms, num_rows="dynamic", use_container_width=True,
@@ -1226,6 +1280,10 @@ elif module == "🪑 Xếp Phòng Thi":
         column_config={
             "Tên phòng": st.column_config.TextColumn(required=True),
             "Sức chứa": st.column_config.NumberColumn(min_value=1, max_value=100, step=1, required=True),
+            "Số cột bàn": st.column_config.NumberColumn(
+                min_value=1, max_value=12, step=1, required=True,
+                help="Số cột bàn thật trong phòng, VD phòng 24 chỗ xếp 4 cột x 6 hàng thì nhập 4.",
+            ),
         },
     )
     st.markdown('</div>', unsafe_allow_html=True)
@@ -1269,6 +1327,10 @@ elif module == "🪑 Xếp Phòng Thi":
             {"ten_phong": r["Tên phòng"], "suc_chua": int(r["Sức chứa"])}
             for _, r in st.session_state.exam_rooms.dropna(subset=["Tên phòng", "Sức chứa"]).iterrows()
         ]
+        room_so_cot = {
+            r["Tên phòng"]: int(r["Số cột bàn"]) if pd.notna(r.get("Số cột bàn")) else 4
+            for _, r in st.session_state.exam_rooms.dropna(subset=["Tên phòng"]).iterrows()
+        }
         if not rooms_list_all:
             loi_xep_phong.append("Chưa khai báo phòng thi nào ở mục 2.")
 
@@ -1311,6 +1373,8 @@ elif module == "🪑 Xếp Phòng Thi":
                 continue
 
             ket_qua, thieu = er.xep_phong_thi(hs_dang_ky, rooms_list_all, che_do)
+            for phong in ket_qua:
+                phong["so_cot"] = room_so_cot.get(phong["ten_phong"], 4)
             ket_qua_moi[mon["Môn thi"]] = {
                 "rooms": ket_qua, "thieu": thieu,
                 "ngay": mon["Ngày thi"], "ca": mon["Ca thi"], "lop_ap_dung": lop_ap_dung,
@@ -1373,6 +1437,15 @@ elif module == "🪑 Xếp Phòng Thi":
                         for hs in r["hoc_sinh"]
                     ])
                     st.dataframe(df_show, use_container_width=True, hide_index=True)
+
+                    st.markdown(
+                        '<div class="section-title" style="margin-top:18px;">'
+                        '<h3>🪑 Sơ đồ chỗ ngồi</h3></div>',
+                        unsafe_allow_html=True,
+                    )
+                    so_cot_hien_thi = r.get("so_cot", 4)
+                    hang_ghe = er.sap_xep_so_do_cho_ngoi(r["hoc_sinh"], so_cot_hien_thi)
+                    st.markdown(ve_so_do_cho_ngoi_html(hang_ghe), unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------
