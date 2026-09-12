@@ -1375,6 +1375,7 @@ elif module == "🪑 Xếp Phòng Thi":
             ket_qua, thieu = er.xep_phong_thi(hs_dang_ky, rooms_list_all, che_do)
             for phong in ket_qua:
                 phong["so_cot"] = room_so_cot.get(phong["ten_phong"], 4)
+                phong["hoc_sinh_cho_ngoi"] = er.xao_tron_cho_ngoi(phong["hoc_sinh"])
             ket_qua_moi[mon["Môn thi"]] = {
                 "rooms": ket_qua, "thieu": thieu,
                 "ngay": mon["Ngày thi"], "ca": mon["Ca thi"], "lop_ap_dung": lop_ap_dung,
@@ -1406,13 +1407,13 @@ elif module == "🪑 Xếp Phòng Thi":
                 + ". Vào mục 2 thêm phòng thi hoặc tăng sức chứa rồi xếp lại."
             )
 
-        exp1, exp2, _ = st.columns([1, 1, 2])
+        exp1, exp2, exp3 = st.columns([1, 1, 1])
         with exp1:
             pdf_bytes_exam = exam_rooms_to_pdf_bytes(
                 mon_chon, entry["ngay"], entry["ca"], entry["rooms"], school_name=school_name,
             )
             st.download_button(
-                "📄 Xuất PDF (danh sách + thẻ báo danh)", data=pdf_bytes_exam,
+                "📄 Xuất PDF (danh sách + sơ đồ)", data=pdf_bytes_exam,
                 file_name=f"phong_thi_{slugify(mon_chon)}.pdf", mime="application/pdf",
                 type="primary", use_container_width=True, key=f"pdf_exam_{mon_chon}",
             )
@@ -1424,6 +1425,15 @@ elif module == "🪑 Xếp Phòng Thi":
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True, key=f"xls_exam_{mon_chon}",
             )
+        with exp3:
+            if st.button(
+                "🔀 Xáo lại chỗ ngồi", use_container_width=True, key=f"xao_lai_{mon_chon}",
+                help="Chỉ xáo lại VỊ TRÍ NGỒI ngẫu nhiên trong từng phòng — không đổi danh sách "
+                     "phòng/SBD đã xếp.",
+            ):
+                for phong in entry["rooms"]:
+                    phong["hoc_sinh_cho_ngoi"] = er.xao_tron_cho_ngoi(phong["hoc_sinh"])
+                st.rerun()
 
         st.write("")
         if not entry["rooms"]:
@@ -1440,11 +1450,12 @@ elif module == "🪑 Xếp Phòng Thi":
 
                     st.markdown(
                         '<div class="section-title" style="margin-top:18px;">'
-                        '<h3>🪑 Sơ đồ chỗ ngồi</h3></div>',
+                        '<h3>🪑 Sơ đồ chỗ ngồi (xếp ngẫu nhiên theo SBD)</h3></div>',
                         unsafe_allow_html=True,
                     )
                     so_cot_hien_thi = r.get("so_cot", 4)
-                    hang_ghe = er.sap_xep_so_do_cho_ngoi(r["hoc_sinh"], so_cot_hien_thi)
+                    hs_cho_so_do = r.get("hoc_sinh_cho_ngoi") or r["hoc_sinh"]
+                    hang_ghe = er.sap_xep_so_do_cho_ngoi(hs_cho_so_do, so_cot_hien_thi)
                     st.markdown(ve_so_do_cho_ngoi_html(hang_ghe), unsafe_allow_html=True)
 
 

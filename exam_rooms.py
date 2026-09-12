@@ -8,6 +8,8 @@ thuật toán chia đơn giản + round-robin để trộn lớp, không dùng C
 
 from __future__ import annotations
 
+import random
+
 
 def sinh_sbd_tu_dong(danh_sach_hs: list[dict]) -> list[dict]:
     """Với mỗi học sinh chưa có 'ma_hs' (rỗng/None), sinh SBD dạng
@@ -82,6 +84,15 @@ def chia_vao_phong(danh_sach_hs_theo_thu_tu: list[dict], danh_sach_phong: list[d
 
     con_thieu = danh_sach_hs_theo_thu_tu[idx:] if idx < tong_hs else []
     return ket_qua, con_thieu
+
+
+def xao_tron_cho_ngoi(hoc_sinh_trong_phong: list[dict]) -> list[dict]:
+    """Trả về 1 bản SAO đã xáo trộn ngẫu nhiên thứ tự học sinh trong 1
+    phòng — dùng riêng cho SƠ ĐỒ CHỖ NGỒI, không ảnh hưởng danh sách phòng
+    thi gốc (danh sách vẫn giữ thứ tự ổn định để dễ dò tên/ký tên)."""
+    ban_sao = list(hoc_sinh_trong_phong)
+    random.shuffle(ban_sao)
+    return ban_sao
 
 
 def sap_xep_so_do_cho_ngoi(hoc_sinh_trong_phong: list[dict], so_cot: int) -> list[list]:

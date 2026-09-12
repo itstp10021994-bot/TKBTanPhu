@@ -354,10 +354,11 @@ def exam_rooms_to_pdf_bytes(
 
         # ---------------- Sơ đồ chỗ ngồi ----------------
         so_cot = int(phong.get("so_cot") or 4)
-        hang_ghe = _sap_xep_luoi(phong["hoc_sinh"], so_cot)
+        hs_cho_so_do = phong.get("hoc_sinh_cho_ngoi") or phong["hoc_sinh"]
+        hang_ghe = _sap_xep_luoi(hs_cho_so_do, so_cot)
         if hang_ghe:
             elements.append(Spacer(1, 12))
-            elements.append(Paragraph("Sơ đồ chỗ ngồi", room_title_style))
+            elements.append(Paragraph("Sơ đồ chỗ ngồi (xếp ngẫu nhiên theo SBD)", room_title_style))
 
             board_style = ParagraphStyle(
                 "BoardVN", parent=base_styles["Normal"], fontName="VN-Bold",
