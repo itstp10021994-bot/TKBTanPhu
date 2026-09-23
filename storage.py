@@ -44,6 +44,7 @@ BANG_DU_LIEU = {
     "exam_students": "HS_du_thi",
     "exam_rooms": "Phong_thi",
     "exam_subjects": "Mon_thi",
+    "exam_proctors": "Coi_thi",
 }
 # Các giá trị đơn / cấu hình
 GIA_TRI_CAU_HINH = [

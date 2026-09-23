@@ -1,12 +1,38 @@
 # Đăng nhập & phân quyền
 
-| Chức năng | admin | user |
+| Chức năng | admin | user (giáo viên) |
 |---|---|---|
-| 📅 Thời khoá biểu | Nhập liệu, xếp lịch, xuất file | Xem & xuất PDF/Excel bản đã công bố |
-| 🪑 Phòng thi | Nhập liệu, xếp phòng, xuất file | Xem & xuất PDF/Excel bản đã công bố |
-| 🔄 Dạy thay | Phân công, lưu, xoá | Xem & xuất PDF |
-| ☁️ Lưu trữ SharePoint | Lưu / tải / đồng bộ List | — |
-| 👥 Tài khoản & Công bố | Công bố, xem cấu hình đăng nhập | — |
+| 📅 Thời khoá biểu (toàn trường) | Nhập liệu, xếp lịch, xuất file | — |
+| 🪑 Phòng thi + phân công coi thi | Nhập liệu, xếp phòng, phân công giám thị | — |
+| 🔄 Dạy thay | Phân công, lưu, xoá | — |
+| ☁️ Lưu trữ SharePoint, 👥 Tài khoản & Công bố | Có | — |
+| **👤 Lịch của tôi** | Xem trước lịch của bất kỳ GV nào | **TKB của mình, TKB lớp chủ nhiệm, lịch coi thi, lịch dạy thay liên quan** (xem & tải PDF/Excel) |
+
+## Cấp quyền admin — 2 cách
+1. **Trong Secrets** (admin gốc, luôn có hiệu lực):
+   ```toml
+   [phan_quyen]
+   admin_emails = ["it.stp@igcschool.edu.vn", "hieutruong@igcschool.edu.vn"]
+   ```
+2. **Trong app** (không cần sửa Secrets): module 📅 → tab **🏢 Tổ / GV / Lớp / Phòng**
+   → bảng **Giáo viên** → cột **Quyền** chọn `admin` cho giáo viên đó → module 👥
+   → **📢 Công bố**. Giáo viên đăng nhập lại là có quyền admin. Đổi về `user` + công
+   bố để thu hồi.
+
+## Gắn giáo viên với tài khoản đăng nhập
+Bảng **Giáo viên** có thêm 3 cột:
+- **Email**: email trường của giáo viên — khi đăng nhập bằng email này, trang
+  **👤 Lịch của tôi** hiện đúng lịch của giáo viên đó. Email có trong cột này cũng
+  được phép đăng nhập (kể cả khi không thuộc tên miền trong `domains`).
+- **Lớp chủ nhiệm**: giáo viên thấy thêm TKB của lớp này.
+- **Quyền**: `user` / `admin` (xem trên).
+
+Lịch coi thi: module 🪑 → sau khi xếp phòng → mục **4. Phân công coi thi** → chọn số
+giám thị/phòng, GV không tham gia → **🎲 Phân công coi thi tự động** (chia đều, không
+coi 2 phòng cùng buổi, tránh coi môn mình dạy) → sửa tay nếu cần → **📢 Công bố**.
+
+Mọi thay đổi (TKB, email, lớp chủ nhiệm, quyền, coi thi) chỉ đến với giáo viên sau
+khi admin **📢 Công bố**.
 
 Các cách đăng nhập (dùng 1 hoặc kết hợp):
 - **C. Mã gửi qua email trường** — giáo viên nhập email trường, nhận mã 6 số trong

@@ -80,6 +80,7 @@ def timetable_to_pdf_bytes(
     period_labels_by_class: dict | None = None,
     cell_times_by_class: dict | None = None,
     off_slots_by_class: dict | None = None,
+    tien_to_tieu_de: str = "Lớp",
 ) -> bytes:
     """cell_times_by_class: {class_id: {(day, period): "07:15–08:00"}} — giờ học
     ghi trong từng ô khi giờ của 1 tiết khác nhau giữa các ngày.
@@ -153,7 +154,7 @@ def timetable_to_pdf_bytes(
         elements.append(Spacer(1, 6))
 
     for idx, c in enumerate(classes):
-        elements.append(Paragraph(f"Lớp {c.name}", class_title_style))
+        elements.append(Paragraph(f"{tien_to_tieu_de} {c.name}".strip(), class_title_style))
 
         labels_for_c = (period_labels_by_class or {}).get(c.id, {})
         times_for_c = (cell_times_by_class or {}).get(c.id, {})
