@@ -551,6 +551,31 @@ class GraphSharePoint(DongBoList):
 # ---------------------------------------------------------------------
 # Cách 2: Power Automate (flow HTTP trigger ghi/đọc SharePoint)
 # ---------------------------------------------------------------------
+def _giai_thich_loi_xac_thuc_flow(r: requests.Response, url: str) -> str:
+    """Power Automate trả 401/403 khi chặn request ngay ở trigger (flow chưa
+    chạy). Đọc mã lỗi để chỉ đúng nguyên nhân."""
+    try:
+        loi = r.json().get("error", {})
+        ma, thong_diep = str(loi.get("code", "")), str(loi.get("message", ""))
+    except ValueError:
+        ma, thong_diep = "", r.text[:200]
+    chi_tiet = f" [mã lỗi: {ma or r.status_code}{' — ' + thong_diep[:200] if thong_diep else ''}]"
+    if "sig=" not in url:
+        goi_y = ("URL trong Secrets bị THIẾU phần '&sig=...' ở cuối (copy chưa hết). Copy lại toàn bộ "
+                 "HTTP URL của trigger bằng nút copy bên cạnh ô URL.")
+    elif "&amp;" in url:
+        goi_y = "URL trong Secrets chứa '&amp;' — thay tất cả '&amp;' bằng '&'."
+    elif any(k in ma for k in ("DirectApiAuthorizationRequired", "MisMatchingOAuthClaims", "OAuth",
+                               "Unauthorized", "AuthorizationFailed")) or "OAuth" in thong_diep:
+        goi_y = ("Trigger đang yêu cầu đăng nhập Microsoft. Mở flow → bấm vào trigger 'When a HTTP "
+                 "request is received' → mục 'Who can trigger the flow' chọn 'Anyone' → Save, rồi COPY "
+                 "LẠI HTTP URL (URL có thể đổi sau khi lưu) và cập nhật Secrets.")
+    else:
+        goi_y = ("Kiểm tra: (1) mục 'Who can trigger the flow' của trigger là 'Anyone'; (2) URL trong "
+                 "Secrets copy đủ, đúng flow; (3) flow đang Bật (On); (4) tài khoản có giấy phép Premium.")
+    return f"Power Automate từ chối yêu cầu ({r.status_code}). {goi_y}{chi_tiet}"
+
+
 class PowerAutomate(DongBoList):
     """save_url/list_url/load_url: lưu/tải FILE sao lưu (3 flow).
     sp_url: 1 flow duy nhất đọc/ghi SharePoint List bằng quyền của chính
@@ -584,7 +609,7 @@ class PowerAutomate(DongBoList):
                 "xem bước nào lỗi (thường do sai tên List/cột hoặc thiếu bước Response)."
             )
         if r.status_code in (401, 403):
-            raise LoiLuuTru(f"Flow từ chối ({r.status_code}) — kiểm tra lại URL trong Secrets / giấy phép Premium.")
+            raise LoiLuuTru(_giai_thich_loi_xac_thuc_flow(r, url))
         if r.status_code >= 300:
             raise LoiLuuTru(f"Flow Power Automate trả lỗi {r.status_code}: {r.text[:300]}")
         return r
