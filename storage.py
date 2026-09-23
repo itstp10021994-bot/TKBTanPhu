@@ -22,6 +22,8 @@ import base64
 import io
 import json
 import re
+import time
+import unicodedata
 from datetime import date, datetime
 from urllib.parse import quote, urlparse
 
@@ -49,6 +51,48 @@ GIA_TRI_CAU_HINH = [
     "cfg_school_name", "free_depts",
     "ct_period_spread", "ct_room_capacity", "ct_order_group", "ct_dept_free_session", "ct_no_gap",
 ]
+
+
+# Bảng nhập liệu -> tên SharePoint List mặc định (đổi được trong Secrets:
+# [sharepoint.lists] classes = "TenListKhac")
+LIST_MAC_DINH = {
+    "departments": "ToChuyenMon",
+    "teachers": "GiaoVien",
+    "classes": "LopHoc",
+    "rooms": "PhongDacBiet",
+    "activities": "MonHocPhanCong",
+    "grade_times": "GioHocTheoKhoi",
+    "exam_students": "DanhSachHocSinhThi",
+    "exam_rooms": "DanhSachPhongThi",
+    "exam_subjects": "MonThi",
+}
+# Cột kiểu số của ứng dụng (đọc từ List về thì đổi sang số)
+COT_SO = {"Khối", "Tiết", "Nhóm thứ tự", "Số tiết/tuần", "Số phòng cùng loại", "Sức chứa", "Số cột bàn"}
+
+
+def khoa_cot(ten) -> str:
+    """Khoá so khớp tên cột/list: bỏ phần trong ngoặc, bỏ dấu, chữ thường.
+    VD 'Họ và tên (không bắt buộc)' -> 'hovaten', 'Số tiết/tuần' -> 'sotiettuan'."""
+    ten = re.sub(r"\(.*?\)", "", str(ten or "")).replace("đ", "d").replace("Đ", "D")
+    ten = unicodedata.normalize("NFKD", ten)
+    return re.sub(r"[^a-z0-9]", "", "".join(c for c in ten if not unicodedata.combining(c)).lower())
+
+
+def _gia_tri_trong(v) -> bool:
+    if v is None:
+        return True
+    try:
+        if pd.isna(v):
+            return True
+    except (TypeError, ValueError):
+        pass
+    return str(v).strip() == ""
+
+
+def _chuoi_gon(v) -> str:
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v).strip()
 
 
 class LoiLuuTru(Exception):
@@ -167,6 +211,34 @@ def sang_excel(goi: dict) -> bytes:
     return buf.getvalue()
 
 
+def mau_excel_tao_list(bang_df: dict[str, pd.DataFrame], ten_list: dict[str, str]) -> bytes:
+    """File Excel để tạo SharePoint List bằng 'Danh sách mới → Từ Excel':
+    mỗi List 1 sheet, dữ liệu nằm trong 1 Excel Table cùng tên với List."""
+    from openpyxl import Workbook
+    from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.table import Table, TableStyleInfo
+
+    wb = Workbook()
+    wb.remove(wb.active)
+    for bang, df in bang_df.items():
+        ten = ten_list[bang]
+        ws = wb.create_sheet(ten[:31])
+        cot = [str(c) for c in df.columns]
+        ws.append(cot)
+        du_lieu = df.astype(object).where(pd.notna(df), None).values.tolist()
+        for dong in du_lieu or [[None] * len(cot)]:
+            ws.append([v.item() if hasattr(v, "item") else v for v in dong])
+        for j, c in enumerate(cot, start=1):
+            ws.column_dimensions[get_column_letter(j)].width = min(max(len(c) + 4, 12), 40)
+        bang_excel = Table(displayName=re.sub(r"[^A-Za-z0-9_]", "_", ten) or f"Bang_{bang}",
+                           ref=f"A1:{get_column_letter(len(cot))}{ws.max_row}")
+        bang_excel.tableStyleInfo = TableStyleInfo(name="TableStyleMedium2", showRowStripes=True)
+        ws.add_table(bang_excel)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
 def ten_file_an_toan(ten: str) -> str:
     """Bỏ các ký tự SharePoint không cho phép trong tên file."""
     ten = re.sub(r'[\\/:*?"<>|#%~&{}]+', "_", (ten or "").strip()).strip(". _")
@@ -187,6 +259,9 @@ class GraphSharePoint:
         self.thu_muc = str(cfg.get("folder") or "TKB_TanPhu").strip("/")
         self._token = None
         self._drive_id = None
+        self._site_id = None
+        self._lists = None
+        self._cot_cache: dict[str, list[dict]] = {}
 
     def _lay_token(self) -> str:
         if self._token:
@@ -212,8 +287,9 @@ class GraphSharePoint:
     def _goi(self, method: str, url: str, **kw) -> requests.Response:
         headers = kw.pop("headers", {})
         headers["Authorization"] = f"Bearer {self._lay_token()}"
-        r = requests.request(method, f"https://graph.microsoft.com/v1.0{url}", headers=headers,
-                             timeout=TIMEOUT, **kw)
+        if not url.startswith("https://"):
+            url = f"https://graph.microsoft.com/v1.0{url}"
+        r = requests.request(method, url, headers=headers, timeout=TIMEOUT, **kw)
         if r.status_code == 403:
             raise LoiLuuTru(
                 "Ứng dụng chưa được cấp quyền ghi vào site SharePoint này (403). Xem bước cấp "
@@ -221,15 +297,25 @@ class GraphSharePoint:
             )
         return r
 
-    def _drive(self) -> str:
-        if self._drive_id:
-            return self._drive_id
+    def _site(self) -> str:
+        if self._site_id:
+            return self._site_id
         u = urlparse(self.cfg["site_url"])
         duong_dan = u.path.rstrip("/")
+        # link dán từ trình duyệt có thể kèm /Lists/..., /SitePages/... -> chỉ giữ phần site
+        m = re.match(r"^(/(?:sites|teams|personal)/[^/]+)", duong_dan)
+        if m:
+            duong_dan = m.group(1)
         r = self._goi("GET", f"/sites/{u.hostname}:{duong_dan}" if duong_dan else f"/sites/{u.hostname}")
         if r.status_code != 200:
             raise LoiLuuTru(f"Không tìm thấy site SharePoint '{self.cfg['site_url']}' ({r.status_code}).")
-        site_id = r.json()["id"]
+        self._site_id = r.json()["id"]
+        return self._site_id
+
+    def _drive(self) -> str:
+        if self._drive_id:
+            return self._drive_id
+        site_id = self._site()
         ten_thu_vien = self.cfg.get("library")
         if ten_thu_vien:
             r = self._goi("GET", f"/sites/{site_id}/drives")
@@ -277,6 +363,172 @@ class GraphSharePoint:
         if r.status_code != 200:
             raise LoiLuuTru(f"Không tải được '{ten}.json' ({r.status_code}).")
         return json.loads(r.content.decode("utf-8-sig"))
+
+
+    # -----------------------------------------------------------------
+    # Đồng bộ trực tiếp với SharePoint Lists: mỗi bảng nhập liệu <-> 1 List,
+    # mỗi dòng của bảng = 1 item. Cột khớp theo TÊN HIỂN THỊ (không phân biệt
+    # dấu, hoa/thường, bỏ phần trong ngoặc) — VD cột list "So tiet tuan" khớp
+    # cột "Số tiết/tuần" của ứng dụng.
+    # -----------------------------------------------------------------
+    def ten_list(self, bang: str) -> str:
+        tuy_chinh = self.cfg.get("lists") or {}
+        return str(tuy_chinh.get(bang) or LIST_MAC_DINH[bang])
+
+    def _tim_list(self, ten: str) -> dict | None:
+        if self._lists is None:
+            self._lists, url = [], f"/sites/{self._site()}/lists?$select=id,displayName,name&$top=200"
+            while url:
+                r = self._goi("GET", url)
+                if r.status_code != 200:
+                    raise LoiLuuTru(f"Không đọc được danh sách List của site ({r.status_code}).")
+                self._lists += r.json().get("value", [])
+                url = r.json().get("@odata.nextLink")
+        k = khoa_cot(ten)
+        return next((l for l in self._lists
+                     if khoa_cot(l.get("displayName")) == k or khoa_cot(l.get("name")) == k), None)
+
+    def _cot_list(self, list_id: str) -> list[dict]:
+        if list_id not in self._cot_cache:
+            r = self._goi("GET", f"/sites/{self._site()}/lists/{list_id}/columns")
+            if r.status_code != 200:
+                raise LoiLuuTru(f"Không đọc được cột của List ({r.status_code}).")
+            self._cot_cache[list_id] = [
+                c for c in r.json().get("value", [])
+                if c.get("name") == "Title" or not (c.get("readOnly") or c.get("hidden"))
+            ]
+        return self._cot_cache[list_id]
+
+    def _ghep_cot(self, list_id: str, cot_app: list[str]) -> tuple[dict, list[str], dict]:
+        """-> ({cột app: cột list}, [cột app không có trong list], cột Title)."""
+        cot_list = self._cot_list(list_id)
+        ghep, thieu = {}, []
+        for c in cot_app:
+            k = khoa_cot(c)
+            khop = next((x for x in cot_list
+                         if khoa_cot(x.get("displayName")) == k or khoa_cot(x.get("name")) == k), None)
+            if khop:
+                ghep[c] = khop
+            else:
+                thieu.append(c)
+        title = next((x for x in cot_list if x.get("name") == "Title"), None)
+        return ghep, thieu, title
+
+    def kiem_tra_list(self, bang_cot: dict[str, list[str]]) -> list[dict]:
+        """Kiểm tra từng bảng: List có tồn tại không, cột nào khớp / thiếu."""
+        ket_qua = []
+        for bang, cot_app in bang_cot.items():
+            ten = self.ten_list(bang)
+            l = self._tim_list(ten)
+            if not l:
+                ket_qua.append({"bang": bang, "list": ten, "co_list": False, "khop": [], "thieu": cot_app})
+                continue
+            ghep, thieu, _ = self._ghep_cot(l["id"], cot_app)
+            ket_qua.append({"bang": bang, "list": ten, "co_list": True,
+                            "khop": [f"{c} → {x.get('displayName')}" for c, x in ghep.items()],
+                            "thieu": thieu})
+        return ket_qua
+
+    def _batch(self, yeu_cau: list[dict], tuan_tu: bool):
+        """Gửi nhiều request qua /$batch (20 request/lần). tuan_tu=True: chạy
+        lần lượt (dependsOn) để giữ đúng thứ tự dòng khi tạo item."""
+        for dau in range(0, len(yeu_cau), 20):
+            nhom = yeu_cau[dau:dau + 20]
+            for lan in range(5):
+                reqs = []
+                for i, rq in enumerate(nhom):
+                    rq = {**rq, "id": str(i + 1)}
+                    if tuan_tu and i > 0:
+                        rq["dependsOn"] = [str(i)]
+                    reqs.append(rq)
+                r = self._goi("POST", "/$batch", json={"requests": reqs})
+                if r.status_code != 200:
+                    raise LoiLuuTru(f"Ghi List thất bại ({r.status_code}): {r.text[:300]}")
+                tra_ve = {x["id"]: x for x in r.json().get("responses", [])}
+                loi = [(i, tra_ve.get(str(i + 1), {})) for i in range(len(nhom))
+                       if tra_ve.get(str(i + 1), {}).get("status", 500) >= 300]
+                if not loi:
+                    break
+                if all(x.get("status") in (424, 429, 503, 504) for _, x in loi) and lan < 4:
+                    cho = max([int((x.get("headers") or {}).get("Retry-After", 2)) for _, x in loi] + [2])
+                    time.sleep(min(cho, 30))
+                    nhom = [nhom[i] for i, _ in loi]  # chỉ gửi lại các request lỗi
+                    continue
+                i, x = next(((i, x) for i, x in loi if x.get("status") != 424), loi[0])
+                chi_tiet = ((x.get("body") or {}).get("error") or {}).get("message", "")
+                raise LoiLuuTru(f"SharePoint từ chối ghi dòng {dau + i + 1} ({x.get('status')}): {chi_tiet}")
+
+    def ghi_list(self, bang: str, df: pd.DataFrame) -> tuple[int, list[str]]:
+        """Thay TOÀN BỘ item của List bằng các dòng của df. -> (số dòng, cảnh báo)."""
+        ten = self.ten_list(bang)
+        l = self._tim_list(ten)
+        if not l:
+            raise LoiLuuTru(f"Không tìm thấy List '{ten}' trên site.")
+        ghep, thieu, title = self._ghep_cot(l["id"], [str(c) for c in df.columns])
+        if not ghep:
+            raise LoiLuuTru(f"List '{ten}' không có cột nào trùng tên với bảng — kiểm tra lại tên cột.")
+        canh_bao = [f"List '{ten}' thiếu cột {thieu} — dữ liệu các cột này KHÔNG được lưu."] if thieu else []
+
+        items = []
+        for _, row in df.iterrows():
+            fields = {}
+            for c, cot in ghep.items():
+                v = row[c]
+                if _gia_tri_trong(v):
+                    continue
+                if "number" in cot:
+                    so = pd.to_numeric(v, errors="coerce")
+                    if pd.isna(so):
+                        raise LoiLuuTru(f"List '{ten}', cột '{c}': '{v}' không phải là số.")
+                    fields[cot["name"]] = int(so) if float(so).is_integer() else float(so)
+                elif "boolean" in cot:
+                    fields[cot["name"]] = str(v).strip().lower() in ("1", "true", "x", "có", "co", "yes")
+                else:
+                    fields[cot["name"]] = _chuoi_gon(v)
+            if not fields:
+                continue  # dòng trống
+            if title is not None and "Title" not in fields:
+                # cột Tiêu đề mặc định của List: điền giá trị cột đầu tiên cho dễ nhìn
+                fields["Title"] = _chuoi_gon(next(iter(fields.values())))[:255]
+            items.append(fields)
+
+        # xoá item cũ rồi tạo lại theo đúng thứ tự dòng
+        cu = self._doc_items(l["id"])
+        duong_dan = f"/sites/{self._site()}/lists/{l['id']}/items"
+        self._batch([{"method": "DELETE", "url": f"{duong_dan}/{it['id']}"} for it in cu], tuan_tu=False)
+        self._batch([{"method": "POST", "url": duong_dan, "headers": {"Content-Type": "application/json"},
+                      "body": {"fields": f}} for f in items], tuan_tu=True)
+        return len(items), canh_bao
+
+    def _doc_items(self, list_id: str) -> list[dict]:
+        items, url = [], f"/sites/{self._site()}/lists/{list_id}/items?$expand=fields&$top=500"
+        while url:
+            r = self._goi("GET", url)
+            if r.status_code != 200:
+                raise LoiLuuTru(f"Không đọc được dữ liệu List ({r.status_code}): {r.text[:200]}")
+            items += r.json().get("value", [])
+            url = r.json().get("@odata.nextLink")
+        return sorted(items, key=lambda it: int(it["id"]) if str(it.get("id", "")).isdigit() else 0)
+
+    def doc_list(self, bang: str, cot_app: list[str]) -> tuple[pd.DataFrame, list[str]]:
+        """Đọc List -> DataFrame đúng các cột của ứng dụng. -> (df, cảnh báo)."""
+        ten = self.ten_list(bang)
+        l = self._tim_list(ten)
+        if not l:
+            raise LoiLuuTru(f"Không tìm thấy List '{ten}' trên site.")
+        ghep, thieu, _ = self._ghep_cot(l["id"], cot_app)
+        rows = []
+        for it in self._doc_items(l["id"]):
+            f = it.get("fields", {})
+            rows.append({c: ("" if _gia_tri_trong(f.get(ghep[c]["name"])) else f.get(ghep[c]["name"]))
+                         if c in ghep else "" for c in cot_app})
+        df = pd.DataFrame(rows, columns=cot_app)
+        for c in cot_app:
+            if c in COT_SO:
+                so = pd.to_numeric(df[c], errors="coerce")
+                df[c] = so.astype(int) if len(so) and so.notna().all() and (so % 1 == 0).all() else so
+        canh_bao = [f"List '{ten}' thiếu cột {thieu} — để trống khi tải về."] if thieu else []
+        return df, canh_bao
 
 
 # ---------------------------------------------------------------------

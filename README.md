@@ -67,6 +67,9 @@ Bản Streamlit (`streamlit_app/`) còn có thêm:
   `<tên>.xlsx` (xem trên SharePoint). Kết nối bằng Microsoft Graph (App
   Registration) hoặc qua flow Power Automate; cấu hình trong Secrets, xem
   **HUONG_DAN_SHAREPOINT.md**. Có thêm sao lưu/khôi phục file `.json` trên máy.
+  Với Microsoft Graph còn **đồng bộ trực tiếp từng bảng ⇄ SharePoint List**
+  (ToChuyenMon, GiaoVien, LopHoc, ... — cột khớp theo tên hiển thị), kèm nút
+  kiểm tra List/cột và file Excel mẫu để tạo List bằng "Từ Excel".
 - **Ngày thực tế theo lịch**: chọn "Ngày bắt đầu tuần (Thứ 2)" ở tab Cấu hình
   chung, mọi nơi hiển thị "Thứ 2/3/4..." sẽ kèm luôn ngày thật (VD "Thứ 2
   (08/09)") trên màn hình, PDF và Excel.
