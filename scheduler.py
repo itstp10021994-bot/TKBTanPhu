@@ -122,16 +122,21 @@ def solve_timetable(
 
     # ---------------------------------------------------------------
     # 2b) Số tiết thực tế theo (khối, ngày) — BẮT BUỘC, không thể tắt, vì
-    #     đây là thực tế vật lý (khối đó ngày đó chỉ học đến tiết N). Nếu 1
-    #     activity liên quan nhiều lớp thuộc nhiều khối khác nhau, dùng
-    #     ngưỡng NHỎ NHẤT trong số các khối đó cho ngày tương ứng.
+    #     đây là thực tế vật lý (khối đó ngày đó chỉ học các tiết đã khai
+    #     báo trong thời gian biểu). Nếu 1 activity liên quan nhiều lớp
+    #     thuộc nhiều khối khác nhau, chỉ dùng các tiết mà MỌI khối đó
+    #     cùng học trong ngày tương ứng (giao các tập tiết).
     # ---------------------------------------------------------------
     grade_of_class = {c.id: c.grade for c in data.classes}
-    grade_day_cap: dict[tuple[int, int], int] = {
-        (g.grade, g.day): g.periods_count for g in data.grade_day_periods
+    grade_day_allowed: dict[tuple[int, int], set[int]] = {
+        (g.grade, g.day): (
+            set(g.allowed_periods) if g.allowed_periods is not None
+            else set(range(1, g.periods_count + 1))
+        )
+        for g in data.grade_day_periods
     }
 
-    if grade_day_cap:
+    if grade_day_allowed:
         for a in data.activities:
             grades_involved = {
                 grade_of_class[cid] for cid in a.blocked_classes if cid in grade_of_class
@@ -139,21 +144,22 @@ def solve_timetable(
             if not grades_involved:
                 continue
             for d in days:
-                caps_today = [
-                    grade_day_cap[(g, d)] for g in grades_involved if (g, d) in grade_day_cap
+                allowed_sets = [
+                    grade_day_allowed[(g, d)] for g in grades_involved if (g, d) in grade_day_allowed
                 ]
-                if not caps_today:
+                if not allowed_sets:
                     continue
-                cap = min(caps_today)
+                allowed_today = set.intersection(*allowed_sets)
                 for p in periods:
-                    if p <= cap:
+                    if p in allowed_today:
                         continue
                     v = occ(a.id, d, p)
                     if isinstance(v, int):
                         if v:
                             raise SchedulerError(
                                 f"Activity {a.id}: giờ cố định trước rơi vào ngày {d} tiết {p}, "
-                                f"vượt quá số tiết cho phép ({cap}) của khối liên quan hôm đó."
+                                f"không nằm trong các tiết khối liên quan được học hôm đó "
+                                f"({sorted(allowed_today)})."
                             )
                     else:
                         model.Add(v == 0)

@@ -78,7 +78,13 @@ def timetable_to_pdf_bytes(
     classes, config, lessons, day_names, teacher_id_to_name,
     dept_free_sessions=None, school_name: str = "",
     period_labels_by_class: dict | None = None,
+    cell_times_by_class: dict | None = None,
+    off_slots_by_class: dict | None = None,
 ) -> bytes:
+    """cell_times_by_class: {class_id: {(day, period): "07:15–08:00"}} — giờ học
+    ghi trong từng ô khi giờ của 1 tiết khác nhau giữa các ngày.
+    off_slots_by_class: {class_id: {(day, period)}} — ô mà khối của lớp đó
+    KHÔNG học theo thời gian biểu (hiện chữ 'nghỉ' thay vì '—')."""
     _ensure_fonts()
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -150,6 +156,8 @@ def timetable_to_pdf_bytes(
         elements.append(Paragraph(f"Lớp {c.name}", class_title_style))
 
         labels_for_c = (period_labels_by_class or {}).get(c.id, {})
+        times_for_c = (cell_times_by_class or {}).get(c.id, {})
+        off_for_c = (off_slots_by_class or {}).get(c.id, set())
 
         grid = {p: {d: "" for d in days} for p in periods}
         for lesson in lessons:
@@ -175,7 +183,13 @@ def timetable_to_pdf_bytes(
             row = [Paragraph(p_label, period_style)]
             for d in days:
                 text = grid[p][d]
-                row.append(Paragraph(text, cell_style) if text else Paragraph("—", cell_style))
+                gio = times_for_c.get((d, p))
+                if gio:
+                    gio_html = f"<font size=6.5 color='#2C5282'>{gio}</font>"
+                    text = f"{text}<br/>{gio_html}" if text else gio_html
+                if not text:
+                    text = "<font color='#A0AABB'>nghỉ</font>" if (d, p) in off_for_c else "—"
+                row.append(Paragraph(text, cell_style))
             data_rows.append(row)
 
         has_time_labels = any(
@@ -211,49 +225,54 @@ def timetable_to_pdf_bytes(
 # ---------------------------------------------------------------------
 # Excel — kết quả xếp phòng thi
 # ---------------------------------------------------------------------
-def exam_rooms_to_excel_bytes(mon_thi: str, ngay_thi: str, ca_thi: str, ket_qua: list[dict]) -> bytes:
+def exam_rooms_to_excel_bytes(
+    mon_thi: str, ngay_thi: str, ca_thi: str, ket_qua: list[dict], hien_ho_ten: bool = False,
+) -> bytes:
     """ket_qua: list[dict] {"ten_phong", "hoc_sinh": [{"sbd","ho_ten","lop"}, ...]}
-    Mỗi phòng 1 sheet, cộng thêm 1 sheet 'Tong_hop' gộp toàn bộ."""
+    Mỗi phòng 1 sheet, cộng thêm 1 sheet 'Tong_hop' gộp toàn bộ. Mặc định chỉ
+    ghi SBD + Lớp (không ghi họ tên), bật hien_ho_ten nếu cần."""
+    def _dong(stt, hs):
+        dong = {"STT": stt, "SBD": hs["sbd"]}
+        if hien_ho_ten:
+            dong["Họ và tên"] = hs.get("ho_ten", "")
+        dong.update({"Lớp": hs["lop"], "Môn thi": mon_thi})
+        return dong
+
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         header_fill = PatternFill("solid", fgColor=NAVY)
         header_font = Font(color="FFFFFF", bold=True)
 
-        tong_hop_rows = []
-        for phong in ket_qua:
-            df = pd.DataFrame([
-                {"SBD": hs["sbd"], "Họ và tên": hs["ho_ten"], "Lớp": hs["lop"], "Môn thi": mon_thi}
-                for hs in phong["hoc_sinh"]
-            ])
-            sheet_name = str(phong["ten_phong"])[:31]
-            df.to_excel(writer, index=False, sheet_name=sheet_name, startrow=2)
-            ws = writer.sheets[sheet_name]
-            ws["A1"] = f"Môn thi: {mon_thi}    Ngày thi: {ngay_thi}    Ca thi: {ca_thi}    Phòng: {phong['ten_phong']}"
-            ws["A1"].font = Font(bold=True, color=NAVY)
-            for cell in ws[3]:
+        def _dinh_dang(ws, header_row):
+            for cell in ws[header_row]:
                 cell.fill = header_fill
                 cell.font = header_font
                 cell.alignment = Alignment(horizontal="center")
-            ws.column_dimensions["A"].width = 14
-            ws.column_dimensions["B"].width = 28
-            ws.column_dimensions["C"].width = 14
-            ws.column_dimensions["D"].width = 18
+            for col_cells in ws.iter_cols(min_row=header_row):
+                ten = str(col_cells[0].value or "")
+                ws.column_dimensions[col_cells[0].column_letter].width = (
+                    28 if ten == "Họ và tên" else 8 if ten == "STT" else 16
+                )
+
+        tong_hop_rows = []
+        for phong in ket_qua:
+            df = pd.DataFrame([_dong(i + 1, hs) for i, hs in enumerate(phong["hoc_sinh"])])
+            sheet_name = str(phong["ten_phong"])[:31]
+            df.to_excel(writer, index=False, sheet_name=sheet_name, startrow=2)
+            ws = writer.sheets[sheet_name]
+            ws["A1"] = (
+                f"Môn thi: {mon_thi}    Ngày thi: {ngay_thi}    Ca thi: {ca_thi}    "
+                f"Phòng: {phong['ten_phong']}    Sĩ số: {len(phong['hoc_sinh'])}"
+            )
+            ws["A1"].font = Font(bold=True, color=NAVY)
+            _dinh_dang(ws, 3)
             for hs in phong["hoc_sinh"]:
-                tong_hop_rows.append({
-                    "Phòng thi": phong["ten_phong"], "SBD": hs["sbd"],
-                    "Họ và tên": hs["ho_ten"], "Lớp": hs["lop"], "Môn thi": mon_thi,
-                })
+                tong_hop_rows.append({"Phòng thi": phong["ten_phong"], **_dong(len(tong_hop_rows) + 1, hs)})
 
         if tong_hop_rows:
             df_tong = pd.DataFrame(tong_hop_rows)
             df_tong.to_excel(writer, index=False, sheet_name="Tong_hop")
-            ws2 = writer.sheets["Tong_hop"]
-            for cell in ws2[1]:
-                cell.fill = header_fill
-                cell.font = header_font
-                cell.alignment = Alignment(horizontal="center")
-            for col, w in zip("ABCDE", [16, 14, 28, 14, 18]):
-                ws2.column_dimensions[col].width = w
+            _dinh_dang(writer.sheets["Tong_hop"], 1)
     return buf.getvalue()
 
 
@@ -275,7 +294,10 @@ def _sap_xep_luoi(hoc_sinh_trong_phong: list[dict], so_cot: int) -> list[list]:
 
 def exam_rooms_to_pdf_bytes(
     mon_thi: str, ngay_thi: str, ca_thi: str, ket_qua: list[dict], school_name: str = "",
+    hien_ho_ten: bool = False,
 ) -> bytes:
+    """Danh sách phòng thi (STT, SBD, Lớp, Ký tên — thêm Họ tên nếu
+    hien_ho_ten), sơ đồ chỗ ngồi CHỈ ghi SBD, và thẻ báo danh."""
     _ensure_fonts()
     buf = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -325,21 +347,17 @@ def exam_rooms_to_pdf_bytes(
     # ---------------- Trang 1..N: danh sách theo từng phòng ----------------
     for idx, phong in enumerate(ket_qua):
         elements.append(Paragraph(f"Phòng thi: {phong['ten_phong']}  (Sĩ số: {len(phong['hoc_sinh'])})", room_title_style))
-        header_row = [
-            Paragraph("SBD", header_cell_style),
-            Paragraph("Họ và tên", header_cell_style),
-            Paragraph("Lớp", header_cell_style),
-            Paragraph("Ký tên", header_cell_style),
-        ]
+        tieu_de = ["STT", "SBD"] + (["Họ và tên"] if hien_ho_ten else []) + ["Lớp", "Ký tên"]
+        header_row = [Paragraph(t, header_cell_style) for t in tieu_de]
         data_rows = [header_row]
-        for hs in phong["hoc_sinh"]:
-            data_rows.append([
-                Paragraph(hs["sbd"], cell_style),
-                Paragraph(hs["ho_ten"], cell_style),
-                Paragraph(hs["lop"], cell_style),
-                Paragraph("", cell_style),
-            ])
-        col_widths = [usable_width * 0.18, usable_width * 0.42, usable_width * 0.18, usable_width * 0.22]
+        for stt, hs in enumerate(phong["hoc_sinh"], start=1):
+            dong = [Paragraph(str(stt), cell_style), Paragraph(str(hs["sbd"]), cell_style)]
+            if hien_ho_ten:
+                dong.append(Paragraph(str(hs.get("ho_ten") or ""), cell_style))
+            dong += [Paragraph(str(hs["lop"]), cell_style), Paragraph("", cell_style)]
+            data_rows.append(dong)
+        ti_le = [0.08, 0.22, 0.36, 0.14, 0.20] if hien_ho_ten else [0.10, 0.34, 0.24, 0.32]
+        col_widths = [usable_width * t for t in ti_le]
         table = Table(data_rows, colWidths=col_widths, repeatRows=1)
         table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), NAVY_HEX),
@@ -366,7 +384,7 @@ def exam_rooms_to_pdf_bytes(
             )
             seat_sbd_style = ParagraphStyle(
                 "SeatSbdVN", parent=base_styles["Normal"], fontName="VN-Bold",
-                fontSize=10.5, textColor=NAVY_HEX, alignment=1,
+                fontSize=13, leading=16, textColor=NAVY_HEX, alignment=1,
             )
             seat_name_style = ParagraphStyle(
                 "SeatNameVN", parent=base_styles["Normal"], fontName="VN",
@@ -381,8 +399,8 @@ def exam_rooms_to_pdf_bytes(
                     if o is None:
                         row_cells.append(Paragraph("", seat_name_style))
                     else:
-                        noi_dung = f'<b>{o["sbd"]}</b><br/><font size=7.5>{o["ho_ten"]}</font>'
-                        row_cells.append(Paragraph(noi_dung, seat_sbd_style))
+                        # sơ đồ chỗ ngồi chỉ ghi SỐ BÁO DANH
+                        row_cells.append(Paragraph(f'<b>{o["sbd"]}</b>', seat_sbd_style))
                 seat_rows.append(row_cells)
 
             seat_col_w = usable_width / so_cot
@@ -416,7 +434,8 @@ def exam_rooms_to_pdf_bytes(
             noi_dung = (
                 f'<font name="VN-Bold" size=8 color="#69758A">SỐ BÁO DANH</font><br/>'
                 f'<font name="VN-Bold" size=17 color="#12294B">{hs["sbd"]}</font><br/>'
-                f'<font name="VN-Bold" size=10.5>{hs["ho_ten"]}</font><br/>'
+                + (f'<font name="VN-Bold" size=10.5>{hs["ho_ten"]}</font><br/>'
+                   if hien_ho_ten and hs.get("ho_ten") else "") +
                 f'Lớp: {hs["lop"]}<br/>'
                 f'Phòng thi: <b>{phong["ten_phong"]}</b><br/>'
                 f'Môn: {mon_thi}<br/>'
