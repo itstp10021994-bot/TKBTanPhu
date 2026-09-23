@@ -24,6 +24,10 @@ Có **2 cách** kết nối — chọn 1 (hoặc cấu hình cả 2, ứng dụn
 | Tải lại từ SharePoint | ✅ | ✅ (cần thêm 2 flow đọc) |
 | Ưu điểm | Nhanh, ít bước, không tốn lượt chạy flow | Không cần tạo App Registration; dễ thêm bước xử lý (gửi mail, duyệt, ghi List...) |
 
+> **Không có quyền admin?** Dùng **Cách 3** bên dưới: 1 flow Power Automate
+> chạy bằng chính tài khoản của bạn, ghi/đọc thẳng các List — kể cả List trong
+> **"Danh sách của tôi"**.
+
 Cấu hình đặt trong **Secrets** của ứng dụng — KHÔNG đưa lên GitHub:
 - **Streamlit Cloud**: *Manage app → Settings → Secrets*, dán nội dung vào.
 - **Chạy trên máy**: tạo file `.streamlit/secrets.toml` (copy từ
@@ -144,14 +148,123 @@ hiệu mỗi khi có bản thời khoá biểu mới, hoặc *Start and wait for
 
 ---
 
+## Cách 3: 1 flow Power Automate đồng bộ SharePoint List (không cần admin)
+
+Flow chạy bằng **quyền của chính tài khoản tạo flow**, nên đọc/ghi được mọi List
+bạn có quyền — kể cả List trong **"Danh sách của tôi"** — mà không cần quản
+trị viên cấp quyền. Chỉ cần **1 flow** cho cả 9 List.
+
+> ⚠️ Trigger *When a HTTP request is received* là connector **Premium**: tài khoản
+> cần giấy phép Power Automate Premium (hoặc bản dùng thử 90 ngày — Power
+> Automate tự đề nghị khi bạn thêm trigger này). Nếu không lưu được flow vì
+> giấy phép, dùng tạm mục **3. Sao lưu trên máy** trong ứng dụng.
+
+### Bước 0 — Lấy địa chỉ site chứa List
+Mở 1 List của bạn trên trình duyệt, địa chỉ có dạng:
+```
+https://tenmien-my.sharepoint.com/personal/ten_taikhoan_tenmien_edu_vn/Lists/LopHoc/AllItems.aspx
+```
+**Địa chỉ site** là phần trước `/Lists/...`:
+`https://tenmien-my.sharepoint.com/personal/ten_taikhoan_tenmien_edu_vn`
+(List trong 1 site nhóm thì có dạng `https://tenmien.sharepoint.com/sites/TenSite`).
+
+### Bước 1 — Tạo flow
+https://make.powerautomate.com → **+ Tạo (Create) → Luồng đám mây tức thì
+(Instant cloud flow)** → đặt tên `TKB_SharePointList` → chọn trigger
+**When a HTTP request is received** → **Tạo**.
+
+### Bước 2 — Trigger
+- *Who can trigger the flow*: **Anyone**
+- *Request Body JSON Schema*:
+  ```json
+  {"type": "object", "properties": {
+    "thao_tac": {"type": "string"},
+    "list": {"type": "string"},
+    "duong_dan": {"type": "string"},
+    "xoa_ids": {"type": "array", "items": {"type": "integer"}},
+    "items": {"type": "array", "items": {"type": "object"}}}}
+  ```
+
+### Bước 3 — Điều kiện (Condition)
+Thêm **Condition**: ô trái nhập biểu thức (fx) `triggerBody()?['thao_tac']`,
+toán tử **is equal to**, ô phải gõ `doc`.
+
+### Bước 4 — Nhánh **True** (đọc cột / đọc dữ liệu)
+1. Thêm **SharePoint → Send an HTTP request to SharePoint**, đổi tên bước thành
+   **`Doc_SharePoint`** (bấm ⋯ → Rename; đúng tên này để biểu thức bên dưới chạy):
+   - *Site Address*: chọn **Enter custom value**, dán địa chỉ site ở Bước 0
+   - *Method*: `GET`
+   - *Uri* (fx):
+     ```
+     concat('_api/web/lists/getbytitle(''', triggerBody()?['list'], ''')/', triggerBody()?['duong_dan'])
+     ```
+   - *Headers*: `Accept` = `application/json;odata=nometadata`
+2. Thêm **Response** (Request → Response):
+   - *Status Code* (fx): `outputs('Doc_SharePoint')?['statusCode']`
+   - *Body* (fx): `body('Doc_SharePoint')`
+   - ⋯ → **Settings / Configure run after** → tick cả **is successful** và
+     **has failed** (để ứng dụng biết List không tồn tại thay vì bị treo).
+
+### Bước 5 — Nhánh **False** (ghi dữ liệu)
+1. **Apply to each** — đổi tên `Xoa_tung_muc`:
+   - *Select an output*: (fx) `triggerBody()?['xoa_ids']`
+   - ⋯ → **Settings** → bật **Concurrency control**, *Degree of parallelism* = `20`
+   - Bên trong thêm **Send an HTTP request to SharePoint**:
+     - *Site Address*: như Bước 4
+     - *Method*: `DELETE`
+     - *Uri* (fx):
+       ```
+       concat('_api/web/lists/getbytitle(''', triggerBody()?['list'], ''')/items(', string(item()), ')')
+       ```
+     - *Headers*: `IF-MATCH` = `*`
+2. **Apply to each** thứ 2 (đặt SAU vòng xoá) — đổi tên `Tao_tung_muc`:
+   - *Select an output*: (fx) `triggerBody()?['items']`
+   - Để **tắt** Concurrency (chạy lần lượt → giữ đúng thứ tự dòng)
+   - Bên trong thêm **Send an HTTP request to SharePoint**:
+     - *Site Address*: như Bước 4
+     - *Method*: `POST`
+     - *Uri* (fx):
+       ```
+       concat('_api/web/lists/getbytitle(''', triggerBody()?['list'], ''')/items')
+       ```
+     - *Headers*: `Accept` = `application/json;odata=nometadata` và
+       `Content-Type` = `application/json;odata=nometadata`
+     - *Body* (fx): `item()`
+3. Sau 2 vòng lặp, thêm **Response**: *Status Code* `200`, *Body* `{"ok": true}`.
+
+### Bước 6 — Lưu & dán URL vào Secrets
+Bấm **Save** → mở lại trigger, copy **HTTP URL**, rồi thêm vào Secrets của
+ứng dụng (Streamlit Cloud: *Manage app → Settings → Secrets*):
+```toml
+[power_automate]
+sp_url = "https://....logic.azure.com:443/workflows/.../triggers/manual/paths/invoke?...&sig=..."
+```
+Có thể giữ cả `save_url`/`list_url`/`load_url` (Cách 2) trong cùng mục nếu muốn
+lưu thêm file sao lưu.
+
+> 🔒 URL này cho phép đọc/ghi các List trong site ở Bước 0 bằng quyền của bạn —
+> chỉ dán vào Secrets, không gửi qua chat/email. Nếu lộ, xoá trigger rồi tạo lại
+> để có URL mới.
+
+### Bước 7 — Chạy thử
+Trong ứng dụng: module **☁️ Lưu trữ SharePoint** → mục **2b** → **🔍 Kiểm tra
+List & cột**. Nếu báo lỗi 502/504, mở flow → **Run history** → bấm vào lần chạy
+lỗi để xem bước nào đỏ.
+
+Mỗi lần ghi, ứng dụng gửi tối đa 40 dòng/lần gọi flow (xoá tối đa 200 mục/lần),
+nên danh sách vài trăm học sinh mất khoảng 1–3 phút. Mỗi List đọc được tối đa
+5.000 mục.
+
+---
+
 ## Đồng bộ trực tiếp với SharePoint Lists (mục 2b trong module ☁️)
 
 Ngoài lưu file, ứng dụng ghi/đọc thẳng từng bảng vào **SharePoint List** —
-mỗi dòng của bảng = 1 mục của List. Cần kết nối **Cách 1 (Microsoft Graph)**
-và App Registration có quyền **write** trên site chứa các List.
+mỗi dòng của bảng = 1 mục của List. Cần **Cách 3** (flow `sp_url`, không cần
+admin) hoặc **Cách 1** (Microsoft Graph, App Registration có quyền **write**).
 
-> Nên tạo List trong 1 **site** (VD Team Site của trường), không để ở "Danh sách
-> của tôi" (OneDrive cá nhân). Khi đó `site_url` trong Secrets là địa chỉ site,
+> Với Cách 1 nên tạo List trong 1 **site** (VD Team Site của trường); Cách 3
+> dùng được cả "Danh sách của tôi". Với Cách 1, `site_url` trong Secrets là địa chỉ site,
 > VD `https://tenmien.sharepoint.com/sites/TKB` (dán cả link của 1 List cũng được,
 > ứng dụng tự lấy phần địa chỉ site).
 
@@ -177,7 +290,7 @@ và App Registration có quyền **write** trên site chứa các List.
 - List `SoTietTheoKhoiNgay` **không còn dùng** — đã gộp vào `GioHocTheoKhoi`.
 - Muốn dùng tên List khác, khai báo trong Secrets:
   ```toml
-  [sharepoint.lists]
+  [sharepoint.lists]          # hoặc [power_automate.lists] nếu dùng Cách 3
   classes = "DanhSachLop"      # departments, teachers, classes, rooms, activities,
                                # grade_times, exam_students, exam_rooms, exam_subjects
   ```

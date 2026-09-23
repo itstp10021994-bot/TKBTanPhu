@@ -67,7 +67,9 @@ Bản Streamlit (`streamlit_app/`) còn có thêm:
   `<tên>.xlsx` (xem trên SharePoint). Kết nối bằng Microsoft Graph (App
   Registration) hoặc qua flow Power Automate; cấu hình trong Secrets, xem
   **HUONG_DAN_SHAREPOINT.md**. Có thêm sao lưu/khôi phục file `.json` trên máy.
-  Với Microsoft Graph còn **đồng bộ trực tiếp từng bảng ⇄ SharePoint List**
+  Còn **đồng bộ trực tiếp từng bảng ⇄ SharePoint List** — qua Microsoft Graph,
+  hoặc qua 1 flow Power Automate chạy bằng tài khoản người dùng (không cần
+  admin, dùng được với "Danh sách của tôi")
   (ToChuyenMon, GiaoVien, LopHoc, ... — cột khớp theo tên hiển thị), kèm nút
   kiểm tra List/cột và file Excel mẫu để tạo List bằng "Từ Excel".
 - **Ngày thực tế theo lịch**: chọn "Ngày bắt đầu tuần (Thứ 2)" ở tab Cấu hình
