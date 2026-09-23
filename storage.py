@@ -24,13 +24,14 @@ import json
 import re
 import time
 import unicodedata
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from urllib.parse import quote, urlparse
 
 import pandas as pd
 import requests
 
 PHIEN_BAN_DINH_DANG = 1
+GIO_VN = timezone(timedelta(hours=7))  # máy chủ Streamlit Cloud chạy giờ UTC
 TIMEOUT = 60
 
 # Các bảng nhập liệu (DataFrame trong st.session_state) được sao lưu
@@ -130,7 +131,7 @@ def dong_goi(ss) -> dict:
     """Gom toàn bộ dữ liệu cần lưu từ st.session_state thành 1 dict JSON."""
     goi = {
         "phien_ban": PHIEN_BAN_DINH_DANG,
-        "thoi_gian_luu": datetime.now().isoformat(timespec="seconds"),
+        "thoi_gian_luu": datetime.now(GIO_VN).replace(tzinfo=None).isoformat(timespec="seconds"),
         "bang": {k: _df_sang_json(ss[k]) for k in BANG_DU_LIEU if k in ss},
         "cau_hinh": {k: ss[k] for k in GIA_TRI_CAU_HINH if k in ss},
         "tuan_bat_dau": ss["tuan_bat_dau"].isoformat() if "tuan_bat_dau" in ss else None,
@@ -247,7 +248,7 @@ def mau_excel_tao_list(bang_df: dict[str, pd.DataFrame], ten_list: dict[str, str
 def ten_file_an_toan(ten: str) -> str:
     """Bỏ các ký tự SharePoint không cho phép trong tên file."""
     ten = re.sub(r'[\\/:*?"<>|#%~&{}]+', "_", (ten or "").strip()).strip(". _")
-    return ten[:100] or datetime.now().strftime("TKB_%Y%m%d_%H%M%S")
+    return ten[:100] or datetime.now(GIO_VN).strftime("TKB_%Y%m%d_%H%M%S")
 
 
 # ---------------------------------------------------------------------

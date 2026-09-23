@@ -33,6 +33,7 @@ from exports import (
 import auth
 import exam_rooms as er
 import storage
+import teams
 from models import TimetableResult
 
 st.set_page_config(page_title="Xếp Thời Khoá Biểu", layout="wide", page_icon="🗓️")
@@ -551,6 +552,68 @@ def luoi_tkb(result, classes, config, loc, noi_dung, grade_times_df, tuan_bat_da
     return luoi, gio_o
 
 
+def _excel_nhieu_sheet(bang: dict[str, pd.DataFrame]) -> bytes:
+    """Nhiều bảng -> 1 file Excel, mỗi bảng 1 sheet (tên sheet hợp lệ, không trùng)."""
+    buf, da_dung = io.BytesIO(), set()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        for ten, df in bang.items():
+            goc = re.sub(r"[\[\]:*?/\\]", "_", str(ten))[:28] or "Sheet"
+            ten_sheet, i = goc, 1
+            while ten_sheet.lower() in da_dung:
+                i += 1
+                ten_sheet = f"{goc[:26]}_{i}"
+            da_dung.add(ten_sheet.lower())
+            df.to_excel(writer, sheet_name=ten_sheet)
+    return buf.getvalue()
+
+
+def tao_tep_dang_teams(ss, ten_truong: str, moc) -> tuple[list[tuple[str, bytes]], list[str]]:
+    """Tạo các tệp đăng Teams từ dữ liệu trong phiên: TKB các lớp (PDF + Excel),
+    TKB từng giáo viên (PDF + Excel), lịch coi thi (Excel). -> (tệp, ghi chú)."""
+    tep, ghi_chu = [], []
+    hau_to = moc.strftime("%Y-%m-%d_%Hh%M")
+    kq, cfg = ss.get("result"), ss.get("result_config")
+    classes = ss.get("result_classes") or []
+    if kq is not None and kq.status not in ("INFEASIBLE", "ERROR") and cfg is not None:
+        gt, tuan = ss.get("grade_times"), ss["tuan_bat_dau"]
+        ngay = {d: nhan_ngay_thuc_te(d, tuan) for d in cfg.days}
+        ten_gv = {slugify(n, "gv_"): n for n in ss["teachers"]["Tên giáo viên"].dropna().astype(str) if n.strip()}
+        lop_ten = {c.id: c.name for c in classes}
+        ds_gv = lambda l: ", ".join(ten_gv.get(t, t) for t in l.teacher_ids)
+        ds_lop = lambda l: ", ".join(lop_ten.get(c, c) for c in l.class_ids)
+
+        gio_lop, sheet_lop = {}, {}
+        for c in classes:
+            luoi, gio = luoi_tkb(kq, classes, cfg, lambda l, cid=c.id: cid in l.class_ids,
+                                 lambda l: f"{l.activity_name} ({ds_gv(l)})", gt, tuan)
+            gio_lop[c.id], sheet_lop[c.name] = gio, luoi
+        tep.append((f"TKB_Lop_{hau_to}.pdf", timetable_to_pdf_bytes(
+            classes, cfg, kq.lessons, ngay, ten_gv, school_name=ten_truong, cell_times_by_class=gio_lop)))
+        tep.append((f"TKB_Lop_{hau_to}.xlsx", _excel_nhieu_sheet(sheet_lop)))
+
+        lop_gv, bai_gv, gio_gv, sheet_gv = [], [], {}, {}
+        for tid in sorted({t for l in kq.lessons for t in l.teacher_ids}, key=lambda t: ten_gv.get(t, t)):
+            ma, ten = f"gv::{tid}", ten_gv.get(tid, tid)
+            lop_gv.append(SchoolClass(id=ma, name=ten, grade=0))
+            bai_gv += [l.model_copy(update={"class_ids": [ma], "teacher_ids": [],
+                                            "activity_name": f"{l.activity_name} — {ds_lop(l)}"})
+                       for l in kq.lessons if tid in l.teacher_ids]
+            luoi, gio = luoi_tkb(kq, classes, cfg, lambda l, t=tid: t in l.teacher_ids,
+                                 lambda l: f"{l.activity_name} — {ds_lop(l)}", gt, tuan)
+            gio_gv[ma], sheet_gv[ten] = gio, luoi
+        if lop_gv:
+            tep.append((f"TKB_GiaoVien_{hau_to}.pdf", timetable_to_pdf_bytes(
+                lop_gv, cfg, bai_gv, ngay, {}, school_name=ten_truong, cell_times_by_class=gio_gv,
+                tien_to_tieu_de="Thời khoá biểu GV")))
+            tep.append((f"TKB_GiaoVien_{hau_to}.xlsx", _excel_nhieu_sheet(sheet_gv)))
+    else:
+        ghi_chu.append("Chưa có thời khoá biểu xếp thành công — không đăng tệp thời khoá biểu.")
+    ct = ss.get("exam_proctors")
+    if ct is not None and not ct.empty:
+        tep.append((f"Lich_coi_thi_{hau_to}.xlsx", df_to_excel_bytes(ct, "Lich_coi_thi")))
+    return tep, ghi_chu
+
+
 # ---------------------------------------------------------------------
 # Dữ liệu mẫu ban đầu (dạng bảng thân thiện) để người dùng có ví dụ sẵn
 # ---------------------------------------------------------------------
@@ -838,6 +901,7 @@ def cong_bo(goi: dict) -> tuple[list[str], list[str]]:
 # =======================================================================
 TAI_KHOAN = auth.doc_tai_khoan(st.secrets)
 PHAN_QUYEN = auth.doc_phan_quyen(st.secrets)
+CAU_HINH_TEAMS = teams.doc_cau_hinh(st.secrets)
 DANG_NHAP_MS = auth.dang_nhap_microsoft_bat(st.secrets)
 DANG_NHAP_OTP = bool(PHAN_QUYEN["otp_url"])
 BAT_DANG_NHAP = bool(TAI_KHOAN) or DANG_NHAP_MS or DANG_NHAP_OTP
@@ -3030,6 +3094,38 @@ elif module == "👥 Tài khoản & Công bố":
         st.caption(f"Bản công bố sẽ lưu vào SharePoint List **{storage.LIST_MAC_DINH['cong_bo']}** "
                    "(cần 1 cột 'NoiDung' kiểu Nhiều dòng văn bản).")
 
+    def _dang_len_teams():
+        """Tạo tệp TKB / coi thi rồi gửi flow Teams; hiện kết quả."""
+        moc = teams.bay_gio_vn()
+        with st.spinner("Đang tạo tệp và đăng lên Teams..."):
+            tep, ghi_chu = tao_tep_dang_teams(st.session_state, school_name, moc)
+            for g in ghi_chu:
+                st.warning(g)
+            if not tep:
+                st.error("Không có tệp nào để đăng lên Teams.")
+                return
+            thong_diep = teams.tao_thong_diep(
+                f"📅 {school_name + ' — ' if school_name else ''}Thời khoá biểu / lịch mới đã được công bố",
+                [f"Áp dụng từ: {st.session_state.tuan_bat_dau.strftime('%d/%m/%Y')}",
+                 f"Công bố bởi {NGUOI_DUNG['ten']} lúc {moc.strftime('%H:%M %d/%m/%Y')}"],
+                [t for t, _ in tep], CAU_HINH_TEAMS["thu_muc"], CAU_HINH_TEAMS["app_url"],
+            )
+            try:
+                teams.gui(CAU_HINH_TEAMS, tep, thong_diep)
+                st.success(f"📤 Đã đăng {len(tep)} tệp lên Teams (thư mục '{CAU_HINH_TEAMS['thu_muc']}') "
+                           "và gửi thông báo vào kênh.")
+            except storage.LoiLuuTru as e:
+                st.error(f"Đăng Teams thất bại: {e}")
+
+    dang_teams = False
+    if CAU_HINH_TEAMS:
+        dang_teams = st.checkbox(
+            f"📤 Đồng thời đăng lên Microsoft Teams (thư mục '{CAU_HINH_TEAMS['thu_muc']}' + tin nhắn thông báo)",
+            value=True, key="cb_dang_teams",
+        )
+    else:
+        st.caption("📤 Muốn tự đăng thời khoá biểu lên Teams khi công bố: xem hướng dẫn TEAMS.md (mục [teams] trong Secrets).")
+
     cb1, cb2, cb3 = st.columns(3)
     with cb1:
         if st.button("📢 Công bố dữ liệu hiện tại", type="primary", use_container_width=True):
@@ -3041,6 +3137,8 @@ elif module == "👥 Tài khoản & Công bố":
             st.success("✅ Đã công bố. Đã lưu: " + " · ".join(da_luu))
             for e in loi:
                 st.warning(e)
+            if dang_teams:
+                _dang_len_teams()
     with cb2:
         if st.button("📥 Nạp bản công bố vào phiên của tôi", use_container_width=True,
                      disabled=not goi_cb,
@@ -3057,6 +3155,9 @@ elif module == "👥 Tài khoản & Công bố":
                 st.success("✅ Đã nạp bản công bố từ SharePoint.")
             else:
                 st.error("Không đọc được bản công bố từ SharePoint. " + (kho.get("loi_nap") or ""))
+    if CAU_HINH_TEAMS and st.button("📤 Chỉ đăng lên Teams (không công bố lại)",
+                                    help="VD khi lần đăng trước bị lỗi."):
+        _dang_len_teams()
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="section-card">', unsafe_allow_html=True)
