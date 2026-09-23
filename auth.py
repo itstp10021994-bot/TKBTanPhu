@@ -206,3 +206,52 @@ class KhoMaOTP:
             return True, ""
         con = self.SO_LAN_THU - ban_ghi["da_thu"]
         return False, f"Mã không đúng — còn {con} lần thử." if con else "Nhập sai quá nhiều lần — bấm Gửi lại mã."
+
+
+# ---------------------------------------------------------------------
+# Ghi nhớ đăng nhập: token có chữ ký HMAC lưu trong cookie trình duyệt
+# ---------------------------------------------------------------------
+TEN_COOKIE = "tkb_dang_nhap"
+
+
+def khoa_ky_token(secrets) -> bytes | None:
+    """Khoá ký token. Ưu tiên [phan_quyen] cookie_secret, rồi [auth] cookie_secret;
+    nếu không có thì suy ra từ otp_url / mã băm mật khẩu (đều là bí mật chỉ có
+    trong Secrets). None = không bật được ghi nhớ đăng nhập."""
+    pq, au = _muc(secrets, "phan_quyen"), _muc(secrets, "auth")
+    nguon = pq.get("cookie_secret") or au.get("cookie_secret") or pq.get("otp_url")
+    if not nguon:
+        bam = sorted(str(tk.get("password_hash") or tk.get("password") or "")
+                     for tk in doc_tai_khoan(secrets).values())
+        nguon = "|".join(b for b in bam if b)
+    if not nguon:
+        return None
+    return hashlib.sha256(f"tkb-dang-nhap|{nguon}".encode("utf-8")).digest()
+
+
+def tao_token(khoa: bytes, nguon: str, dinh_danh: str, so_ngay: int, bay_gio: float) -> str:
+    """Token dạng '<nguồn>|<định danh>|<hết hạn>' + chữ ký HMAC-SHA256 (base64url)."""
+    import base64
+    than = f"{nguon}|{dinh_danh}|{int(bay_gio + so_ngay * 86400)}".encode("utf-8")
+    ky = hmac.new(khoa, than, hashlib.sha256).digest()
+    ma_hoa = lambda b: base64.urlsafe_b64encode(b).decode("ascii").rstrip("=")
+    return f"{ma_hoa(than)}.{ma_hoa(ky)}"
+
+
+def doc_token(khoa: bytes | None, token: str | None, bay_gio: float) -> tuple[str, str] | None:
+    """-> (nguồn, định danh) nếu token hợp lệ và chưa hết hạn, ngược lại None."""
+    import base64
+    if not khoa or not token or "." not in token:
+        return None
+    try:
+        giai = lambda s: base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
+        phan_than, phan_ky = token.strip().split(".", 1)
+        than = giai(phan_than)
+        if not hmac.compare_digest(giai(phan_ky), hmac.new(khoa, than, hashlib.sha256).digest()):
+            return None
+        nguon, dinh_danh, het_han = than.decode("utf-8").rsplit("|", 2)
+        if bay_gio > int(het_han):
+            return None
+        return nguon, dinh_danh
+    except (ValueError, UnicodeDecodeError):
+        return None

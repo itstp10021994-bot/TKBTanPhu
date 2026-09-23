@@ -59,7 +59,12 @@ thư của người tạo flow (VD `it.stp@...`), dùng connector Outlook thư�
 
 Bảo mật: mã hết hạn sau 10 phút, dùng 1 lần, sai 5 lần phải gửi mã mới; mỗi email
 chỉ gửi được 1 mã/phút và 5 mã/giờ; chỉ gửi cho email hợp lệ theo `[phan_quyen]`.
-Đăng nhập giữ đến khi đóng/tải lại tab trình duyệt (tải lại trang thì nhập mã mới).
+**Ghi nhớ đăng nhập**: tick "Ghi nhớ đăng nhập trên máy này" (mặc định bật) thì
+tải lại trang / mở lại app **không phải nhập mã lại** trong 30 ngày (cookie có chữ
+ký bảo mật). Đổi số ngày: `nho_dang_nhap_ngay = 60` trong `[phan_quyen]` (0 = tắt).
+Bấm **🚪 Đăng xuất** để xoá ghi nhớ; dùng máy tính chung thì bỏ tick. Mỗi lần tự
+đăng nhập, quyền được kiểm tra lại theo dữ liệu mới nhất (gỡ email khỏi bảng Giáo
+viên + công bố là giáo viên đó mất quyền).
 
 ### C1. Tạo flow gửi mã (1 lần)
 1. https://make.powerautomate.com → **+ Tạo → Luồng đám mây tức thì** → tên
