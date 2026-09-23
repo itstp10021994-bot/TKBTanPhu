@@ -17,6 +17,7 @@ from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import requests
 
@@ -869,6 +870,69 @@ def _ten_hien_thi(email: str, mac_dinh: str) -> str:
     return gv["ten"] if gv else mac_dinh
 
 
+# ---- Ghi nhớ đăng nhập (cookie có chữ ký) — không phải nhập mã lại khi tải lại trang ----
+KHOA_KY_TOKEN = auth.khoa_ky_token(st.secrets)
+try:
+    SO_NGAY_GHI_NHO = max(int(dict(st.secrets.get("phan_quyen", {})).get("nho_dang_nhap_ngay", 30)), 0)
+except Exception:
+    SO_NGAY_GHI_NHO = 30
+CO_GHI_NHO = bool(KHOA_KY_TOKEN) and SO_NGAY_GHI_NHO > 0
+
+
+def _js_cookie(gia_tri: str, max_age: int):
+    """Ghi / xoá cookie ghi nhớ đăng nhập trên trình duyệt."""
+    js = (
+        f"var c='{auth.TEN_COOKIE}={gia_tri}; path=/; max-age={max_age}; SameSite=Lax'"
+        "+(location.protocol==='https:'?'; Secure':'');"
+        "document.cookie=c; try{if(window.parent!==window){window.parent.document.cookie=c;}}catch(e){}"
+    )
+    try:
+        # Streamlit mới: chạy JavaScript thẳng trên trang app
+        st.html(f"<script>{js}</script>", unsafe_allow_javascript=True)
+    except TypeError:
+        # Streamlit cũ: dùng iframe components (cùng nguồn với app)
+        components.html(f"<script>{js}</script>", height=0)
+
+
+def _ghi_nho(nguon: str, dinh_danh: str):
+    """Đánh dấu cần ghi cookie ở lần chạy kế tiếp (sau st.rerun)."""
+    if CO_GHI_NHO and st.session_state.get("_muon_ghi_nho", True):
+        st.session_state["_cookie_can_ghi"] = auth.tao_token(
+            KHOA_KY_TOKEN, nguon, dinh_danh, SO_NGAY_GHI_NHO, time_mod.time())
+
+
+def _dang_nhap_tu_cookie():
+    """Tự đăng nhập bằng cookie còn hạn — kiểm tra lại quyền theo dữ liệu hiện tại."""
+    if not CO_GHI_NHO or st.session_state.get("_da_dang_xuat"):
+        return
+    try:
+        token = st.context.cookies.get(auth.TEN_COOKIE)
+    except Exception:
+        return
+    ket_qua = auth.doc_token(KHOA_KY_TOKEN, token, time_mod.time())
+    if not ket_qua:
+        return
+    nguon, dinh_danh = ket_qua
+    if nguon == "email":
+        vai_tro = xac_dinh_vai_tro(dinh_danh)
+        if vai_tro:
+            st.session_state.nguoi_dung = {
+                "ten_dn": dinh_danh, "ten": _ten_hien_thi(dinh_danh, dinh_danh.split("@")[0]),
+                "vai_tro": vai_tro, "nguon": "email",
+            }
+    elif nguon == "noi_bo" and dinh_danh in TAI_KHOAN:
+        tk = TAI_KHOAN[dinh_danh]
+        st.session_state.nguoi_dung = {"ten_dn": tk["ten_dn"], "ten": tk["ten"],
+                                       "vai_tro": tk["vai_tro"], "nguon": "noi_bo"}
+
+
+def _o_ghi_nho(key: str):
+    if CO_GHI_NHO:
+        st.session_state["_muon_ghi_nho"] = st.checkbox(
+            f"Ghi nhớ đăng nhập trên máy này ({SO_NGAY_GHI_NHO} ngày)", value=True, key=key,
+            help="Bỏ chọn nếu đang dùng máy tính chung.")
+
+
 @st.cache_resource
 def _dem_dang_nhap_sai() -> dict:
     """Đếm số lần sai mật khẩu theo tên đăng nhập, dùng chung mọi phiên."""
@@ -890,6 +954,7 @@ def _form_tai_khoan_noi_bo():
     with st.form("form_dang_nhap"):
         ten_dn = st.text_input("Tên đăng nhập")
         mat_khau = st.text_input("Mật khẩu", type="password")
+        _o_ghi_nho("ghi_nho_noi_bo")
         dang_nhap = st.form_submit_button("Đăng nhập", use_container_width=True,
                                           type="secondary" if DANG_NHAP_MS else "primary")
     if dang_nhap:
@@ -903,6 +968,7 @@ def _form_tai_khoan_noi_bo():
         if nguoi_dung:
             dem.pop(khoa, None)
             st.session_state.nguoi_dung = {**nguoi_dung, "nguon": "noi_bo"}
+            _ghi_nho("noi_bo", nguoi_dung["ten_dn"])
             st.rerun()
         so_lan += 1
         dem[khoa] = (0, time_mod.time() + 60) if so_lan >= 5 else (so_lan, 0.0)
@@ -949,6 +1015,7 @@ def _form_ma_email():
             f"(cả mục Thư rác/Other). Mã có hiệu lực {auth.KhoMaOTP.HAN_PHUT} phút.")
     with st.form("form_otp_ma"):
         ma = st.text_input("Mã đăng nhập", max_chars=6)
+        _o_ghi_nho("ghi_nho_otp")
         xac_nhan = st.form_submit_button("Đăng nhập", type="primary", use_container_width=True)
     if xac_nhan:
         dung, ly_do = _kho_otp().kiem_tra(email_cho, ma, time_mod.time())
@@ -958,6 +1025,7 @@ def _form_ma_email():
                 "ten_dn": email_cho, "ten": _ten_hien_thi(email_cho, email_cho.split("@")[0]),
                 "vai_tro": xac_dinh_vai_tro(email_cho) or "user", "nguon": "email",
             }
+            _ghi_nho("email", email_cho)
             st.rerun()
         st.error(ly_do)
     if st.button("↩ Đổi email / gửi lại mã", use_container_width=True):
@@ -987,6 +1055,9 @@ def man_hinh_dang_nhap():
             _form_tai_khoan_noi_bo()
 
 
+if BAT_DANG_NHAP and not st.session_state.get("nguoi_dung"):
+    _dang_nhap_tu_cookie()
+
 if BAT_DANG_NHAP and not st.session_state.get("nguoi_dung") and DANG_NHAP_MS:
     _email = _email_microsoft()
     if _email:
@@ -1006,8 +1077,13 @@ if BAT_DANG_NHAP and not st.session_state.get("nguoi_dung") and DANG_NHAP_MS:
             st.stop()
 
 if BAT_DANG_NHAP and not st.session_state.get("nguoi_dung"):
+    if st.session_state.pop("_cookie_can_xoa", False):
+        _js_cookie("", 0)
     man_hinh_dang_nhap()
     st.stop()
+
+if st.session_state.get("_cookie_can_ghi"):
+    _js_cookie(st.session_state.pop("_cookie_can_ghi"), SO_NGAY_GHI_NHO * 86400)
 
 NGUOI_DUNG = st.session_state.get("nguoi_dung") or {
     "ten_dn": "", "ten": "Chưa bật đăng nhập", "vai_tro": "admin",
@@ -1100,6 +1176,9 @@ with st.sidebar:
             dang_xuat_ms = NGUOI_DUNG.get("nguon") == "microsoft"
             for k in list(st.session_state.keys()):
                 del st.session_state[k]
+            # không tự đăng nhập lại từ cookie trong phiên này, và xoá cookie ghi nhớ
+            st.session_state["_da_dang_xuat"] = True
+            st.session_state["_cookie_can_xoa"] = True
             if dang_xuat_ms:
                 st.logout()  # xoá cookie đăng nhập Microsoft
             st.rerun()
