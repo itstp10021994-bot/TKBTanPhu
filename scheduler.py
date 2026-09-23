@@ -474,7 +474,9 @@ def solve_timetable(
     for dept_id, choices in dept_free_choice.items():
         for (d, s), var in choices.items():
             if solver.Value(var):
-                dept_free[dept_id] = f"Thứ {d} - buổi {('sáng' if s == 'morning' else 'chiều')}"
+                ten_ngay = {1: "Thứ 2", 2: "Thứ 3", 3: "Thứ 4", 4: "Thứ 5", 5: "Thứ 6",
+                            6: "Thứ 7", 7: "Chủ nhật"}.get(d, f"Ngày {d}")
+                dept_free[dept_id] = f"{ten_ngay} — buổi {('sáng' if s == 'morning' else 'chiều')}"
 
     signature = {
         f"{aid}|{d}|{p}": 1

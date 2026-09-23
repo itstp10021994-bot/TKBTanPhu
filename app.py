@@ -36,7 +36,8 @@ import storage
 import teams
 from models import TimetableResult
 
-st.set_page_config(page_title="Xếp Thời Khoá Biểu", layout="wide", page_icon="🗓️")
+st.set_page_config(page_title="Thời khoá biểu — THPT Tân Phú", layout="wide", page_icon="🗓️",
+                   initial_sidebar_state="expanded")
 
 DAY_NAMES = {1: "Thứ 2", 2: "Thứ 3", 3: "Thứ 4", 4: "Thứ 5", 5: "Thứ 6", 6: "Thứ 7", 7: "CN"}
 
@@ -45,214 +46,180 @@ DAY_NAMES = {1: "Thứ 2", 2: "Thứ 3", 3: "Thứ 4", 4: "Thứ 5", 5: "Thứ 6
 # =======================================================================
 st.markdown("""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&display=swap');
 :root{
-    --navy-900:#0B1E39;
-    --navy-800:#122A4E;
-    --navy-700:#1D3E68;
-    --navy-600:#2C5282;
-    --accent-500:#2F7DE1;
-    --accent-400:#4C9AFF;
-    --accent-glow:rgba(47,125,225,0.35);
-    --navy-100:#E9EFF7;
-    --gray-50:#F3F6FB;
-    --gray-100:#EAEFF6;
-    --gray-200:#DCE3EE;
-    --gray-500:#69758A;
-    --text-900:#16233A;
+    --navy-900:#0B1E39; --navy-800:#122A4E; --navy-700:#1D3E68;
+    --blue-600:#2563EB; --blue-500:#3B82F6; --blue-100:#DBEAFE; --blue-50:#EFF6FF;
+    --gray-50:#F4F7FB; --gray-100:#EDF2F9; --gray-200:#E1E8F2; --gray-400:#94A3B8; --gray-500:#64748B;
+    --text-900:#16233A; --ok:#15803D;
+    --shadow-sm:0 1px 2px rgba(15,35,70,.06), 0 1px 3px rgba(15,35,70,.08);
+    --shadow-md:0 4px 14px -4px rgba(15,35,70,.14), 0 2px 4px rgba(15,35,70,.05);
 }
-html, body, [class*="css"]{ font-family:"Segoe UI","Helvetica Neue",Arial,sans-serif; }
-.stApp{
-    background:
-        radial-gradient(1100px 500px at 8% -10%, rgba(76,154,255,0.10), transparent 60%),
-        radial-gradient(900px 460px at 100% 0%, rgba(47,125,225,0.08), transparent 55%),
-        linear-gradient(180deg, var(--gray-50) 0%, var(--gray-100) 100%);
-}
+html, body, .stApp{ font-family:"Be Vietnam Pro","Segoe UI","Helvetica Neue",Arial,sans-serif; }
+.stApp{ background:
+    radial-gradient(900px 420px at 0% -8%, rgba(59,130,246,.10), transparent 60%),
+    radial-gradient(800px 380px at 100% 0%, rgba(37,99,235,.07), transparent 55%),
+    var(--gray-50); }
+[data-testid="stMainBlockContainer"]{ padding-top:2.2rem; max-width:1320px; }
+[data-testid="stHeader"]{ background:transparent; }
 
-/* ---- Header banner (nổi khối, có glow nhẹ) ---- */
+/* ---------- Băng tiêu đề ---------- */
 .app-hero{
-    background:linear-gradient(135deg, var(--navy-900) 0%, var(--navy-700) 55%, var(--navy-600) 100%);
-    padding:30px 34px; border-radius:22px; margin-bottom:24px;
-    box-shadow:
-        0 1px 0 rgba(255,255,255,0.08) inset,
-        0 18px 40px -14px rgba(11,30,57,0.55),
-        0 0 0 1px rgba(255,255,255,0.04) inset;
-    position:relative; overflow:hidden;
+    background:linear-gradient(120deg, var(--navy-900) 0%, var(--navy-700) 60%, #28508A 100%);
+    padding:22px 28px; border-radius:18px; margin:0 0 18px 0; position:relative; overflow:hidden;
+    box-shadow:0 14px 30px -16px rgba(11,30,57,.55);
 }
-.app-hero::after{
-    content:""; position:absolute; inset:0; pointer-events:none;
-    background:radial-gradient(420px 180px at 85% -20%, rgba(76,154,255,0.35), transparent 70%);
-}
-.app-hero h1{ color:#fff; font-size:1.7rem; margin:0 0 6px 0; font-weight:800; letter-spacing:.2px;
-    text-shadow:0 2px 10px rgba(0,0,0,0.25);}
-.app-hero p{ color:#CBD9EE; margin:0; font-size:0.93rem; line-height:1.55; position:relative; z-index:1;}
+.app-hero::after{ content:""; position:absolute; right:-60px; top:-80px; width:320px; height:320px;
+    background:radial-gradient(circle, rgba(96,165,250,.35), transparent 65%); pointer-events:none; }
+.app-hero h1{ color:#fff !important; font-size:1.55rem !important; font-weight:800 !important; margin:0 !important;
+    padding:0 !important; letter-spacing:.1px; }
+.app-hero p{ color:#C9D8EE; margin:6px 0 0 0; font-size:.92rem; line-height:1.55; max-width:900px; position:relative; z-index:1; }
+.app-hero b{ color:#fff; }
+.hero-chips{ display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; position:relative; z-index:1; }
+.hero-chip{ background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.22); color:#E6EEFA;
+    font-size:.78rem; font-weight:600; padding:4px 11px; border-radius:999px; }
 
-/* ---- Section card: hiệu ứng nổi khối 3D, đổ bóng 2 lớp mềm ---- */
-.section-card{
-    background:linear-gradient(180deg, #FFFFFF 0%, #FBFCFE 100%);
-    border:1px solid var(--gray-200); border-radius:18px;
-    padding:20px 22px 10px 22px; margin-bottom:20px;
-    box-shadow:
-        0 1px 0 rgba(255,255,255,0.7) inset,
-        0 2px 6px -2px rgba(18,41,75,0.08),
-        0 16px 32px -18px rgba(18,41,75,0.28);
-    transition:box-shadow .2s ease, transform .2s ease;
-}
-.section-card:hover{
-    box-shadow:
-        0 1px 0 rgba(255,255,255,0.7) inset,
-        0 4px 10px -2px rgba(18,41,75,0.10),
-        0 22px 40px -16px rgba(18,41,75,0.32);
-}
-.section-title{
-    display:flex; align-items:center; gap:10px; margin-bottom:2px;
-}
-.section-badge{
-    background:linear-gradient(145deg, var(--accent-400), var(--navy-800));
-    color:#fff; font-size:0.78rem; font-weight:700;
-    width:28px; height:28px; border-radius:9px; display:flex; align-items:center;
-    justify-content:center; flex-shrink:0;
-    box-shadow:0 3px 8px -1px var(--accent-glow), 0 1px 0 rgba(255,255,255,0.4) inset;
-}
-.section-title h3{ margin:0; color:var(--navy-900); font-size:1.06rem; font-weight:800;}
-.section-sub{ color:var(--gray-500); font-size:0.86rem; margin:2px 0 14px 38px; line-height:1.5;}
+/* ---------- Thẻ nội dung (st.container border=True) ---------- */
+[class*="st-key-the_"]{
+    background:#fff !important; border:1px solid var(--gray-200) !important; border-radius:16px !important;
+    box-shadow:var(--shadow-sm); padding:18px 20px 12px 20px !important; }
+[class*="st-key-the_"]:hover{ box-shadow:var(--shadow-md); }
+.section-title{ display:flex; align-items:center; gap:10px; margin:2px 0 2px 0; }
+.section-badge{ background:linear-gradient(145deg, var(--blue-500), var(--navy-800)); color:#fff; font-size:.78rem;
+    font-weight:800; min-width:28px; height:28px; padding:0 6px; border-radius:9px; display:flex; align-items:center;
+    justify-content:center; flex-shrink:0; box-shadow:0 3px 8px -2px rgba(37,99,235,.45); }
+.section-title h3{ margin:0 !important; padding:0 !important; color:var(--navy-900); font-size:1.05rem !important; font-weight:800 !important; }
+.section-sub{ color:var(--gray-500); font-size:.86rem; margin:4px 0 12px 38px; line-height:1.55; }
+.result-title{ font-size:1.25rem; font-weight:800; color:var(--navy-900); margin:4px 0 10px 0; }
+.login-title{ font-size:1.25rem; font-weight:800; color:var(--navy-900); margin:6px 0 10px 0; text-align:center; }
 
-/* ---- Buttons: kiểu nút 3D nổi, nhấn xuống khi bấm ---- */
-.stButton>button, .stDownloadButton>button{
-    border-radius:12px !important; border:1px solid var(--gray-200) !important;
-    font-weight:700 !important; color:var(--navy-800) !important; background:#fff !important;
-    box-shadow:
-        0 1px 0 rgba(255,255,255,0.8) inset,
-        0 3px 8px -2px rgba(18,41,75,0.18) !important;
-    transition:transform .12s ease, box-shadow .12s ease !important;
-}
-.stButton>button:hover, .stDownloadButton>button:hover{
-    transform:translateY(-1px);
-    box-shadow:
-        0 1px 0 rgba(255,255,255,0.8) inset,
-        0 8px 16px -4px rgba(18,41,75,0.24) !important;
-    background:var(--navy-100) !important;
-}
-.stButton>button:active, .stDownloadButton>button:active{
-    transform:translateY(1px);
-    box-shadow:0 2px 4px -1px rgba(18,41,75,0.20) !important;
-}
-.stButton>button[kind="primary"], .stDownloadButton>button[kind="primary"]{
-    background:linear-gradient(145deg, var(--accent-400) 0%, var(--navy-800) 100%) !important;
-    color:#fff !important; border:none !important;
-    box-shadow:
-        0 1px 0 rgba(255,255,255,0.25) inset,
-        0 10px 22px -6px var(--accent-glow) !important;
-}
-.stButton>button[kind="primary"]:hover, .stDownloadButton>button[kind="primary"]:hover{
-    box-shadow:
-        0 1px 0 rgba(255,255,255,0.3) inset,
-        0 14px 28px -6px var(--accent-glow) !important;
-}
+/* ---------- Nút ---------- */
+.stButton>button, .stDownloadButton>button, .stFormSubmitButton>button{
+    border-radius:11px !important; font-weight:600 !important; border:1px solid var(--gray-200) !important;
+    background:#fff !important; color:var(--navy-800) !important; box-shadow:var(--shadow-sm) !important;
+    transition:transform .12s ease, box-shadow .12s ease, background .12s ease !important; }
+.stButton>button:hover, .stDownloadButton>button:hover, .stFormSubmitButton>button:hover{
+    transform:translateY(-1px); box-shadow:var(--shadow-md) !important; background:var(--blue-50) !important;
+    border-color:var(--blue-100) !important; }
+.stButton>button[kind="primary"], .stDownloadButton>button[kind="primary"], .stFormSubmitButton>button[kind="primaryFormSubmit"]{
+    background:linear-gradient(135deg, var(--blue-500), var(--blue-600) 55%, #1E40AF) !important; color:#fff !important;
+    border:none !important; box-shadow:0 8px 18px -8px rgba(37,99,235,.7) !important; }
+.stButton>button[kind="primary"]:hover, .stDownloadButton>button[kind="primary"]:hover,
+.stFormSubmitButton>button[kind="primaryFormSubmit"]:hover{ filter:brightness(1.06); }
+.stButton>button:disabled{ opacity:.55; }
 
-/* ---- Tabs: dạng viên thuốc nổi khối ---- */
-.stTabs [data-baseweb="tab-list"]{ gap:6px; border-bottom:2px solid var(--gray-200); padding-bottom:2px;}
-.stTabs [data-baseweb="tab"]{
-    background:var(--gray-100); border-radius:12px 12px 0 0; padding:9px 18px;
-    color:var(--navy-800); font-weight:700; transition:all .15s ease;
-}
-.stTabs [aria-selected="true"]{
-    background:linear-gradient(145deg, var(--navy-800), var(--navy-900)) !important; color:#fff !important;
-    box-shadow:0 -3px 10px -3px rgba(18,41,75,0.35);
-}
+/* ---------- Tab ---------- */
+.stTabs [data-baseweb="tab-list"], .stTabs [role="tablist"]{ gap:6px; border-bottom:1px solid var(--gray-200); }
+.stTabs [data-testid="stTab"]{ background:transparent; border-radius:10px 10px 0 0; padding:8px 14px !important;
+    font-weight:600; color:var(--gray-500); }
+.stTabs [data-testid="stTab"]:hover{ color:var(--navy-800); background:var(--gray-100); }
+.stTabs [data-testid="stTab"][aria-selected="true"]{ color:var(--blue-600); background:#fff;
+    box-shadow:0 -2px 8px -4px rgba(15,35,70,.18); }
+.stTabs [data-testid="stTab"] p{ font-size:.92rem; font-weight:inherit; }
 
-/* ---- Expander (cấu hình) ---- */
-.streamlit-expanderHeader{
-    background:linear-gradient(145deg, var(--navy-800), var(--navy-900)) !important;
-    color:#fff !important; border-radius:12px !important;
-}
+/* ---------- Thẻ số liệu ---------- */
+[data-testid="stMetric"]{ background:#fff; border:1px solid var(--gray-200); border-radius:14px; padding:12px 16px;
+    box-shadow:var(--shadow-sm); }
+[data-testid="stMetricLabel"] p{ color:var(--gray-500) !important; font-weight:600; font-size:.82rem; }
+[data-testid="stMetricValue"]{ color:var(--navy-900); font-weight:800; }
 
-/* ---- Constraint checkbox rows: nổi nhẹ, bo tròn hơn ---- */
-.constraint-row{
-    background:#fff; border:1px solid var(--gray-200); border-radius:13px;
-    padding:11px 15px; margin-bottom:9px;
-    box-shadow:0 2px 6px -3px rgba(18,41,75,0.12);
-}
+/* ---------- Ô nhập, bảng, thông báo ---------- */
+[data-testid="stDataFrame"], [data-testid="stDataEditor"]{ border-radius:12px; overflow:hidden; }
+[data-testid="stExpander"] details{ border-radius:12px !important; border-color:var(--gray-200) !important; background:#fff; }
+[data-testid="stAlert"]{ border-radius:12px; }
+[data-testid="stForm"]{ background:#fff; border-radius:14px !important; border-color:var(--gray-200) !important; }
+
+/* ---------- Ràng buộc luôn bật ---------- */
+.constraint-row{ background:#fff; border:1px solid var(--gray-200); border-radius:12px; padding:10px 14px; margin-bottom:8px; }
 .constraint-row b{ color:var(--navy-900); }
-.constraint-locked{
-    background:var(--navy-100); border:1px solid var(--navy-100);
-    box-shadow:none;
-}
+.constraint-locked{ background:var(--blue-50); border-color:var(--blue-100); color:var(--navy-800); }
 
-/* ---- Status pill ---- */
-.status-ok{
-    background:linear-gradient(145deg, #E9F8EF, #DDF3E6); color:#1B7A45; border:1px solid #BFE8CE;
-    padding:11px 18px; border-radius:13px; font-weight:700;
-    box-shadow:0 4px 12px -6px rgba(27,122,69,0.35);
-}
-
-/* ---- Sơ đồ chỗ ngồi ---- */
+/* ---------- Sơ đồ chỗ ngồi ---------- */
 .seating-chart{ margin:10px 0 20px 0; }
-.board-label{
-    text-align:center; background:linear-gradient(145deg, var(--navy-800), var(--navy-900));
-    color:#fff !important; padding:10px; border-radius:10px; margin-bottom:16px;
-    font-weight:800; letter-spacing:1.5px; font-size:0.85rem;
-    box-shadow:0 6px 14px -6px rgba(18,41,75,0.4);
-}
+.board-label{ text-align:center; background:linear-gradient(135deg, var(--navy-800), var(--navy-900)); color:#fff !important;
+    padding:10px; border-radius:10px; margin-bottom:16px; font-weight:800; letter-spacing:1.5px; font-size:.85rem; }
 .seat-row{ display:flex; gap:10px; margin-bottom:10px; justify-content:center; flex-wrap:wrap; }
-.seat{
-    width:104px; min-height:54px; border-radius:10px; display:flex; flex-direction:column;
-    align-items:center; justify-content:center; text-align:center; padding:6px;
-}
-.seat.filled{
-    background:linear-gradient(180deg, #FFFFFF 0%, #FBFCFE 100%);
-    border:1.5px solid var(--navy-700);
-    box-shadow:0 4px 10px -4px rgba(18,41,75,0.30), 0 1px 0 rgba(255,255,255,0.7) inset;
-}
+.seat{ width:104px; min-height:54px; border-radius:10px; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; text-align:center; padding:6px; }
+.seat.filled{ background:#fff; border:1.5px solid var(--navy-700); box-shadow:var(--shadow-sm); }
 .seat.empty{ background:var(--gray-100); border:1.5px dashed var(--gray-200); }
 .seat-sbd{ font-weight:800; color:var(--navy-800) !important; font-size:1.02rem; letter-spacing:.3px; }
-.seat-name{ color:var(--text-900) !important; font-size:0.72rem; line-height:1.2; margin-top:2px; }
-.seat-class{ color:var(--gray-500) !important; font-size:0.68rem; margin-top:1px; }
 
-/* ---- Footer ---- */
-.app-footer{
-    text-align:center; color:var(--gray-500); font-size:0.82rem;
-    margin-top:32px; padding-top:16px; border-top:1px solid var(--gray-200);
-}
+/* ---------- Thanh bên (chọn module) ---------- */
+section[data-testid="stSidebar"]{ background:linear-gradient(180deg, var(--navy-900) 0%, #0A1730 100%); }
+section[data-testid="stSidebar"] *{ color:#E2EAF6 !important; }
+.sidebar-brand{ font-size:1.05rem; font-weight:800; color:#fff !important; line-height:1.35; padding:4px 2px 14px 2px;
+    margin-bottom:8px; border-bottom:1px solid rgba(255,255,255,.12); }
+section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p{ font-size:.72rem !important; letter-spacing:1px;
+    text-transform:uppercase; color:#8FA6C8 !important; font-weight:700; }
+section[data-testid="stSidebar"] [role="radiogroup"]{ gap:2px; }
+section[data-testid="stSidebar"] [role="radiogroup"] label{ padding:9px 12px !important; border-radius:10px !important;
+    margin:0 !important; width:100%; transition:background .15s ease; }
+section[data-testid="stSidebar"] [role="radiogroup"] label > div:first-child{ display:none; }
+section[data-testid="stSidebar"] [role="radiogroup"] label:hover{ background:rgba(255,255,255,.07) !important; }
+section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked){
+    background:linear-gradient(135deg, rgba(59,130,246,.35), rgba(37,99,235,.18)) !important;
+    box-shadow:inset 3px 0 0 #60A5FA; }
+section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) p{ font-weight:700; color:#fff !important; }
+section[data-testid="stSidebar"] .stButton>button{ background:rgba(255,255,255,.06) !important; color:#fff !important;
+    border:1px solid rgba(255,255,255,.16) !important; box-shadow:none !important; }
+section[data-testid="stSidebar"] .stButton>button:hover{ background:rgba(255,255,255,.13) !important; transform:none; }
+section[data-testid="stSidebar"] hr{ border-color:rgba(255,255,255,.12) !important; }
 
-/* ---- Sidebar: thanh dọc chuyển module ---- */
-section[data-testid="stSidebar"]{
-    background:linear-gradient(180deg, var(--navy-900) 0%, #0A1730 100%);
-    box-shadow:4px 0 20px -8px rgba(0,0,0,0.35);
-}
-section[data-testid="stSidebar"] *{ color:#E7EEF9 !important; }
-.sidebar-brand{
-    font-size:1.05rem; font-weight:800; color:#fff !important; line-height:1.35;
-    padding:6px 2px 16px 2px; margin-bottom:10px;
-    border-bottom:1px solid rgba(255,255,255,0.14);
-}
-section[data-testid="stSidebar"] [data-baseweb="radio"]{
-    background:rgba(255,255,255,0.05); border-radius:12px; padding:4px;
-}
-section[data-testid="stSidebar"] label{
-    padding:10px 12px !important; border-radius:10px !important; margin-bottom:4px !important;
-    transition:background .15s ease;
-}
-section[data-testid="stSidebar"] label:hover{ background:rgba(255,255,255,0.08) !important; }
-section[data-testid="stSidebar"] .stButton>button{
-    background:rgba(255,255,255,0.06) !important; color:#fff !important;
-    border:1px solid rgba(255,255,255,0.18) !important; box-shadow:none !important;
-}
-section[data-testid="stSidebar"] .stButton>button:hover{
-    background:rgba(255,255,255,0.14) !important; transform:none;
-}
-section[data-testid="stSidebar"] hr{ border-color:rgba(255,255,255,0.14) !important; }
+/* ---------- Chân trang ---------- */
+.app-footer{ text-align:center; color:var(--gray-500); font-size:.85rem; font-weight:500; margin-top:36px;
+    padding:16px 0 8px 0; border-top:1px solid var(--gray-200); }
+
+/* ---------- Bảng thời khoá biểu (HTML) ---------- */
+.tkb-khung{ overflow-x:auto; border:1px solid var(--gray-200); border-radius:14px; background:#fff; box-shadow:var(--shadow-sm); margin:6px 0 14px 0; }
+table.tkb{ width:100%; border-collapse:collapse; table-layout:fixed; font-size:.84rem; }
+table.tkb th, table.tkb td{ border-bottom:1px solid var(--gray-100); border-right:1px solid var(--gray-100); padding:8px 8px; vertical-align:top; }
+table.tkb thead th{ background:var(--navy-800); color:#fff; font-weight:700; font-size:.8rem; text-align:center; padding:10px 6px; position:sticky; top:0; }
+table.tkb thead th.tkb-goc{ width:92px; }
+table.tkb th.tkb-nhan{ background:var(--gray-50); color:var(--navy-800); font-weight:700; text-align:left; width:92px; white-space:nowrap; }
+table.tkb tr.tkb-buoi td{ background:#E3EAF5; color:var(--navy-800); font-weight:800; font-size:.76rem; letter-spacing:.6px; padding:6px 10px; }
+td.tkb-tiet{ background:var(--blue-50); }
+.tkb-mon{ font-weight:700; color:var(--navy-900); line-height:1.3; }
+.tkb-phu{ color:var(--gray-500); font-size:.76rem; line-height:1.3; margin-top:2px; }
+.tkb-gio{ color:var(--blue-600); font-size:.72rem; font-weight:600; margin-top:3px; }
+td.tkb-chi-gio{ color:var(--gray-400); font-size:.74rem; }
+td.tkb-nghi{ background:repeating-linear-gradient(135deg,#F7F8FA,#F7F8FA 6px,#EFF2F6 6px,#EFF2F6 12px); color:var(--gray-400); font-size:.74rem; text-align:center; }
+hr.tkb-ngan{ border:none; border-top:1px dashed var(--blue-100); margin:6px 0; }
+section[data-testid="stSidebar"] label[data-testid="stRadioOption"] > div > div:first-child:not([data-testid]){ display:none !important; }
+section[data-testid="stSidebar"] [role="radiogroup"], section[data-testid="stSidebar"] label[data-testid="stRadioOption"]{ width:100%; }
+section[data-testid="stSidebar"] label[data-testid="stRadioOption"][data-selected="true"]{
+    background:linear-gradient(135deg, rgba(59,130,246,.35), rgba(37,99,235,.18)) !important; box-shadow:inset 3px 0 0 #60A5FA; }
+section[data-testid="stSidebar"] label[data-testid="stRadioOption"][data-selected="true"] p{ font-weight:700; color:#fff !important; }
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("""
-<div class="app-hero">
-  <h1>🗓️ Hệ thống Xếp Thời Khoá Biểu</h1>
-  <p>Nhập dữ liệu trực tiếp (giống Excel) hoặc nhập/xuất file <b>.xlsx</b> cho từng mục.
-  Chọn ràng buộc cần áp dụng, bấm <b>Xếp thời khoá biểu</b> — hệ thống dùng CP-SAT giải tự động
-  100%, sau đó có thể xuất kết quả ra <b>PDF</b> hoặc <b>Excel</b>, hoặc bấm xếp lại để có thêm
-  phương án khác.</p>
-</div>
-""", unsafe_allow_html=True)
+CHAN_TRANG = ("Ứng dụng được phát triển bởi Chuyên viên Quản lý hệ thống - "
+              "Trường TH, THCS và THPT Tân Phú.")
+
+
+def hien_hero(tieu_de: str, mo_ta: str = "", nhan: list[str] | None = None):
+    """Băng tiêu đề đầu trang (đổi theo từng module)."""
+    the_nhan = "".join(f'<span class="hero-chip">{html.escape(n)}</span>' for n in (nhan or []) if n)
+    st.markdown(
+        f'<div class="app-hero"><h1>{html.escape(tieu_de)}</h1>'
+        + (f'<p>{mo_ta}</p>' if mo_ta else "")
+        + (f'<div class="hero-chips">{the_nhan}</div>' if the_nhan else "")
+        + '</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def hien_chan_trang():
+    st.markdown(f'<div class="app-footer">🏫 {html.escape(CHAN_TRANG)}</div>', unsafe_allow_html=True)
+
+
+_DEM_KHUNG = [0]
+
+
+def the_khung():
+    """Khung (thẻ) có viền cho 1 mục nội dung — gắn key riêng để CSS tạo kiểu thẻ."""
+    _DEM_KHUNG[0] += 1
+    return st.container(border=True, key=f"the_{_DEM_KHUNG[0]}")
 
 
 def slugify(text: str, prefix: str = "") -> str:
@@ -550,6 +517,59 @@ def luoi_tkb(result, classes, config, loc, noi_dung, grade_times_df, tuan_bat_da
         if gio:
             gio_o[(l.day, l.period)] = gio
     return luoi, gio_o
+
+
+def _tach_mon_phu(chu: str) -> tuple[str, str | None]:
+    """'Toán 10A1 — 10A1' -> ('Toán 10A1', '10A1'); 'Tiếng Anh (10A1) (Mr. John (GVNN))'
+    -> ('Tiếng Anh (10A1)', 'Mr. John (GVNN)') — lấy cặp ngoặc CUỐI làm phần phụ."""
+    if " — " in chu:
+        ten, phu = chu.split(" — ", 1)
+        return ten, phu
+    if chu.endswith(")"):
+        sau = 0
+        for i in range(len(chu) - 1, -1, -1):
+            sau += {")": 1, "(": -1}.get(chu[i], 0)
+            if sau == 0:
+                if i > 0 and chu[i - 1] == " ":
+                    return chu[:i - 1], chu[i + 1:-1]
+                break
+    return chu, None
+
+
+def bang_tkb_html(luoi: pd.DataFrame) -> str:
+    """Vẽ lưới thời khoá biểu thành bảng HTML: chữ tự xuống dòng, tên môn in đậm,
+    giáo viên / lớp và giờ học in nhỏ bên dưới, ô không học tô xám."""
+    def _o(v: str) -> str:
+        if not v:
+            return '<td class="tkb-trong"></td>'
+        if v.startswith("✕"):
+            return '<td class="tkb-nghi">không học</td>'
+        if v.startswith("🕘"):
+            return f'<td class="tkb-chi-gio">{html.escape(v[1:].strip())}</td>'
+        phan = []
+        for muc in v.split(" / "):
+            chinh, _, gio = muc.partition(" · ")
+            ten, phu = _tach_mon_phu(chinh)
+            phan.append(
+                f'<div class="tkb-mon">{html.escape(ten)}</div>'
+                + (f'<div class="tkb-phu">{html.escape(phu)}</div>' if phu else "")
+                + (f'<div class="tkb-gio">{html.escape(gio)}</div>' if gio else "")
+            )
+        return '<td class="tkb-tiet">' + '<hr class="tkb-ngan">'.join(phan) + "</td>"
+
+    dau = "".join(f"<th>{html.escape(str(c))}</th>" for c in luoi.columns)
+    dong = []
+    for chi_so, hang in luoi.iterrows():
+        nhan = str(chi_so)
+        if nhan.startswith(("☀️", "🌙")):
+            dong.append(f'<tr class="tkb-buoi"><td colspan="{len(luoi.columns) + 1}">{html.escape(nhan)}</td></tr>')
+            continue
+        tiet, _, gio = nhan.partition(" (")
+        nhan_html = html.escape(tiet) + (f'<div class="tkb-gio">{html.escape(gio.rstrip(")"))}</div>' if gio else "")
+        dong.append(f'<tr><th class="tkb-nhan">{nhan_html}</th>'
+                    + "".join(_o(str(v or "")) for v in hang) + "</tr>")
+    return (f'<div class="tkb-khung"><table class="tkb"><thead><tr><th class="tkb-goc">Tiết</th>{dau}</tr></thead>'
+            f'<tbody>{"".join(dong)}</tbody></table></div>')
 
 
 def _excel_nhieu_sheet(bang: dict[str, pd.DataFrame]) -> bytes:
@@ -1203,9 +1223,11 @@ def _o_chan_doan():
 
 
 def man_hinh_dang_nhap():
+    hien_hero("🏫 Hệ thống Quản lý Trường học",
+              "Thời khoá biểu · Phòng thi · Coi thi · Dạy thay — đăng nhập để xem lịch của bạn.")
     _, giua, _ = st.columns([1, 1.3, 1])
     with giua:
-        st.markdown("### 🔐 Đăng nhập")
+        st.markdown('<div class="login-title">🔐 Đăng nhập</div>', unsafe_allow_html=True)
         if DANG_NHAP_OTP:
             st.caption("Nhập email của trường, hệ thống gửi mã đăng nhập vào hộp thư Outlook của bạn.")
             _form_ma_email()
@@ -1244,6 +1266,7 @@ if BAT_DANG_NHAP and not st.session_state.get("nguoi_dung") and DANG_NHAP_MS:
                          "Liên hệ quản trị viên, hoặc đăng nhập bằng email của trường.")
                 if st.button("🔄 Đăng nhập bằng tài khoản khác", use_container_width=True):
                     st.logout()
+            hien_chan_trang()
             st.stop()
 
 if BAT_DANG_NHAP and not st.session_state.get("nguoi_dung"):
@@ -1252,6 +1275,7 @@ if BAT_DANG_NHAP and not st.session_state.get("nguoi_dung"):
     elif CO_GHI_NHO and not st.session_state.get("_da_dang_xuat"):
         _js_khoi_phuc_dang_nhap()
     man_hinh_dang_nhap()
+    hien_chan_trang()
     st.stop()
 
 if st.session_state.get("_cookie_can_ghi"):
@@ -1393,16 +1417,41 @@ with st.sidebar:
     if LA_ADMIN:
         st.caption("Đổi ngày này ở tab ⚙️ Cấu hình chung.")
 
+MO_TA_MODULE = {
+    "📅 Xếp Thời Khoá Biểu": ("📅 Xếp thời khoá biểu",
+        "Nhập dữ liệu ở các tab ① ② ③ → sang tab <b>🗓️ Xếp lịch & Kết quả</b>, chọn ràng buộc và bấm "
+        "<b>Xếp thời khoá biểu</b>. Kết quả hiện ngay bên dưới — xem theo lớp hoặc theo giáo viên, "
+        "xuất PDF / Excel, rồi 📢 công bố cho giáo viên."),
+    "🪑 Xếp Phòng Thi": ("🪑 Xếp phòng thi & coi thi",
+        "Tải danh sách học sinh (SBD · Lớp · Môn thi) → khai báo phòng và môn thi → bấm xếp. "
+        "Sơ đồ chỗ ngồi chỉ ghi SBD; phân công giám thị tự động."),
+    "🔄 Phân Công Dạy Thay": ("🔄 Phân công dạy thay",
+        "Chọn ngày và giáo viên nghỉ — hệ thống gợi ý giáo viên đang trống tiết, ưu tiên cùng môn."),
+    "☁️ Lưu trữ SharePoint": ("☁️ Lưu trữ SharePoint",
+        "Lưu / tải dữ liệu lên SharePoint, đồng bộ các List, sao lưu trên máy."),
+    "👥 Tài khoản & Công bố": ("👥 Tài khoản & Công bố",
+        "Công bố thời khoá biểu cho giáo viên, đăng lên Microsoft Teams, quản lý đăng nhập và phân quyền."),
+    "👤 Lịch của tôi": ("👤 Lịch của tôi",
+        f"Xin chào <b>{html.escape(NGUOI_DUNG.get('ten') or '')}</b> — thời khoá biểu, lớp chủ nhiệm, "
+        "lịch coi thi và dạy thay của bạn."),
+}
+_tieu_de_mod, _mo_ta_mod = MO_TA_MODULE.get(module, (module, ""))
+hien_hero(
+    _tieu_de_mod, _mo_ta_mod,
+    [school_name, f"📆 Áp dụng từ {st.session_state.tuan_bat_dau.strftime('%d/%m/%Y')}"],
+)
+
 if module == "📅 Xếp Thời Khoá Biểu":
     generate = regenerate = False
     if LA_ADMIN:
-        tab_cfg, tab_data, tab_activities, tab_constraints, tab_result = st.tabs([
+        tab_cfg, tab_data, tab_activities, tab_constraints = st.tabs([
             "⚙️ Cấu hình chung",
             "🏢 Tổ / GV / Lớp / Phòng",
             "📚 Môn học & phân công",
-            "⚖️ Ràng buộc & Xếp lịch",
-            "📅 Kết quả",
+            "🗓️ Xếp lịch & Kết quả",
         ])
+        # kết quả hiện ngay bên dưới nút "Xếp thời khoá biểu" (cùng tab)
+        tab_result = tab_constraints
     else:
         # người dùng thường: chỉ xem thời khoá biểu đã được công bố
         (tab_result,) = st.tabs(["📅 Thời khoá biểu"])
@@ -1413,352 +1462,334 @@ if module == "📅 Xếp Thời Khoá Biểu":
         # TAB 1 — Cấu hình chung + giờ học theo khối
         # ---------------------------------------------------------------------
         with tab_cfg:
-            st.markdown('<div class="section-card">', unsafe_allow_html=True)
-            section_header("1", "Cấu hình lịch học")
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                num_days = st.selectbox("Số ngày học/tuần", [5, 6], key="cfg_num_days")
-            with c2:
-                periods_per_day = st.number_input(
-                    "Số tiết/ngày TỐI ĐA", min_value=1, max_value=15,
-                    help="Số tiết của ngày học DÀI NHẤT trong tuần (tính trên toàn trường). "
-                         "Nếu 1 số khối có ít tiết hơn vào 1 số ngày, khai báo ở mục '2. Thời gian "
-                         "biểu theo từng khối, từng ngày' bên dưới — không cần đổi số này xuống thấp.",
-                    key="cfg_periods_per_day",
-                )
-            with c3:
-                # số tiết buổi sáng không được vượt số tiết/ngày vừa chọn
-                st.session_state.cfg_morning_count = min(
-                    int(st.session_state.cfg_morning_count), int(periods_per_day)
-                )
-                morning_count = st.number_input(
-                    "Số tiết buổi sáng (còn lại là buổi chiều)", min_value=1,
-                    max_value=int(periods_per_day),
-                    key="cfg_morning_count",
-                )
-            max_seconds = st.slider(
-                "Thời gian tối đa cho solver tìm lời giải (giây)", 5, 120, key="cfg_max_seconds"
-            )
-            school_name = st.text_input(
-                "Tên trường (hiển thị trên PDF xuất ra, không bắt buộc)",
-                key="cfg_school_name",
-            )
-            st.session_state.tuan_bat_dau = st.date_input(
-                "📆 Ngày bắt đầu áp dụng TKB (Thứ 2 của tuần đầu tiên áp dụng)",
-                value=st.session_state.tuan_bat_dau,
-                help="Ngày này vừa là mốc TKB bắt đầu có hiệu lực, vừa dùng để hiện ngày thực tế "
-                     "(VD 'Thứ 2 (08/09)') trên thời khoá biểu, phòng thi và phân công dạy thay.",
-            )
-            st.markdown('</div>', unsafe_allow_html=True)
-
-            st.markdown('<div class="section-card">', unsafe_allow_html=True)
-            section_header(
-                "2", "Thời gian biểu theo từng khối, từng ngày (không bắt buộc)",
-                "Cấu hình RIÊNG cho từng khối và từng ngày: khối đó ngày đó học những tiết nào, "
-                "giờ bắt đầu/kết thúc của từng tiết. Cột <b>Thứ</b> chọn <i>Tất cả các ngày</i> để "
-                "áp dụng chung cho cả tuần — ngày nào khai báo riêng thì dòng riêng được ưu tiên. "
-                "<b>Tiết = 0</b> nghĩa là khối đó nghỉ cả ngày. Đây là ràng buộc THẬT: khối đã khai "
-                "báo thì ngày đó CHỈ được xếp vào đúng các tiết có trong bảng. Khối nào không có dòng "
-                "nào sẽ học đủ 'Số tiết/ngày tối đa' với nhãn mặc định 'Tiết N'. Tiết buổi chiều được "
-                f"đánh số tiếp theo buổi sáng (buổi sáng hiện có {int(morning_count)} tiết → buổi "
-                f"chiều bắt đầu từ Tiết {int(morning_count) + 1}).",
-            )
-            st.session_state.grade_times = chuan_hoa_bang_gio(st.session_state.grade_times)
-
-            grades_known = sorted({
-                int(g) for g in pd.to_numeric(st.session_state.classes["Khối"], errors="coerce").dropna()
-            }) or list(range(1, 13))
-            thu_hien_co = DAY_OPTIONS[:int(num_days)]
-            so_tiet_chieu_toi_da = max(int(periods_per_day) - int(morning_count), 0)
-
-            with st.expander("⚡ Tạo nhanh thời gian biểu cho nhiều khối / nhiều ngày", expanded=False):
-                with st.form("form_tao_gio_hoc"):
-                    g1, g2 = st.columns(2)
-                    with g1:
-                        tg_khoi = st.multiselect("Khối áp dụng", grades_known, default=grades_known[:1])
-                    with g2:
-                        tg_thu = st.multiselect(
-                            "Ngày áp dụng", [THU_TAT_CA] + thu_hien_co, default=[THU_TAT_CA],
-                            help="Chọn 'Tất cả các ngày' để dùng chung cho cả tuần, hoặc chọn từng ngày "
-                                 "cụ thể để cấu hình riêng.",
-                        )
-                    g3, g4, g5, g6 = st.columns(4)
-                    with g3:
-                        tg_so_sang = st.number_input(
-                            "Số tiết buổi sáng", 0, int(morning_count), int(morning_count), step=1)
-                    with g4:
-                        tg_gio_sang = st.time_input("Giờ vào học buổi sáng", time(7, 0), step=300)
-                    with g5:
-                        tg_so_chieu = st.number_input(
-                            "Số tiết buổi chiều", 0, so_tiet_chieu_toi_da, so_tiet_chieu_toi_da, step=1)
-                    with g6:
-                        tg_gio_chieu = st.time_input("Giờ vào học buổi chiều", time(13, 30), step=300)
-                    g7, g8, g9, g10 = st.columns(4)
-                    with g7:
-                        tg_thoi_luong = st.number_input("Thời lượng 1 tiết (phút)", 20, 120, 45, step=5)
-                    with g8:
-                        tg_nghi = st.number_input("Nghỉ giữa 2 tiết (phút)", 0, 60, 5, step=5)
-                    with g9:
-                        tg_ra_choi_sau = st.number_input(
-                            "Ra chơi sau tiết thứ (của mỗi buổi)", 0, 10, 2, step=1,
-                            help="Để 0 nếu không có giờ ra chơi dài.")
-                    with g10:
-                        tg_ra_choi = st.number_input("Thời gian ra chơi (phút)", 0, 60, 20, step=5)
-                    tao_btn = st.form_submit_button(
-                        "⚡ Tạo / ghi đè thời gian biểu cho các khối & ngày đã chọn",
-                        type="primary", use_container_width=True,
+            with the_khung():
+                section_header("1", "Cấu hình lịch học")
+                c1, c2, c3 = st.columns(3)
+                with c1:
+                    num_days = st.selectbox("Số ngày học/tuần", [5, 6], key="cfg_num_days")
+                with c2:
+                    periods_per_day = st.number_input(
+                        "Số tiết/ngày TỐI ĐA", min_value=1, max_value=15,
+                        help="Số tiết của ngày học DÀI NHẤT trong tuần (tính trên toàn trường). "
+                             "Nếu 1 số khối có ít tiết hơn vào 1 số ngày, khai báo ở mục '2. Thời gian "
+                             "biểu theo từng khối, từng ngày' bên dưới — không cần đổi số này xuống thấp.",
+                        key="cfg_periods_per_day",
                     )
-                if tao_btn:
-                    if not tg_khoi or not tg_thu:
-                        st.error("Chọn ít nhất 1 khối và 1 ngày.")
-                    else:
-                        moi = tao_bang_gio_tu_dong(
-                            tg_khoi, tg_thu, int(tg_so_sang), tg_gio_sang, int(tg_so_chieu), tg_gio_chieu,
-                            tiet_dau_chieu=int(morning_count) + 1, thoi_luong=int(tg_thoi_luong),
-                            nghi_giua_tiet=int(tg_nghi), ra_choi_sau=int(tg_ra_choi_sau),
-                            ra_choi_phut=int(tg_ra_choi),
-                        )
-                        cu = st.session_state.grade_times
-                        khoi_cu = pd.to_numeric(cu["Khối"], errors="coerce")
-                        giu_lai = cu[~(khoi_cu.isin(tg_khoi) & cu["Thứ"].isin(tg_thu))]
-                        st.session_state.grade_times = pd.concat(
-                            [giu_lai, pd.DataFrame(moi, columns=GRADE_TIME_COLUMNS)], ignore_index=True,
-                        ).sort_values(
-                            ["Khối", "Thứ", "Tiết"],
-                            key=lambda col: col.map(
-                                lambda v: ([THU_TAT_CA] + DAY_OPTIONS).index(v)
-                                if v in ([THU_TAT_CA] + DAY_OPTIONS) else 99
-                            ) if col.name == "Thứ" else pd.to_numeric(col, errors="coerce"),
-                        ).reset_index(drop=True)
-                        st.session_state.pop("editor_grade_times", None)
-                        st.rerun()
+                with c3:
+                    # số tiết buổi sáng không được vượt số tiết/ngày vừa chọn
+                    st.session_state.cfg_morning_count = min(
+                        int(st.session_state.cfg_morning_count), int(periods_per_day)
+                    )
+                    morning_count = st.number_input(
+                        "Số tiết buổi sáng (còn lại là buổi chiều)", min_value=1,
+                        max_value=int(periods_per_day),
+                        key="cfg_morning_count",
+                    )
+                max_seconds = st.slider(
+                    "Thời gian tối đa cho solver tìm lời giải (giây)", 5, 120, key="cfg_max_seconds"
+                )
+                school_name = st.text_input(
+                    "Tên trường (hiển thị trên PDF xuất ra, không bắt buộc)",
+                    key="cfg_school_name",
+                )
+                st.session_state.tuan_bat_dau = st.date_input(
+                    "📆 Ngày bắt đầu áp dụng TKB (Thứ 2 của tuần đầu tiên áp dụng)",
+                    value=st.session_state.tuan_bat_dau,
+                    help="Ngày này vừa là mốc TKB bắt đầu có hiệu lực, vừa dùng để hiện ngày thực tế "
+                         "(VD 'Thứ 2 (08/09)') trên thời khoá biểu, phòng thi và phân công dạy thay.",
+                )
 
-            excel_io_row("grade_times", "Thoi_gian_bieu", transform=chuan_hoa_bang_gio)
-            st.session_state.grade_times = st.data_editor(
-                st.session_state.grade_times, num_rows="dynamic", use_container_width=True,
-                key="editor_grade_times",
-                column_config={
-                    "Khối": st.column_config.NumberColumn(min_value=1, max_value=12, step=1, required=True),
-                    "Thứ": st.column_config.SelectboxColumn(
-                        options=[THU_TAT_CA] + DAY_OPTIONS, required=True,
-                        help="'Tất cả các ngày' = dùng chung cả tuần; dòng của ngày cụ thể được ưu tiên.",
-                    ),
-                    "Tiết": st.column_config.NumberColumn(
-                        min_value=0, max_value=15, step=1, required=True,
-                        help="Số thứ tự tiết trong ngày. Nhập 0 nếu khối đó NGHỈ cả ngày hôm đó.",
-                    ),
-                    "Giờ bắt đầu": st.column_config.TextColumn(help="Định dạng HH:MM, VD 07:15"),
-                    "Giờ kết thúc": st.column_config.TextColumn(help="Định dạng HH:MM, VD 08:00"),
-                },
-            )
+            with the_khung():
+                section_header(
+                    "2", "Thời gian biểu theo từng khối, từng ngày (không bắt buộc)",
+                    "Cấu hình RIÊNG cho từng khối và từng ngày: khối đó ngày đó học những tiết nào, "
+                    "giờ bắt đầu/kết thúc của từng tiết. Cột <b>Thứ</b> chọn <i>Tất cả các ngày</i> để "
+                    "áp dụng chung cho cả tuần — ngày nào khai báo riêng thì dòng riêng được ưu tiên. "
+                    "<b>Tiết = 0</b> nghĩa là khối đó nghỉ cả ngày. Đây là ràng buộc THẬT: khối đã khai "
+                    "báo thì ngày đó CHỈ được xếp vào đúng các tiết có trong bảng. Khối nào không có dòng "
+                    "nào sẽ học đủ 'Số tiết/ngày tối đa' với nhãn mặc định 'Tiết N'. Tiết buổi chiều được "
+                    f"đánh số tiếp theo buổi sáng (buổi sáng hiện có {int(morning_count)} tiết → buổi "
+                    f"chiều bắt đầu từ Tiết {int(morning_count) + 1}).",
+                )
+                st.session_state.grade_times = chuan_hoa_bang_gio(st.session_state.grade_times)
 
-            # Xem lại dạng lưới cho từng khối: dòng = Tiết, cột = Thứ
-            lich_xem, loi_xem = lich_hoc_theo_khoi_ngay(
-                st.session_state.grade_times, list(range(1, int(num_days) + 1))
-            )
-            for e in loi_xem:
-                st.warning(e)
-            khoi_da_cau_hinh = sorted({k for k, _ in lich_xem})
-            if khoi_da_cau_hinh:
-                st.markdown("**👀 Xem lại thời gian biểu theo khối**")
-                khoi_tabs = st.tabs([f"Khối {k}" for k in khoi_da_cau_hinh])
-                for tab, k in zip(khoi_tabs, khoi_da_cau_hinh):
-                    with tab:
-                        luoi = pd.DataFrame(
-                            "", index=[f"Tiết {p}" for p in range(1, int(periods_per_day) + 1)],
-                            columns=thu_hien_co,
+                grades_known = sorted({
+                    int(g) for g in pd.to_numeric(st.session_state.classes["Khối"], errors="coerce").dropna()
+                }) or list(range(1, 13))
+                thu_hien_co = DAY_OPTIONS[:int(num_days)]
+                so_tiet_chieu_toi_da = max(int(periods_per_day) - int(morning_count), 0)
+
+                with st.expander("⚡ Tạo nhanh thời gian biểu cho nhiều khối / nhiều ngày", expanded=False):
+                    with st.form("form_tao_gio_hoc"):
+                        g1, g2 = st.columns(2)
+                        with g1:
+                            tg_khoi = st.multiselect("Khối áp dụng", grades_known, default=grades_known[:1])
+                        with g2:
+                            tg_thu = st.multiselect(
+                                "Ngày áp dụng", [THU_TAT_CA] + thu_hien_co, default=[THU_TAT_CA],
+                                help="Chọn 'Tất cả các ngày' để dùng chung cho cả tuần, hoặc chọn từng ngày "
+                                     "cụ thể để cấu hình riêng.",
+                            )
+                        g3, g4, g5, g6 = st.columns(4)
+                        with g3:
+                            tg_so_sang = st.number_input(
+                                "Số tiết buổi sáng", 0, int(morning_count), int(morning_count), step=1)
+                        with g4:
+                            tg_gio_sang = st.time_input("Giờ vào học buổi sáng", time(7, 0), step=300)
+                        with g5:
+                            tg_so_chieu = st.number_input(
+                                "Số tiết buổi chiều", 0, so_tiet_chieu_toi_da, so_tiet_chieu_toi_da, step=1)
+                        with g6:
+                            tg_gio_chieu = st.time_input("Giờ vào học buổi chiều", time(13, 30), step=300)
+                        g7, g8, g9, g10 = st.columns(4)
+                        with g7:
+                            tg_thoi_luong = st.number_input("Thời lượng 1 tiết (phút)", 20, 120, 45, step=5)
+                        with g8:
+                            tg_nghi = st.number_input("Nghỉ giữa 2 tiết (phút)", 0, 60, 5, step=5)
+                        with g9:
+                            tg_ra_choi_sau = st.number_input(
+                                "Ra chơi sau tiết thứ (của mỗi buổi)", 0, 10, 2, step=1,
+                                help="Để 0 nếu không có giờ ra chơi dài.")
+                        with g10:
+                            tg_ra_choi = st.number_input("Thời gian ra chơi (phút)", 0, 60, 20, step=5)
+                        tao_btn = st.form_submit_button(
+                            "⚡ Tạo / ghi đè thời gian biểu cho các khối & ngày đã chọn",
+                            type="primary", use_container_width=True,
                         )
-                        for d in range(1, int(num_days) + 1):
-                            tiet_dict = lich_xem.get((k, d))
-                            for p in range(1, int(periods_per_day) + 1):
-                                if tiet_dict is None:
-                                    luoi.iloc[p - 1, d - 1] = "(mặc định)"
-                                elif p in tiet_dict:
-                                    luoi.iloc[p - 1, d - 1] = tiet_dict[p] or "✔"
-                                else:
-                                    luoi.iloc[p - 1, d - 1] = "—"
-                        st.dataframe(luoi, use_container_width=True)
-                st.caption("— = khối không học tiết đó; (mặc định) = ngày đó chưa khai báo, học đủ các tiết.")
-            st.markdown('</div>', unsafe_allow_html=True)
+                    if tao_btn:
+                        if not tg_khoi or not tg_thu:
+                            st.error("Chọn ít nhất 1 khối và 1 ngày.")
+                        else:
+                            moi = tao_bang_gio_tu_dong(
+                                tg_khoi, tg_thu, int(tg_so_sang), tg_gio_sang, int(tg_so_chieu), tg_gio_chieu,
+                                tiet_dau_chieu=int(morning_count) + 1, thoi_luong=int(tg_thoi_luong),
+                                nghi_giua_tiet=int(tg_nghi), ra_choi_sau=int(tg_ra_choi_sau),
+                                ra_choi_phut=int(tg_ra_choi),
+                            )
+                            cu = st.session_state.grade_times
+                            khoi_cu = pd.to_numeric(cu["Khối"], errors="coerce")
+                            giu_lai = cu[~(khoi_cu.isin(tg_khoi) & cu["Thứ"].isin(tg_thu))]
+                            st.session_state.grade_times = pd.concat(
+                                [giu_lai, pd.DataFrame(moi, columns=GRADE_TIME_COLUMNS)], ignore_index=True,
+                            ).sort_values(
+                                ["Khối", "Thứ", "Tiết"],
+                                key=lambda col: col.map(
+                                    lambda v: ([THU_TAT_CA] + DAY_OPTIONS).index(v)
+                                    if v in ([THU_TAT_CA] + DAY_OPTIONS) else 99
+                                ) if col.name == "Thứ" else pd.to_numeric(col, errors="coerce"),
+                            ).reset_index(drop=True)
+                            st.session_state.pop("editor_grade_times", None)
+                            st.rerun()
+
+                excel_io_row("grade_times", "Thoi_gian_bieu", transform=chuan_hoa_bang_gio)
+                st.session_state.grade_times = st.data_editor(
+                    st.session_state.grade_times, num_rows="dynamic", use_container_width=True,
+                    key="editor_grade_times",
+                    column_config={
+                        "Khối": st.column_config.NumberColumn(min_value=1, max_value=12, step=1, required=True),
+                        "Thứ": st.column_config.SelectboxColumn(
+                            options=[THU_TAT_CA] + DAY_OPTIONS, required=True,
+                            help="'Tất cả các ngày' = dùng chung cả tuần; dòng của ngày cụ thể được ưu tiên.",
+                        ),
+                        "Tiết": st.column_config.NumberColumn(
+                            min_value=0, max_value=15, step=1, required=True,
+                            help="Số thứ tự tiết trong ngày. Nhập 0 nếu khối đó NGHỈ cả ngày hôm đó.",
+                        ),
+                        "Giờ bắt đầu": st.column_config.TextColumn(help="Định dạng HH:MM, VD 07:15"),
+                        "Giờ kết thúc": st.column_config.TextColumn(help="Định dạng HH:MM, VD 08:00"),
+                    },
+                )
+
+                # Xem lại dạng lưới cho từng khối: dòng = Tiết, cột = Thứ
+                lich_xem, loi_xem = lich_hoc_theo_khoi_ngay(
+                    st.session_state.grade_times, list(range(1, int(num_days) + 1))
+                )
+                for e in loi_xem:
+                    st.warning(e)
+                khoi_da_cau_hinh = sorted({k for k, _ in lich_xem})
+                if khoi_da_cau_hinh:
+                    st.markdown("**👀 Xem lại thời gian biểu theo khối**")
+                    khoi_tabs = st.tabs([f"Khối {k}" for k in khoi_da_cau_hinh])
+                    for tab, k in zip(khoi_tabs, khoi_da_cau_hinh):
+                        with tab:
+                            luoi = pd.DataFrame(
+                                "", index=[f"Tiết {p}" for p in range(1, int(periods_per_day) + 1)],
+                                columns=thu_hien_co,
+                            )
+                            for d in range(1, int(num_days) + 1):
+                                tiet_dict = lich_xem.get((k, d))
+                                for p in range(1, int(periods_per_day) + 1):
+                                    if tiet_dict is None:
+                                        luoi.iloc[p - 1, d - 1] = "(mặc định)"
+                                    elif p in tiet_dict:
+                                        luoi.iloc[p - 1, d - 1] = tiet_dict[p] or "✔"
+                                    else:
+                                        luoi.iloc[p - 1, d - 1] = "—"
+                            st.dataframe(luoi, use_container_width=True)
+                    st.caption("— = khối không học tiết đó; (mặc định) = ngày đó chưa khai báo, học đủ các tiết.")
 
         # ---------------------------------------------------------------------
         # TAB 2 — Tổ chuyên môn / Giáo viên / Lớp học / Phòng đặc biệt
         # ---------------------------------------------------------------------
         with tab_data:
-            st.markdown('<div class="section-card">', unsafe_allow_html=True)
-            section_header("1", "Tổ chuyên môn")
-            excel_io_row("departments", "To_chuyen_mon")
-            st.session_state.departments = st.data_editor(
-                st.session_state.departments, num_rows="dynamic", use_container_width=True,
-                key="editor_departments",
-                column_config={"Tên tổ": st.column_config.TextColumn(required=True)},
-            )
-            st.markdown('</div>', unsafe_allow_html=True)
+            with the_khung():
+                section_header("1", "Tổ chuyên môn")
+                excel_io_row("departments", "To_chuyen_mon")
+                st.session_state.departments = st.data_editor(
+                    st.session_state.departments, num_rows="dynamic", use_container_width=True,
+                    key="editor_departments",
+                    column_config={"Tên tổ": st.column_config.TextColumn(required=True)},
+                )
             dept_names = [d for d in st.session_state.departments["Tên tổ"].dropna().tolist() if d.strip()]
 
-            st.markdown('<div class="section-card">', unsafe_allow_html=True)
-            section_header(
-                "2", "Giáo viên",
-                "<b>Email</b>: email trường để GV đăng nhập và xem lịch của mình. <b>Lớp chủ nhiệm</b>: GV "
-                "thấy thêm TKB lớp này. <b>Quyền</b>: admin/user — có hiệu lực sau khi 📢 Công bố.",
-            )
-            excel_io_row("teachers", "Giao_vien", transform=chuan_hoa_bang_gv)
-            st.session_state.teachers = st.data_editor(
-                st.session_state.teachers, num_rows="dynamic", use_container_width=True,
-                key="editor_teachers",
-                column_config={
-                    "Tên giáo viên": st.column_config.TextColumn(required=True),
-                    "Tổ chuyên môn": st.column_config.SelectboxColumn(options=[""] + dept_names),
-                    "Email": st.column_config.TextColumn(
-                        help="Email trường của GV — dùng để đăng nhập và xem 'Lịch của tôi'."),
-                    "Lớp chủ nhiệm": st.column_config.SelectboxColumn(options=[""] + class_names),
-                    "Quyền": st.column_config.SelectboxColumn(
-                        options=["user", "admin"], required=True,
-                        help="admin = toàn quyền (có hiệu lực sau khi 📢 Công bố). user = chỉ xem lịch của mình."),
-                },
-            )
-            st.markdown('</div>', unsafe_allow_html=True)
+            with the_khung():
+                section_header(
+                    "2", "Giáo viên",
+                    "<b>Email</b>: email trường để GV đăng nhập và xem lịch của mình. <b>Lớp chủ nhiệm</b>: GV "
+                    "thấy thêm TKB lớp này. <b>Quyền</b>: admin/user — có hiệu lực sau khi 📢 Công bố.",
+                )
+                excel_io_row("teachers", "Giao_vien", transform=chuan_hoa_bang_gv)
+                st.session_state.teachers = st.data_editor(
+                    st.session_state.teachers, num_rows="dynamic", use_container_width=True,
+                    key="editor_teachers",
+                    column_config={
+                        "Tên giáo viên": st.column_config.TextColumn(required=True),
+                        "Tổ chuyên môn": st.column_config.SelectboxColumn(options=[""] + dept_names),
+                        "Email": st.column_config.TextColumn(
+                            help="Email trường của GV — dùng để đăng nhập và xem 'Lịch của tôi'."),
+                        "Lớp chủ nhiệm": st.column_config.SelectboxColumn(options=[""] + class_names),
+                        "Quyền": st.column_config.SelectboxColumn(
+                            options=["user", "admin"], required=True,
+                            help="admin = toàn quyền (có hiệu lực sau khi 📢 Công bố). user = chỉ xem lịch của mình."),
+                    },
+                )
             teacher_names = [t for t in st.session_state.teachers["Tên giáo viên"].dropna().tolist() if t.strip()]
 
-            st.markdown('<div class="section-card">', unsafe_allow_html=True)
-            section_header(
-                "3", "Lớp học",
-                "<b>Nhóm thứ tự</b>: dùng cho ràng buộc “lệch giờ khi 1 GV dạy toàn trường” — các lớp cùng "
-                "nhóm sẽ được GV đó dạy liền nhau, nhóm số nhỏ dạy trước. VD: Nhóm 1 = K10/K11/6-ESL, "
-                "Nhóm 2 = K12, Nhóm 3 = K6-9. Nếu trường không có ràng buộc này, để tất cả cùng 1 nhóm.",
-            )
-            excel_io_row("classes", "Lop_hoc")
-            st.session_state.classes = st.data_editor(
-                st.session_state.classes, num_rows="dynamic", use_container_width=True,
-                key="editor_classes",
-                column_config={
-                    "Tên lớp": st.column_config.TextColumn(required=True),
-                    "Khối": st.column_config.NumberColumn(min_value=1, max_value=12, step=1, required=True),
-                    "Nhóm thứ tự": st.column_config.NumberColumn(min_value=0, max_value=9, step=1, required=True),
-                },
-            )
-            st.markdown('</div>', unsafe_allow_html=True)
+            with the_khung():
+                section_header(
+                    "3", "Lớp học",
+                    "<b>Nhóm thứ tự</b>: dùng cho ràng buộc “lệch giờ khi 1 GV dạy toàn trường” — các lớp cùng "
+                    "nhóm sẽ được GV đó dạy liền nhau, nhóm số nhỏ dạy trước. VD: Nhóm 1 = K10/K11/6-ESL, "
+                    "Nhóm 2 = K12, Nhóm 3 = K6-9. Nếu trường không có ràng buộc này, để tất cả cùng 1 nhóm.",
+                )
+                excel_io_row("classes", "Lop_hoc")
+                st.session_state.classes = st.data_editor(
+                    st.session_state.classes, num_rows="dynamic", use_container_width=True,
+                    key="editor_classes",
+                    column_config={
+                        "Tên lớp": st.column_config.TextColumn(required=True),
+                        "Khối": st.column_config.NumberColumn(min_value=1, max_value=12, step=1, required=True),
+                        "Nhóm thứ tự": st.column_config.NumberColumn(min_value=0, max_value=9, step=1, required=True),
+                    },
+                )
             class_names = [c for c in st.session_state.classes["Tên lớp"].dropna().tolist() if c.strip()]
 
-            st.markdown('<div class="section-card">', unsafe_allow_html=True)
-            section_header(
-                "4", "Phòng đặc biệt (không bắt buộc)",
-                "Chỉ khai báo nếu có phòng bị giới hạn số lượng (VD chỉ có 1 phòng máy → không thể 2 lớp "
-                "học Tin cùng lúc). Bỏ trống nếu không cần.",
-            )
-            excel_io_row("rooms", "Phong_dac_biet")
-            st.session_state.rooms = st.data_editor(
-                st.session_state.rooms, num_rows="dynamic", use_container_width=True,
-                key="editor_rooms",
-                column_config={
-                    "Tên phòng": st.column_config.TextColumn(),
-                    "Loại phòng": st.column_config.TextColumn(help="Mã loại phòng, VD: computer_lab"),
-                    "Số phòng cùng loại": st.column_config.NumberColumn(min_value=1, step=1),
-                },
-            )
-            st.markdown('</div>', unsafe_allow_html=True)
+            with the_khung():
+                section_header(
+                    "4", "Phòng đặc biệt (không bắt buộc)",
+                    "Chỉ khai báo nếu có phòng bị giới hạn số lượng (VD chỉ có 1 phòng máy → không thể 2 lớp "
+                    "học Tin cùng lúc). Bỏ trống nếu không cần.",
+                )
+                excel_io_row("rooms", "Phong_dac_biet")
+                st.session_state.rooms = st.data_editor(
+                    st.session_state.rooms, num_rows="dynamic", use_container_width=True,
+                    key="editor_rooms",
+                    column_config={
+                        "Tên phòng": st.column_config.TextColumn(),
+                        "Loại phòng": st.column_config.TextColumn(help="Mã loại phòng, VD: computer_lab"),
+                        "Số phòng cùng loại": st.column_config.NumberColumn(min_value=1, step=1),
+                    },
+                )
             room_types = [r for r in st.session_state.rooms["Loại phòng"].dropna().tolist() if r.strip()]
 
         # ---------------------------------------------------------------------
         # TAB 3 — Môn học / phân công giảng dạy (Activities)
         # ---------------------------------------------------------------------
         with tab_activities:
-            st.markdown('<div class="section-card">', unsafe_allow_html=True)
-            section_header(
-                "5", "Môn học & phân công giảng dạy",
-                "Mỗi dòng = 1 khối cần xếp lịch. <b>Lớp</b>: nhiều lớp cách nhau dấu phẩy cho môn tự chọn "
-                "liên lớp. <b>GV phụ</b>: điền nếu đồng giảng. <b>Mã đồng bộ</b>: các dòng cùng mã sẽ luôn "
-                "học cùng giờ. <b>Cố định trước</b>: dạng <code>Thứ:Tiết</code>, VD <code>2:2,4:4</code>.",
-            )
-            excel_io_row("activities", "Mon_hoc_phan_cong")
-            st.session_state.activities = st.data_editor(
-                st.session_state.activities, num_rows="dynamic", use_container_width=True,
-                key="editor_activities",
-                column_config={
-                    "Tên hoạt động": st.column_config.TextColumn(required=True),
-                    "Môn": st.column_config.TextColumn(help="Mã môn học, VD: toan, van, tieng_anh"),
-                    "Số tiết/tuần": st.column_config.NumberColumn(min_value=1, max_value=15, step=1, required=True),
-                    "Lớp": st.column_config.TextColumn(
-                        required=True, help="1 lớp, hoặc nhiều lớp cách nhau dấu phẩy cho môn tự chọn liên lớp"
-                    ),
-                    "GV chính": st.column_config.SelectboxColumn(options=teacher_names, required=True),
-                    "GV phụ (đồng giảng)": st.column_config.SelectboxColumn(options=[""] + teacher_names),
-                    "Loại phòng cần": st.column_config.SelectboxColumn(options=[""] + room_types),
-                    "Mã đồng bộ (CLB/tự chọn)": st.column_config.TextColumn(),
-                    "Cố định trước (Thứ:Tiết,...)": st.column_config.TextColumn(),
-                },
-            )
-            st.markdown('</div>', unsafe_allow_html=True)
+            with the_khung():
+                section_header(
+                    "5", "Môn học & phân công giảng dạy",
+                    "Mỗi dòng = 1 khối cần xếp lịch. <b>Lớp</b>: nhiều lớp cách nhau dấu phẩy cho môn tự chọn "
+                    "liên lớp. <b>GV phụ</b>: điền nếu đồng giảng. <b>Mã đồng bộ</b>: các dòng cùng mã sẽ luôn "
+                    "học cùng giờ. <b>Cố định trước</b>: dạng <code>Thứ:Tiết</code>, VD <code>2:2,4:4</code>.",
+                )
+                excel_io_row("activities", "Mon_hoc_phan_cong")
+                st.session_state.activities = st.data_editor(
+                    st.session_state.activities, num_rows="dynamic", use_container_width=True,
+                    key="editor_activities",
+                    column_config={
+                        "Tên hoạt động": st.column_config.TextColumn(required=True),
+                        "Môn": st.column_config.TextColumn(help="Mã môn học, VD: toan, van, tieng_anh"),
+                        "Số tiết/tuần": st.column_config.NumberColumn(min_value=1, max_value=15, step=1, required=True),
+                        "Lớp": st.column_config.TextColumn(
+                            required=True, help="1 lớp, hoặc nhiều lớp cách nhau dấu phẩy cho môn tự chọn liên lớp"
+                        ),
+                        "GV chính": st.column_config.SelectboxColumn(options=teacher_names, required=True),
+                        "GV phụ (đồng giảng)": st.column_config.SelectboxColumn(options=[""] + teacher_names),
+                        "Loại phòng cần": st.column_config.SelectboxColumn(options=[""] + room_types),
+                        "Mã đồng bộ (CLB/tự chọn)": st.column_config.TextColumn(),
+                        "Cố định trước (Thứ:Tiết,...)": st.column_config.TextColumn(),
+                    },
+                )
 
         # ---------------------------------------------------------------------
         # TAB 4 — Ràng buộc + nút xếp lịch
         # ---------------------------------------------------------------------
         with tab_constraints:
-            st.markdown('<div class="section-card">', unsafe_allow_html=True)
-            section_header(
-                "6", "Ràng buộc áp dụng khi xếp lịch",
-                "Các ràng buộc <b>cốt lõi</b> (không trùng giờ GV/lớp, đồng bộ tiết chung, đủ số tiết/tuần, "
-                "giờ cố định trước) luôn bật vì tắt đi sẽ tạo lịch chồng giờ. Các ràng buộc <b>tuỳ chọn</b> "
-                "bên dưới có thể tắt nếu trường không cần.",
-            )
+            with the_khung():
+                section_header(
+                    "⚖", "Ràng buộc áp dụng khi xếp lịch",
+                    "Các ràng buộc <b>cốt lõi</b> (không trùng giờ GV/lớp, đồng bộ tiết chung, đủ số tiết/tuần, "
+                    "giờ cố định trước) luôn bật vì tắt đi sẽ tạo lịch chồng giờ. Các ràng buộc <b>tuỳ chọn</b> "
+                    "bên dưới có thể tắt nếu trường không cần.",
+                )
 
-            lock_c1, lock_c2 = st.columns(2)
-            with lock_c1:
-                st.markdown(
-                    '<div class="constraint-row constraint-locked">🔒 <b>Không trùng giờ Giáo viên</b> '
-                    '— luôn bật</div>', unsafe_allow_html=True)
-                st.markdown(
-                    '<div class="constraint-row constraint-locked">🔒 <b>Không trùng giờ Lớp học</b> '
-                    '— luôn bật</div>', unsafe_allow_html=True)
-            with lock_c2:
-                st.markdown(
-                    '<div class="constraint-row constraint-locked">🔒 <b>Đồng bộ tiết chung (Mã đồng bộ)</b> '
-                    '— luôn bật</div>', unsafe_allow_html=True)
-                st.markdown(
-                    '<div class="constraint-row constraint-locked">🔒 <b>Giờ cố định trước / đồng giảng</b> '
-                    '— luôn bật</div>', unsafe_allow_html=True)
+                lock_c1, lock_c2 = st.columns(2)
+                with lock_c1:
+                    st.markdown(
+                        '<div class="constraint-row constraint-locked">🔒 <b>Không trùng giờ Giáo viên</b> '
+                        '— luôn bật</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        '<div class="constraint-row constraint-locked">🔒 <b>Không trùng giờ Lớp học</b> '
+                        '— luôn bật</div>', unsafe_allow_html=True)
+                with lock_c2:
+                    st.markdown(
+                        '<div class="constraint-row constraint-locked">🔒 <b>Đồng bộ tiết chung (Mã đồng bộ)</b> '
+                        '— luôn bật</div>', unsafe_allow_html=True)
+                    st.markdown(
+                        '<div class="constraint-row constraint-locked">🔒 <b>Giờ cố định trước / đồng giảng</b> '
+                        '— luôn bật</div>', unsafe_allow_html=True)
 
-            opt_c1, opt_c2 = st.columns(2)
-            with opt_c1:
-                st.markdown('<div class="constraint-row">', unsafe_allow_html=True)
-                st.session_state.ct_period_spread = st.checkbox(
-                    "Không dồn tiết trong ngày (3-4 tiết/tuần ≤2 tiết/ngày; ≥5 tiết/tuần ≤3 tiết/ngày)",
-                    value=st.session_state.ct_period_spread,
-                )
-                st.markdown('</div>', unsafe_allow_html=True)
-                st.markdown('<div class="constraint-row">', unsafe_allow_html=True)
-                st.session_state.ct_order_group = st.checkbox(
-                    "Lệch giờ giữa các khối khi 1 GV dạy toàn trường (theo Nhóm thứ tự)",
-                    value=st.session_state.ct_order_group,
-                )
-                st.markdown('</div>', unsafe_allow_html=True)
-                st.markdown('<div class="constraint-row">', unsafe_allow_html=True)
-                st.session_state.ct_no_gap = st.checkbox(
-                    "Không ngắt quãng: 2 tiết cùng môn trong 1 ngày phải liền kề nhau "
-                    "(không xếp kiểu Tiết A → môn khác → lại Tiết A)",
-                    value=st.session_state.ct_no_gap,
-                )
-                st.markdown('</div>', unsafe_allow_html=True)
-            with opt_c2:
-                st.markdown('<div class="constraint-row">', unsafe_allow_html=True)
-                st.session_state.ct_room_capacity = st.checkbox(
-                    "Giới hạn phòng đặc biệt (VD chỉ 1 phòng máy → không xếp 2 lớp Tin cùng lúc)",
-                    value=st.session_state.ct_room_capacity,
-                )
-                st.markdown('</div>', unsafe_allow_html=True)
-                st.markdown('<div class="constraint-row">', unsafe_allow_html=True)
-                st.session_state.ct_dept_free_session = st.checkbox(
-                    "Buổi trống chung cho tổ chuyên môn (chọn tổ ở bên dưới)",
-                    value=st.session_state.ct_dept_free_session,
-                )
-                st.markdown('</div>', unsafe_allow_html=True)
+                opt_c1, opt_c2 = st.columns(2)
+                with opt_c1:
+                    st.session_state.ct_period_spread = st.checkbox(
+                        "Không dồn tiết trong ngày (3-4 tiết/tuần ≤2 tiết/ngày; ≥5 tiết/tuần ≤3 tiết/ngày)",
+                        value=st.session_state.ct_period_spread,
+                    )
+                    st.session_state.ct_order_group = st.checkbox(
+                        "Lệch giờ giữa các khối khi 1 GV dạy toàn trường (theo Nhóm thứ tự)",
+                        value=st.session_state.ct_order_group,
+                    )
+                    st.session_state.ct_no_gap = st.checkbox(
+                        "Không ngắt quãng: 2 tiết cùng môn trong 1 ngày phải liền kề nhau "
+                        "(không xếp kiểu Tiết A → môn khác → lại Tiết A)",
+                        value=st.session_state.ct_no_gap,
+                    )
+                with opt_c2:
+                    st.session_state.ct_room_capacity = st.checkbox(
+                        "Giới hạn phòng đặc biệt (VD chỉ 1 phòng máy → không xếp 2 lớp Tin cùng lúc)",
+                        value=st.session_state.ct_room_capacity,
+                    )
+                    st.session_state.ct_dept_free_session = st.checkbox(
+                        "Buổi trống chung cho tổ chuyên môn (chọn tổ ở bên dưới)",
+                        value=st.session_state.ct_dept_free_session,
+                    )
 
-            st.session_state.free_depts = st.multiselect(
-                "Tổ nào cần 1 buổi trống chung/tuần (toàn bộ GV của tổ đều rảnh)?",
-                options=dept_names, default=[d for d in st.session_state.free_depts if d in dept_names],
-                disabled=not st.session_state.ct_dept_free_session,
-            )
-            st.markdown('</div>', unsafe_allow_html=True)
+                st.session_state.free_depts = st.multiselect(
+                    "Tổ nào cần 1 buổi trống chung/tuần (toàn bộ GV của tổ đều rảnh)?",
+                    options=dept_names, default=[d for d in st.session_state.free_depts if d in dept_names],
+                    disabled=not st.session_state.ct_dept_free_session,
+                )
 
             st.divider()
             gen_c1, gen_c2 = st.columns([2, 1])
@@ -1922,69 +1953,70 @@ if module == "📅 Xếp Thời Khoá Biểu":
         "no_gap": st.session_state.ct_no_gap,
     }
 
-    if generate:
-        data = build_input_from_tables()
-        if data is not None:
-            with st.spinner("Đang xếp lịch bằng CP-SAT..."):
-                try:
-                    result = solve_timetable(
-                        data, enabled=constraint_flags, random_seed=random.randint(1, 10_000_000)
-                    )
-                    if result.status in ("INFEASIBLE", "ERROR"):
-                        st.session_state.result = result
-                        st.session_state.solutions_history = []
-                    else:
-                        st.session_state.solutions_history = [{
-                            "result": result, "classes": data.classes, "config": data.config,
-                        }]
-                        st.session_state.selected_solution_idx = 0
-                        st.session_state.result = result
-                        st.session_state.result_classes = data.classes
-                        st.session_state.result_config = data.config
-                except SchedulerError as e:
-                    st.error(f"Lỗi ràng buộc dữ liệu: {e}")
-                    st.session_state.result = None
-                    st.session_state.solutions_history = []
-
-    if regenerate and st.session_state.solutions_history:
-        data = build_input_from_tables()
-        if data is not None:
-            with st.spinner("Đang tìm phương án khác..."):
-                try:
-                    prev_signatures = [
-                        h["result"].solution_signature for h in st.session_state.solutions_history
-                    ]
-                    result = solve_timetable(
-                        data, enabled=constraint_flags,
-                        forbid_signatures=prev_signatures,
-                        random_seed=random.randint(1, 10_000_000),
-                    )
-                    if result.status in ("INFEASIBLE", "ERROR"):
-                        st.warning(
-                            "Không tìm được phương án nào khác nữa với cùng dữ liệu/ràng buộc này "
-                            "(đã hết lựa chọn khả thi, hoặc solver hết thời gian). Các phương án cũ "
-                            "vẫn còn nguyên, bạn có thể xem lại ở dưới."
+    with (tab_constraints if LA_ADMIN else st.container()):
+        if generate:
+            data = build_input_from_tables()
+            if data is not None:
+                with st.spinner("Đang xếp lịch bằng CP-SAT..."):
+                    try:
+                        result = solve_timetable(
+                            data, enabled=constraint_flags, random_seed=random.randint(1, 10_000_000)
                         )
-                    else:
-                        st.session_state.solutions_history.append({
-                            "result": result, "classes": data.classes, "config": data.config,
-                        })
-                        st.session_state.selected_solution_idx = len(st.session_state.solutions_history) - 1
-                        st.session_state.result = result
-                        st.session_state.result_classes = data.classes
-                        st.session_state.result_config = data.config
-                except SchedulerError as e:
-                    st.error(f"Lỗi ràng buộc dữ liệu: {e}")
+                        if result.status in ("INFEASIBLE", "ERROR"):
+                            st.session_state.result = result
+                            st.session_state.solutions_history = []
+                        else:
+                            st.session_state.solutions_history = [{
+                                "result": result, "classes": data.classes, "config": data.config,
+                            }]
+                            st.session_state.selected_solution_idx = 0
+                            st.session_state.result = result
+                            st.session_state.result_classes = data.classes
+                            st.session_state.result_config = data.config
+                    except SchedulerError as e:
+                        st.error(f"Lỗi ràng buộc dữ liệu: {e}")
+                        st.session_state.result = None
+                        st.session_state.solutions_history = []
+
+        if regenerate and st.session_state.solutions_history:
+            data = build_input_from_tables()
+            if data is not None:
+                with st.spinner("Đang tìm phương án khác..."):
+                    try:
+                        prev_signatures = [
+                            h["result"].solution_signature for h in st.session_state.solutions_history
+                        ]
+                        result = solve_timetable(
+                            data, enabled=constraint_flags,
+                            forbid_signatures=prev_signatures,
+                            random_seed=random.randint(1, 10_000_000),
+                        )
+                        if result.status in ("INFEASIBLE", "ERROR"):
+                            st.warning(
+                                "Không tìm được phương án nào khác nữa với cùng dữ liệu/ràng buộc này "
+                                "(đã hết lựa chọn khả thi, hoặc solver hết thời gian). Các phương án cũ "
+                                "vẫn còn nguyên, bạn có thể xem lại ở dưới."
+                            )
+                        else:
+                            st.session_state.solutions_history.append({
+                                "result": result, "classes": data.classes, "config": data.config,
+                            })
+                            st.session_state.selected_solution_idx = len(st.session_state.solutions_history) - 1
+                            st.session_state.result = result
+                            st.session_state.result_classes = data.classes
+                            st.session_state.result_config = data.config
+                    except SchedulerError as e:
+                        st.error(f"Lỗi ràng buộc dữ liệu: {e}")
 
     # ---------------------------------------------------------------------
-    # TAB 5 — Kết quả
+    # KẾT QUẢ — hiện ngay bên dưới nút xếp (cùng tab "Xếp lịch & Kết quả")
     # ---------------------------------------------------------------------
     with tab_result:
         result = st.session_state.result
 
         if result is None:
             if LA_ADMIN:
-                st.info("Chưa có kết quả — sang tab \"⚖️ Ràng buộc & Xếp lịch\" rồi bấm \"🗓️ Xếp thời khoá biểu\".")
+                st.info("👆 Chọn ràng buộc rồi bấm **🗓️ Xếp thời khoá biểu** — kết quả sẽ hiện ngay tại đây.")
             else:
                 st.info("Chưa có thời khoá biểu nào được công bố.")
         elif result.status in ("INFEASIBLE", "ERROR"):
@@ -1992,7 +2024,7 @@ if module == "📅 Xếp Thời Khoá Biểu":
             st.info(
                 "Gợi ý: kiểm tra lại xem có GV bị giao quá nhiều tiết cùng lúc, số tiết/tuần quá "
                 "lớn so với số ngày/tiết có sẵn, hoặc các giờ cố định trước bị chồng nhau không. "
-                "Bạn cũng có thể thử tắt bớt ràng buộc tuỳ chọn ở tab Ràng buộc rồi xếp lại."
+                "Bạn cũng có thể thử tắt bớt ràng buộc tuỳ chọn ở trên rồi xếp lại."
             )
         else:
             history = st.session_state.solutions_history
@@ -2012,20 +2044,24 @@ if module == "📅 Xếp Thời Khoá Biểu":
                 st.session_state.result_config = entry["config"]
                 st.caption(
                     f"Đang xem Phương án {chosen + 1}/{len(history)}. Bấm \"🔀 Xếp phương án khác\" "
-                    f"ở tab Ràng buộc để có thêm lựa chọn."
+                    f"ở trên để có thêm lựa chọn."
                 )
 
-            st.markdown(
-                f'<div class="status-ok">✅ Trạng thái: {result.status} — {result.message}</div>',
-                unsafe_allow_html=True,
-            )
-            st.write("")
+            if st.session_state.pop("_vua_xep_xong", False):
+                st.toast("Xếp thời khoá biểu thành công!", icon="🎉")
+            st.divider()
+            st.markdown('<div class="result-title">📅 Kết quả thời khoá biểu</div>', unsafe_allow_html=True)
+            _gv_co_tiet = {t for l in result.lessons for t in l.teacher_ids}
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Trạng thái", "Tối ưu" if result.status == "OPTIMAL" else "Khả thi")
+            m2.metric("Số lớp", len(st.session_state.result_classes))
+            m3.metric("Giáo viên có tiết", len(_gv_co_tiet))
+            m4.metric("Tổng số tiết đã xếp", len(result.lessons))
 
             if result.department_free_sessions:
-                with st.container(border=True):
-                    st.markdown("**Buổi trống chung theo tổ:**")
-                    for dept, when in result.department_free_sessions.items():
-                        st.markdown(f"- {dept}: {when}")
+                ten_to = {slugify(n, "to_"): n for n in st.session_state.departments["Tên tổ"].dropna().astype(str)}
+                st.info("🗓️ **Buổi trống chung theo tổ:** " + " · ".join(
+                    f"{ten_to.get(dept, dept)}: {when}" for dept, when in result.department_free_sessions.items()))
 
             classes = st.session_state.result_classes
             config = st.session_state.result_config
@@ -2129,13 +2165,31 @@ if module == "📅 Xếp Thời Khoá Biểu":
                 )
 
             st.write("")
-            class_tabs = st.tabs([c.name for c in classes])
-            for tab, c in zip(class_tabs, classes):
-                with tab:
-                    st.dataframe(
-                        xay_grid_cho_lop(c), use_container_width=True,
-                        height=(len(hang_hien_thi) + 1) * 38,
+            che_do_xem = st.radio("Xem theo", ["🏫 Lớp", "👤 Giáo viên"], horizontal=True,
+                                  key="tkb_che_do_xem", label_visibility="collapsed")
+            if che_do_xem == "🏫 Lớp":
+                if len(classes) <= 12:
+                    class_tabs = st.tabs([c.name for c in classes])
+                    for tab, c in zip(class_tabs, classes):
+                        with tab:
+                            st.markdown(bang_tkb_html(xay_grid_cho_lop(c)), unsafe_allow_html=True)
+                else:
+                    ten_lop_chon = st.selectbox("Chọn lớp", [c.name for c in classes], key="tkb_chon_lop")
+                    c = next(x for x in classes if x.name == ten_lop_chon)
+                    st.markdown(bang_tkb_html(xay_grid_cho_lop(c)), unsafe_allow_html=True)
+            else:
+                ds_tid = sorted(_gv_co_tiet, key=lambda t: teacher_id_to_name.get(t, t))
+                tid_chon = st.selectbox("Chọn giáo viên", ds_tid, key="tkb_chon_gv",
+                                        format_func=lambda t: teacher_id_to_name.get(t, t))
+                if tid_chon:
+                    lop_ten = {c.id: c.name for c in classes}
+                    luoi_gv, _ = luoi_tkb(
+                        result, classes, config, lambda l: tid_chon in l.teacher_ids,
+                        lambda l: f"{l.activity_name} — {', '.join(lop_ten.get(x, x) for x in l.class_ids)}",
+                        st.session_state.get("grade_times"), tuan_bat_dau,
                     )
+                    st.caption(f"{sum(1 for l in result.lessons if tid_chon in l.teacher_ids)} tiết/tuần")
+                    st.markdown(bang_tkb_html(luoi_gv), unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------
 # TAB 6 — Phòng thi (xếp SBD + phòng thi theo môn)
@@ -2177,191 +2231,188 @@ elif module == "🪑 Xếp Phòng Thi":
         # ------------------------------------------------------------------
         # 1. Danh sách học sinh dự thi (upload file)
         # ------------------------------------------------------------------
-        st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        section_header(
-            "1", "Danh sách học sinh dự thi — Lớp & Môn thi của từng học sinh",
-            "Tải lên file <b>Excel (.xlsx/.xls) hoặc CSV</b> gồm các cột: <b>SBD</b> (hoặc Mã HS — để "
-            "trống thì hệ thống tự sinh), <b>Lớp</b>, <b>Môn thi</b>. KHÔNG cần họ tên học sinh. Vì 1 lớp "
-            "có thể có nhiều môn lựa chọn khác nhau, môn thi được khai báo RIÊNG cho từng học sinh, "
-            "theo 1 trong 3 kiểu: (1) cột <i>Môn thi</i> ghi nhiều môn cách nhau dấu phẩy; (2) mỗi môn "
-            "1 dòng (các dòng cùng SBD tự gộp lại); (3) mỗi môn 1 cột, đánh dấu <code>x</code> nếu HS "
-            "thi môn đó.",
-        )
-        up_c1, up_c2, up_c3 = st.columns(3)
-        with up_c1:
-            st.download_button(
-                "📄 Tải file mẫu", use_container_width=True, key="dl_mau_hs_thi",
-                data=df_to_excel_bytes(SAMPLE_EXAM_STUDENTS.drop(columns=[er.COT_HO_TEN]), "Danh_sach_HS_thi"),
-                file_name="mau_danh_sach_hoc_sinh_thi.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        with the_khung():
+            section_header(
+                "1", "Danh sách học sinh dự thi — Lớp & Môn thi của từng học sinh",
+                "Tải lên file <b>Excel (.xlsx/.xls) hoặc CSV</b> gồm các cột: <b>SBD</b> (hoặc Mã HS — để "
+                "trống thì hệ thống tự sinh), <b>Lớp</b>, <b>Môn thi</b>. KHÔNG cần họ tên học sinh. Vì 1 lớp "
+                "có thể có nhiều môn lựa chọn khác nhau, môn thi được khai báo RIÊNG cho từng học sinh, "
+                "theo 1 trong 3 kiểu: (1) cột <i>Môn thi</i> ghi nhiều môn cách nhau dấu phẩy; (2) mỗi môn "
+                "1 dòng (các dòng cùng SBD tự gộp lại); (3) mỗi môn 1 cột, đánh dấu <code>x</code> nếu HS "
+                "thi môn đó.",
             )
-        with up_c2:
-            st.download_button(
-                "📥 Xuất Excel danh sách hiện tại", use_container_width=True, key="dl_exam_students",
-                data=df_to_excel_bytes(st.session_state.exam_students, "Danh_sach_HS_thi"),
-                file_name="danh_sach_hoc_sinh_thi.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            up_c1, up_c2, up_c3 = st.columns(3)
+            with up_c1:
+                st.download_button(
+                    "📄 Tải file mẫu", use_container_width=True, key="dl_mau_hs_thi",
+                    data=df_to_excel_bytes(SAMPLE_EXAM_STUDENTS.drop(columns=[er.COT_HO_TEN]), "Danh_sach_HS_thi"),
+                    file_name="mau_danh_sach_hoc_sinh_thi.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            with up_c2:
+                st.download_button(
+                    "📥 Xuất Excel danh sách hiện tại", use_container_width=True, key="dl_exam_students",
+                    data=df_to_excel_bytes(st.session_state.exam_students, "Danh_sach_HS_thi"),
+                    file_name="danh_sach_hoc_sinh_thi.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            with up_c3:
+                file_hs = st.file_uploader(
+                    "📤 Upload danh sách học sinh (thay thế bảng)", type=["xlsx", "xls", "csv"],
+                    key="up_exam_students",
+                )
+            if file_hs is not None:
+                marker = f"{file_hs.name}:{file_hs.size}"
+                if st.session_state.get("_imported_exam_students") != marker:
+                    try:
+                        if file_hs.name.lower().endswith(".csv"):
+                            raw_df = pd.read_csv(file_hs, dtype=str, encoding="utf-8-sig", sep=None, engine="python")
+                        else:
+                            raw_df = pd.read_excel(file_hs, dtype=str)
+                        df_moi, ghi_chu = er.chuan_hoa_danh_sach_hoc_sinh(raw_df)
+                        st.session_state.exam_students = df_moi
+                        st.session_state["_imported_exam_students"] = marker
+                        st.session_state["_ghi_chu_upload_hs"] = (
+                            [f"✅ Đã nhập {len(df_moi)} học sinh từ file '{file_hs.name}'."] + ghi_chu
+                        )
+                        st.session_state.pop("editor_exam_students", None)
+                        st.session_state.exam_results = {}
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Không đọc được file: {e}")
+            for gc in st.session_state.pop("_ghi_chu_upload_hs", []):
+                (st.success if gc.startswith("✅") else st.info)(gc)
+
+            st.session_state.exam_students = st.data_editor(
+                st.session_state.exam_students, num_rows="dynamic", use_container_width=True,
+                key="editor_exam_students",
+                column_config={
+                    er.COT_SBD: st.column_config.TextColumn(help="Để trống thì hệ thống tự sinh SBD theo khối."),
+                    er.COT_HO_TEN: st.column_config.TextColumn(help="Không bắt buộc — có thể bỏ trống."),
+                    er.COT_LOP: st.column_config.TextColumn(required=True),
+                    er.COT_MON: st.column_config.TextColumn(
+                        width="large",
+                        help="Các môn học sinh này thi, cách nhau dấu phẩy. VD: Toán, Ngữ văn, Vật lí. "
+                             "Để trống = thi theo 'Lớp áp dụng' ở bảng Môn thi.",
+                    ),
+                },
             )
-        with up_c3:
-            file_hs = st.file_uploader(
-                "📤 Upload danh sách học sinh (thay thế bảng)", type=["xlsx", "xls", "csv"],
-                key="up_exam_students",
-            )
-        if file_hs is not None:
-            marker = f"{file_hs.name}:{file_hs.size}"
-            if st.session_state.get("_imported_exam_students") != marker:
-                try:
-                    if file_hs.name.lower().endswith(".csv"):
-                        raw_df = pd.read_csv(file_hs, dtype=str, encoding="utf-8-sig", sep=None, engine="python")
+
+            # đọc bảng học sinh -> list[dict]
+            ds_hoc_sinh = []
+            for _, r in st.session_state.exam_students.iterrows():
+                lop = er._chuoi(r.get(er.COT_LOP))
+                if not lop:
+                    continue
+                ds_hoc_sinh.append({
+                    "sbd": er._chuoi(r.get(er.COT_SBD)),
+                    "ho_ten": er._chuoi(r.get(er.COT_HO_TEN)),
+                    "lop": lop, "khoi": khoi_cua_lop(lop),
+                    "mon": er.tach_mon(r.get(er.COT_MON)),
+                })
+
+            # tên hiển thị của từng môn (theo cách viết gặp đầu tiên)
+            mon_trong_ds: dict[str, str] = {}
+            for hs in ds_hoc_sinh:
+                for m in hs["mon"]:
+                    mon_trong_ds.setdefault(er.khoa(m), m)
+
+            if ds_hoc_sinh:
+                with st.expander(
+                    f"📊 Thống kê: {len(ds_hoc_sinh)} học sinh · "
+                    f"{len({hs['lop'] for hs in ds_hoc_sinh})} lớp · {len(mon_trong_ds)} môn", expanded=False,
+                ):
+                    dong_tk = [
+                        {"Lớp": hs["lop"], "Môn": mon_trong_ds[er.khoa(m)]}
+                        for hs in ds_hoc_sinh for m in hs["mon"]
+                    ]
+                    if dong_tk:
+                        bang_tk = pd.crosstab(
+                            pd.DataFrame(dong_tk)["Lớp"], pd.DataFrame(dong_tk)["Môn"],
+                            margins=True, margins_name="Tổng",
+                        )
+                        st.caption("Số học sinh đăng ký thi theo từng lớp × môn:")
+                        st.dataframe(bang_tk, use_container_width=True)
                     else:
-                        raw_df = pd.read_excel(file_hs, dtype=str)
-                    df_moi, ghi_chu = er.chuan_hoa_danh_sach_hoc_sinh(raw_df)
-                    st.session_state.exam_students = df_moi
-                    st.session_state["_imported_exam_students"] = marker
-                    st.session_state["_ghi_chu_upload_hs"] = (
-                        [f"✅ Đã nhập {len(df_moi)} học sinh từ file '{file_hs.name}'."] + ghi_chu
-                    )
-                    st.session_state.pop("editor_exam_students", None)
-                    st.session_state.exam_results = {}
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Không đọc được file: {e}")
-        for gc in st.session_state.pop("_ghi_chu_upload_hs", []):
-            (st.success if gc.startswith("✅") else st.info)(gc)
-
-        st.session_state.exam_students = st.data_editor(
-            st.session_state.exam_students, num_rows="dynamic", use_container_width=True,
-            key="editor_exam_students",
-            column_config={
-                er.COT_SBD: st.column_config.TextColumn(help="Để trống thì hệ thống tự sinh SBD theo khối."),
-                er.COT_HO_TEN: st.column_config.TextColumn(help="Không bắt buộc — có thể bỏ trống."),
-                er.COT_LOP: st.column_config.TextColumn(required=True),
-                er.COT_MON: st.column_config.TextColumn(
-                    width="large",
-                    help="Các môn học sinh này thi, cách nhau dấu phẩy. VD: Toán, Ngữ văn, Vật lí. "
-                         "Để trống = thi theo 'Lớp áp dụng' ở bảng Môn thi.",
-                ),
-            },
-        )
-
-        # đọc bảng học sinh -> list[dict]
-        ds_hoc_sinh = []
-        for _, r in st.session_state.exam_students.iterrows():
-            lop = er._chuoi(r.get(er.COT_LOP))
-            if not lop:
-                continue
-            ds_hoc_sinh.append({
-                "sbd": er._chuoi(r.get(er.COT_SBD)),
-                "ho_ten": er._chuoi(r.get(er.COT_HO_TEN)),
-                "lop": lop, "khoi": khoi_cua_lop(lop),
-                "mon": er.tach_mon(r.get(er.COT_MON)),
-            })
-
-        # tên hiển thị của từng môn (theo cách viết gặp đầu tiên)
-        mon_trong_ds: dict[str, str] = {}
-        for hs in ds_hoc_sinh:
-            for m in hs["mon"]:
-                mon_trong_ds.setdefault(er.khoa(m), m)
-
-        if ds_hoc_sinh:
-            with st.expander(
-                f"📊 Thống kê: {len(ds_hoc_sinh)} học sinh · "
-                f"{len({hs['lop'] for hs in ds_hoc_sinh})} lớp · {len(mon_trong_ds)} môn", expanded=False,
-            ):
-                dong_tk = [
-                    {"Lớp": hs["lop"], "Môn": mon_trong_ds[er.khoa(m)]}
-                    for hs in ds_hoc_sinh for m in hs["mon"]
-                ]
-                if dong_tk:
-                    bang_tk = pd.crosstab(
-                        pd.DataFrame(dong_tk)["Lớp"], pd.DataFrame(dong_tk)["Môn"],
-                        margins=True, margins_name="Tổng",
-                    )
-                    st.caption("Số học sinh đăng ký thi theo từng lớp × môn:")
-                    st.dataframe(bang_tk, use_container_width=True)
-                else:
-                    st.caption("Chưa học sinh nào có cột Môn thi.")
-        st.markdown('</div>', unsafe_allow_html=True)
+                        st.caption("Chưa học sinh nào có cột Môn thi.")
 
         # ------------------------------------------------------------------
         # 2. Phòng thi
         # ------------------------------------------------------------------
-        st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        section_header(
-            "2", "Danh sách phòng thi",
-            "<b>Số cột bàn</b>: dùng để vẽ sơ đồ chỗ ngồi (chia học sinh vào lưới theo đúng số cột "
-            "bàn thật của phòng, xếp từ hàng gần bảng xuống dần).",
-        )
-        excel_io_row("exam_rooms", "Danh_sach_phong_thi")
-        st.session_state.exam_rooms = st.data_editor(
-            st.session_state.exam_rooms, num_rows="dynamic", use_container_width=True,
-            key="editor_exam_rooms",
-            column_config={
-                "Tên phòng": st.column_config.TextColumn(required=True),
-                "Sức chứa": st.column_config.NumberColumn(min_value=1, max_value=100, step=1, required=True),
-                "Số cột bàn": st.column_config.NumberColumn(
-                    min_value=1, max_value=12, step=1, required=True,
-                    help="Số cột bàn thật trong phòng, VD phòng 24 chỗ xếp 4 cột x 6 hàng thì nhập 4.",
-                ),
-            },
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
+        with the_khung():
+            section_header(
+                "2", "Danh sách phòng thi",
+                "<b>Số cột bàn</b>: dùng để vẽ sơ đồ chỗ ngồi (chia học sinh vào lưới theo đúng số cột "
+                "bàn thật của phòng, xếp từ hàng gần bảng xuống dần).",
+            )
+            excel_io_row("exam_rooms", "Danh_sach_phong_thi")
+            st.session_state.exam_rooms = st.data_editor(
+                st.session_state.exam_rooms, num_rows="dynamic", use_container_width=True,
+                key="editor_exam_rooms",
+                column_config={
+                    "Tên phòng": st.column_config.TextColumn(required=True),
+                    "Sức chứa": st.column_config.NumberColumn(min_value=1, max_value=100, step=1, required=True),
+                    "Số cột bàn": st.column_config.NumberColumn(
+                        min_value=1, max_value=12, step=1, required=True,
+                        help="Số cột bàn thật trong phòng, VD phòng 24 chỗ xếp 4 cột x 6 hàng thì nhập 4.",
+                    ),
+                },
+            )
 
         # ------------------------------------------------------------------
         # 3. Môn thi
         # ------------------------------------------------------------------
-        st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        section_header(
-            "3", "Môn thi & chế độ xếp phòng",
-            "Mỗi môn thi tự lấy đúng các học sinh có đăng ký môn đó trong danh sách ở mục 1. "
-            "<b>Lớp áp dụng</b> (không bắt buộc): điền nếu muốn giới hạn thêm theo lớp (VD "
-            "<code>10A1,10A2</code>), hoặc dùng cho học sinh không ghi cột Môn thi. <b>Chế độ xếp</b>: "
-            "\"Theo lớp\" giữ nguyên từng lớp (chỉ tách khi 1 lớp đông hơn sức chứa 1 phòng); "
-            "\"Trộn theo khối\" xáo học sinh từ các lớp khác nhau ngồi xen kẽ nhau (hạn chế quay cóp).",
-        )
-        mon_da_khai_bao = {
-            er.khoa(m) for m in st.session_state.exam_subjects["Môn thi"] if not er._o_trong(m)
-        }
-        mon_chua_co = [ten for k, ten in mon_trong_ds.items() if k not in mon_da_khai_bao]
-        if mon_chua_co:
-            mc1, mc2 = st.columns([3, 1])
-            with mc1:
-                st.info(
-                    f"Có {len(mon_chua_co)} môn trong danh sách học sinh chưa có ở bảng Môn thi: "
-                    + ", ".join(mon_chua_co)
-                )
-            with mc2:
-                if st.button("➕ Thêm các môn này", use_container_width=True, key="them_mon_tu_ds"):
-                    them = pd.DataFrame([
-                        {"Môn thi": m, "Lớp áp dụng (không bắt buộc)": "", "Ngày thi": "", "Ca thi": "Sáng",
-                         "Chế độ xếp": "Trộn theo khối (xáo giữa các lớp)"}
-                        for m in mon_chua_co
-                    ], columns=EXAM_SUBJECT_COLUMNS)
-                    st.session_state.exam_subjects = pd.concat(
-                        [st.session_state.exam_subjects, them], ignore_index=True,
+        with the_khung():
+            section_header(
+                "3", "Môn thi & chế độ xếp phòng",
+                "Mỗi môn thi tự lấy đúng các học sinh có đăng ký môn đó trong danh sách ở mục 1. "
+                "<b>Lớp áp dụng</b> (không bắt buộc): điền nếu muốn giới hạn thêm theo lớp (VD "
+                "<code>10A1,10A2</code>), hoặc dùng cho học sinh không ghi cột Môn thi. <b>Chế độ xếp</b>: "
+                "\"Theo lớp\" giữ nguyên từng lớp (chỉ tách khi 1 lớp đông hơn sức chứa 1 phòng); "
+                "\"Trộn theo khối\" xáo học sinh từ các lớp khác nhau ngồi xen kẽ nhau (hạn chế quay cóp).",
+            )
+            mon_da_khai_bao = {
+                er.khoa(m) for m in st.session_state.exam_subjects["Môn thi"] if not er._o_trong(m)
+            }
+            mon_chua_co = [ten for k, ten in mon_trong_ds.items() if k not in mon_da_khai_bao]
+            if mon_chua_co:
+                mc1, mc2 = st.columns([3, 1])
+                with mc1:
+                    st.info(
+                        f"Có {len(mon_chua_co)} môn trong danh sách học sinh chưa có ở bảng Môn thi: "
+                        + ", ".join(mon_chua_co)
                     )
-                    st.session_state.pop("editor_exam_subjects", None)
-                    st.rerun()
+                with mc2:
+                    if st.button("➕ Thêm các môn này", use_container_width=True, key="them_mon_tu_ds"):
+                        them = pd.DataFrame([
+                            {"Môn thi": m, "Lớp áp dụng (không bắt buộc)": "", "Ngày thi": "", "Ca thi": "Sáng",
+                             "Chế độ xếp": "Trộn theo khối (xáo giữa các lớp)"}
+                            for m in mon_chua_co
+                        ], columns=EXAM_SUBJECT_COLUMNS)
+                        st.session_state.exam_subjects = pd.concat(
+                            [st.session_state.exam_subjects, them], ignore_index=True,
+                        )
+                        st.session_state.pop("editor_exam_subjects", None)
+                        st.rerun()
 
-        excel_io_row("exam_subjects", "Mon_thi", transform=chuan_hoa_bang_mon_thi)
-        st.session_state.exam_subjects = st.data_editor(
-            st.session_state.exam_subjects, num_rows="dynamic", use_container_width=True,
-            key="editor_exam_subjects",
-            column_config={
-                "Môn thi": st.column_config.TextColumn(required=True),
-                "Lớp áp dụng (không bắt buộc)": st.column_config.TextColumn(
-                    help="Để trống = tất cả học sinh đăng ký môn này. Điền các lớp cách nhau dấu phẩy "
-                         "để giới hạn, VD: 10A1,10A2",
-                ),
-                "Ngày thi": st.column_config.TextColumn(help="VD: 15/09/2026", required=True),
-                "Ca thi": st.column_config.SelectboxColumn(options=["Sáng", "Chiều", "Tối"], required=True),
-                "Chế độ xếp": st.column_config.SelectboxColumn(
-                    options=["Theo lớp (giữ nguyên lớp)", "Trộn theo khối (xáo giữa các lớp)"],
-                    required=True,
-                ),
-            },
-        )
-        st.markdown('</div>', unsafe_allow_html=True)
+            excel_io_row("exam_subjects", "Mon_thi", transform=chuan_hoa_bang_mon_thi)
+            st.session_state.exam_subjects = st.data_editor(
+                st.session_state.exam_subjects, num_rows="dynamic", use_container_width=True,
+                key="editor_exam_subjects",
+                column_config={
+                    "Môn thi": st.column_config.TextColumn(required=True),
+                    "Lớp áp dụng (không bắt buộc)": st.column_config.TextColumn(
+                        help="Để trống = tất cả học sinh đăng ký môn này. Điền các lớp cách nhau dấu phẩy "
+                             "để giới hạn, VD: 10A1,10A2",
+                    ),
+                    "Ngày thi": st.column_config.TextColumn(help="VD: 15/09/2026", required=True),
+                    "Ca thi": st.column_config.SelectboxColumn(options=["Sáng", "Chiều", "Tối"], required=True),
+                    "Chế độ xếp": st.column_config.SelectboxColumn(
+                        options=["Theo lớp (giữ nguyên lớp)", "Trộn theo khối (xáo giữa các lớp)"],
+                        required=True,
+                    ),
+                },
+            )
 
         hien_ho_ten = st.checkbox(
             "Hiện họ tên trong danh sách phòng thi / thẻ báo danh (nếu file có họ tên). "
@@ -2574,88 +2625,86 @@ elif module == "🪑 Xếp Phòng Thi":
     # ------------------------------------------------------------------
     if LA_ADMIN and st.session_state.exam_results:
         st.divider()
-        st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        section_header(
-            "4", "Phân công coi thi (giám thị)",
-            "Tự chia đều số buổi coi thi cho giáo viên: 1 giáo viên không coi 2 phòng trong cùng buổi (ngày + "
-            "ca), tránh coi môn mình dạy nếu đủ người. Sau khi phân công có thể sửa tay trong bảng. Giáo viên "
-            "xem lịch coi thi của mình ở trang 👤 Lịch của tôi (sau khi công bố).",
-        )
-        ds_gv_coi = [t for t in teacher_names]
-        p1, p2, p3 = st.columns([1, 2, 1])
-        with p1:
-            so_gt = st.number_input("Số giám thị mỗi phòng", 1, 4, 2, key="ct_so_giam_thi")
-        with p2:
-            gv_loai_tru = st.multiselect("Giáo viên KHÔNG tham gia coi thi", ds_gv_coi, key="ct_loai_tru")
-        with p3:
-            tranh_mon = st.checkbox("Không coi môn mình dạy", value=True, key="ct_tranh_mon")
-        if st.button("🎲 Phân công coi thi tự động", type="primary"):
-            mon_gv: dict[str, set] = {}
-            for _, a in st.session_state.activities.iterrows():
-                for cot_gv in ("GV chính", "GV phụ (đồng giảng)"):
-                    g = a.get(cot_gv)
-                    if not _o_trong(g):
-                        mon_gv.setdefault(str(g), set()).update(
-                            {str(a.get("Môn") or ""), str(a.get("Tên hoạt động") or "").split(" ")[0]})
-            buoi = [
-                {"mon": mon, "ngay": e["ngay"], "ca": e["ca"], "phong": r["ten_phong"]}
-                for mon, e in st.session_state.exam_results.items() for r in e["rooms"]
-            ]
-            kq_ct, cb_ct = er.phan_cong_coi_thi(
-                buoi, [g for g in ds_gv_coi if g not in gv_loai_tru], int(so_gt), mon_gv, tranh_mon,
-                seed=random.randint(1, 10**9),
+        with the_khung():
+            section_header(
+                "4", "Phân công coi thi (giám thị)",
+                "Tự chia đều số buổi coi thi cho giáo viên: 1 giáo viên không coi 2 phòng trong cùng buổi (ngày + "
+                "ca), tránh coi môn mình dạy nếu đủ người. Sau khi phân công có thể sửa tay trong bảng. Giáo viên "
+                "xem lịch coi thi của mình ở trang 👤 Lịch của tôi (sau khi công bố).",
             )
-            st.session_state.exam_proctors = pd.DataFrame([
-                {"Môn thi": b["mon"], "Ngày thi": b["ngay"], "Ca thi": b["ca"], "Phòng": b["phong"],
-                 **{f"Giám thị {i + 1}": (b["giam_thi"][i] if i < len(b["giam_thi"]) else "")
-                    for i in range(int(so_gt))}}
-                for b in kq_ct
-            ])
-            st.session_state["_canh_bao_coi_thi"] = cb_ct
-            st.session_state.pop("editor_exam_proctors", None)
-            st.rerun()
-        for cb in st.session_state.get("_canh_bao_coi_thi", []):
-            st.warning(cb)
+            ds_gv_coi = [t for t in teacher_names]
+            p1, p2, p3 = st.columns([1, 2, 1])
+            with p1:
+                so_gt = st.number_input("Số giám thị mỗi phòng", 1, 4, 2, key="ct_so_giam_thi")
+            with p2:
+                gv_loai_tru = st.multiselect("Giáo viên KHÔNG tham gia coi thi", ds_gv_coi, key="ct_loai_tru")
+            with p3:
+                tranh_mon = st.checkbox("Không coi môn mình dạy", value=True, key="ct_tranh_mon")
+            if st.button("🎲 Phân công coi thi tự động", type="primary"):
+                mon_gv: dict[str, set] = {}
+                for _, a in st.session_state.activities.iterrows():
+                    for cot_gv in ("GV chính", "GV phụ (đồng giảng)"):
+                        g = a.get(cot_gv)
+                        if not _o_trong(g):
+                            mon_gv.setdefault(str(g), set()).update(
+                                {str(a.get("Môn") or ""), str(a.get("Tên hoạt động") or "").split(" ")[0]})
+                buoi = [
+                    {"mon": mon, "ngay": e["ngay"], "ca": e["ca"], "phong": r["ten_phong"]}
+                    for mon, e in st.session_state.exam_results.items() for r in e["rooms"]
+                ]
+                kq_ct, cb_ct = er.phan_cong_coi_thi(
+                    buoi, [g for g in ds_gv_coi if g not in gv_loai_tru], int(so_gt), mon_gv, tranh_mon,
+                    seed=random.randint(1, 10**9),
+                )
+                st.session_state.exam_proctors = pd.DataFrame([
+                    {"Môn thi": b["mon"], "Ngày thi": b["ngay"], "Ca thi": b["ca"], "Phòng": b["phong"],
+                     **{f"Giám thị {i + 1}": (b["giam_thi"][i] if i < len(b["giam_thi"]) else "")
+                        for i in range(int(so_gt))}}
+                    for b in kq_ct
+                ])
+                st.session_state["_canh_bao_coi_thi"] = cb_ct
+                st.session_state.pop("editor_exam_proctors", None)
+                st.rerun()
+            for cb in st.session_state.get("_canh_bao_coi_thi", []):
+                st.warning(cb)
 
-        ct_df = st.session_state.get("exam_proctors")
-        if ct_df is not None and not ct_df.empty:
-            cot_gt = [c for c in ct_df.columns if str(c).startswith("Giám thị")]
-            st.session_state.exam_proctors = st.data_editor(
-                ct_df, use_container_width=True, hide_index=True, key="editor_exam_proctors",
-                disabled=["Môn thi", "Ngày thi", "Ca thi", "Phòng"],
-                column_config={c: st.column_config.SelectboxColumn(options=[""] + ds_gv_coi) for c in cot_gt},
-            )
-            ct_df = st.session_state.exam_proctors
-            # kiểm tra trùng: 1 GV coi 2 phòng cùng buổi
-            trung = []
-            for (ngay, ca), nhom in ct_df.groupby(["Ngày thi", "Ca thi"]):
-                ten = [str(v).strip() for c in cot_gt for v in nhom[c] if not _o_trong(v)]
-                trung += [f"{t} ({ngay} ca {ca})" for t in sorted({t for t in ten if ten.count(t) > 1})]
-            if trung:
-                st.error("Giáo viên bị xếp 2 phòng trong cùng buổi: " + "; ".join(trung))
-            dem = {}
-            for c in cot_gt:
-                for v in ct_df[c]:
-                    if not _o_trong(v):
-                        dem[str(v).strip()] = dem.get(str(v).strip(), 0) + 1
-            with st.expander(f"📊 Số buổi coi thi của từng giáo viên ({len(dem)} GV)"):
-                st.dataframe(pd.DataFrame(
-                    sorted(({"Giáo viên": k, "Số buổi": v} for k, v in dem.items()), key=lambda x: -x["Số buổi"])
-                ), use_container_width=True, hide_index=True)
-            st.download_button(
-                "📊 Xuất Excel phân công coi thi", data=df_to_excel_bytes(ct_df, "Phan_cong_coi_thi"),
-                file_name="phan_cong_coi_thi.xlsx", key="xls_phan_cong_coi_thi",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
-            st.caption("Xếp lại phòng thi thì nên bấm phân công coi thi lại. Nhớ 📢 Công bố để giáo viên thấy.")
-        st.markdown('</div>', unsafe_allow_html=True)
+            ct_df = st.session_state.get("exam_proctors")
+            if ct_df is not None and not ct_df.empty:
+                cot_gt = [c for c in ct_df.columns if str(c).startswith("Giám thị")]
+                st.session_state.exam_proctors = st.data_editor(
+                    ct_df, use_container_width=True, hide_index=True, key="editor_exam_proctors",
+                    disabled=["Môn thi", "Ngày thi", "Ca thi", "Phòng"],
+                    column_config={c: st.column_config.SelectboxColumn(options=[""] + ds_gv_coi) for c in cot_gt},
+                )
+                ct_df = st.session_state.exam_proctors
+                # kiểm tra trùng: 1 GV coi 2 phòng cùng buổi
+                trung = []
+                for (ngay, ca), nhom in ct_df.groupby(["Ngày thi", "Ca thi"]):
+                    ten = [str(v).strip() for c in cot_gt for v in nhom[c] if not _o_trong(v)]
+                    trung += [f"{t} ({ngay} ca {ca})" for t in sorted({t for t in ten if ten.count(t) > 1})]
+                if trung:
+                    st.error("Giáo viên bị xếp 2 phòng trong cùng buổi: " + "; ".join(trung))
+                dem = {}
+                for c in cot_gt:
+                    for v in ct_df[c]:
+                        if not _o_trong(v):
+                            dem[str(v).strip()] = dem.get(str(v).strip(), 0) + 1
+                with st.expander(f"📊 Số buổi coi thi của từng giáo viên ({len(dem)} GV)"):
+                    st.dataframe(pd.DataFrame(
+                        sorted(({"Giáo viên": k, "Số buổi": v} for k, v in dem.items()), key=lambda x: -x["Số buổi"])
+                    ), use_container_width=True, hide_index=True)
+                st.download_button(
+                    "📊 Xuất Excel phân công coi thi", data=df_to_excel_bytes(ct_df, "Phan_cong_coi_thi"),
+                    file_name="phan_cong_coi_thi.xlsx", key="xls_phan_cong_coi_thi",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+                st.caption("Xếp lại phòng thi thì nên bấm phân công coi thi lại. Nhớ 📢 Công bố để giáo viên thấy.")
 
 # ---------------------------------------------------------------------
 # MODULE 3 — Phân công dạy thay
 # ---------------------------------------------------------------------
 elif module == "🔄 Phân Công Dạy Thay":
     if LA_ADMIN:
-        st.markdown('<div class="section-card">', unsafe_allow_html=True)
         section_header(
             "1", "Phân công dạy thay",
             "Dựa trên thời khoá biểu đã xếp ở module 📅 để tìm giáo viên còn TRỐNG TIẾT đúng "
@@ -2666,10 +2715,9 @@ elif module == "🔄 Phân Công Dạy Thay":
         if not ket_qua_tkb or ket_qua_tkb.status in ("INFEASIBLE", "ERROR"):
             st.info(
                 "⚠️ Chưa có thời khoá biểu nào được xếp thành công. Sang module "
-                "\"📅 Xếp Thời Khoá Biểu\" → tab \"⚖️ Ràng buộc & Xếp lịch\" → bấm "
+                "\"📅 Xếp Thời Khoá Biểu\" → tab \"🗓️ Xếp lịch & Kết quả\" → bấm "
                 "\"🗓️ Xếp thời khoá biểu\" trước, rồi quay lại đây."
             )
-            st.markdown('</div>', unsafe_allow_html=True)
         else:
             cfg_tkb = st.session_state.result_config
             classes_tkb = st.session_state.result_classes
@@ -2778,62 +2826,59 @@ elif module == "🔄 Phân Công Dạy Thay":
                         }
                         st.success("✅ Đã lưu phân công dạy thay!")
 
-            st.markdown('</div>', unsafe_allow_html=True)
 
             if st.session_state.substitutions:
-                st.markdown('<div class="section-card">', unsafe_allow_html=True)
-                section_header("2", "Các phân công đã lưu")
+                with the_khung():
+                    section_header("2", "Các phân công đã lưu")
 
-                for key_luu, ban_ghi in list(st.session_state.substitutions.items()):
-                    with st.expander(
-                        f"{ban_ghi['ngay_hien_thi']} — GV nghỉ: {ban_ghi['gv_nghi']} "
-                        f"({len(ban_ghi['phan_cong'])} tiết)"
-                    ):
-                        df_xem = pd.DataFrame(ban_ghi["phan_cong"])[["tiet", "lop", "mon", "gv_thay"]]
-                        df_xem.columns = ["Tiết", "Lớp", "Môn", "GV dạy thay"]
-                        df_xem["GV dạy thay"] = df_xem["GV dạy thay"].fillna("— chưa phân công —")
-                        st.dataframe(df_xem, use_container_width=True, hide_index=True)
+                    for key_luu, ban_ghi in list(st.session_state.substitutions.items()):
+                        with st.expander(
+                            f"{ban_ghi['ngay_hien_thi']} — GV nghỉ: {ban_ghi['gv_nghi']} "
+                            f"({len(ban_ghi['phan_cong'])} tiết)"
+                        ):
+                            df_xem = pd.DataFrame(ban_ghi["phan_cong"])[["tiet", "lop", "mon", "gv_thay"]]
+                            df_xem.columns = ["Tiết", "Lớp", "Môn", "GV dạy thay"]
+                            df_xem["GV dạy thay"] = df_xem["GV dạy thay"].fillna("— chưa phân công —")
+                            st.dataframe(df_xem, use_container_width=True, hide_index=True)
 
-                        bc1, bc2, bc3 = st.columns([1, 1, 2])
-                        with bc1:
-                            pdf_sub = substitution_to_pdf_bytes(
-                                ban_ghi["ngay_hien_thi"], ban_ghi["phan_cong"], school_name=school_name,
-                            )
-                            st.download_button(
-                                "📄 Xuất PDF", data=pdf_sub,
-                                file_name=f"day_thay_{slugify(ban_ghi['gv_nghi'])}.pdf",
-                                mime="application/pdf", use_container_width=True, key=f"pdf_sub_{key_luu}",
-                            )
-                        with bc2:
-                            if st.button("🗑️ Xoá", use_container_width=True, key=f"del_sub_{key_luu}"):
-                                del st.session_state.substitutions[key_luu]
-                                st.rerun()
+                            bc1, bc2, bc3 = st.columns([1, 1, 2])
+                            with bc1:
+                                pdf_sub = substitution_to_pdf_bytes(
+                                    ban_ghi["ngay_hien_thi"], ban_ghi["phan_cong"], school_name=school_name,
+                                )
+                                st.download_button(
+                                    "📄 Xuất PDF", data=pdf_sub,
+                                    file_name=f"day_thay_{slugify(ban_ghi['gv_nghi'])}.pdf",
+                                    mime="application/pdf", use_container_width=True, key=f"pdf_sub_{key_luu}",
+                                )
+                            with bc2:
+                                if st.button("🗑️ Xoá", use_container_width=True, key=f"del_sub_{key_luu}"):
+                                    del st.session_state.substitutions[key_luu]
+                                    st.rerun()
 
-                st.markdown('</div>', unsafe_allow_html=True)
 
     else:
         # người dùng thường: chỉ xem các phân công dạy thay đã được công bố
-        st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        section_header("1", "Lịch dạy thay")
-        if not st.session_state.substitutions:
-            st.info("Chưa có phân công dạy thay nào được công bố.")
-        for key_luu, ban_ghi in st.session_state.substitutions.items():
-            with st.expander(
-                f"{ban_ghi['ngay_hien_thi']} — GV nghỉ: {ban_ghi['gv_nghi']} ({len(ban_ghi['phan_cong'])} tiết)"
-            ):
-                df_xem = pd.DataFrame(ban_ghi["phan_cong"])[["tiet", "lop", "mon", "gv_thay"]]
-                df_xem.columns = ["Tiết", "Lớp", "Môn", "GV dạy thay"]
-                df_xem["GV dạy thay"] = df_xem["GV dạy thay"].fillna("— chưa phân công —")
-                st.dataframe(df_xem, use_container_width=True, hide_index=True)
-                st.download_button(
-                    "📄 Xuất PDF",
-                    data=substitution_to_pdf_bytes(
-                        ban_ghi["ngay_hien_thi"], ban_ghi["phan_cong"], school_name=school_name,
-                    ),
-                    file_name=f"day_thay_{slugify(ban_ghi['gv_nghi'])}.pdf",
-                    mime="application/pdf", key=f"pdf_sub_user_{key_luu}",
-                )
-        st.markdown('</div>', unsafe_allow_html=True)
+        with the_khung():
+            section_header("1", "Lịch dạy thay")
+            if not st.session_state.substitutions:
+                st.info("Chưa có phân công dạy thay nào được công bố.")
+            for key_luu, ban_ghi in st.session_state.substitutions.items():
+                with st.expander(
+                    f"{ban_ghi['ngay_hien_thi']} — GV nghỉ: {ban_ghi['gv_nghi']} ({len(ban_ghi['phan_cong'])} tiết)"
+                ):
+                    df_xem = pd.DataFrame(ban_ghi["phan_cong"])[["tiet", "lop", "mon", "gv_thay"]]
+                    df_xem.columns = ["Tiết", "Lớp", "Môn", "GV dạy thay"]
+                    df_xem["GV dạy thay"] = df_xem["GV dạy thay"].fillna("— chưa phân công —")
+                    st.dataframe(df_xem, use_container_width=True, hide_index=True)
+                    st.download_button(
+                        "📄 Xuất PDF",
+                        data=substitution_to_pdf_bytes(
+                            ban_ghi["ngay_hien_thi"], ban_ghi["phan_cong"], school_name=school_name,
+                        ),
+                        file_name=f"day_thay_{slugify(ban_ghi['gv_nghi'])}.pdf",
+                        mime="application/pdf", key=f"pdf_sub_user_{key_luu}",
+                    )
 
 # ---------------------------------------------------------------------
 # MODULE 4 — Lưu trữ dữ liệu lên SharePoint (Graph API / Power Automate)
@@ -2844,99 +2889,97 @@ elif module == "☁️ Lưu trữ SharePoint":
     except Exception:
         ds_ket_noi = []
 
-    st.markdown('<div class="section-card">', unsafe_allow_html=True)
-    section_header(
-        "1", "Kết nối SharePoint",
-        "Lưu TOÀN BỘ dữ liệu (các bảng nhập liệu, cấu hình, thời gian biểu, kết quả thời khoá biểu, "
-        "phòng thi, dạy thay) lên thư viện tài liệu SharePoint của trường. Mỗi lần lưu tạo 2 file "
-        "cùng tên: <b>.json</b> (để tải lại vào ứng dụng) và <b>.xlsx</b> (mở xem trực tiếp trên "
-        "SharePoint). Có 2 cách kết nối: gọi thẳng Microsoft Graph, hoặc qua flow Power Automate.",
-    )
-    ket_noi = None
-    if not ds_ket_noi:
-        st.warning(
-            "Chưa cấu hình kết nối SharePoint. Quản trị viên cần thêm mục **[sharepoint]** hoặc "
-            "**[power_automate]** vào Secrets của ứng dụng (Streamlit Cloud: *Manage app → Settings "
-            "→ Secrets*; chạy trên máy: file `.streamlit/secrets.toml`). Hướng dẫn từng bước trong "
-            "file `HUONG_DAN_SHAREPOINT.md` của repo. Trong lúc chờ, bạn vẫn dùng được mục 3 "
-            "(sao lưu trên máy)."
+    with the_khung():
+        section_header(
+            "1", "Kết nối SharePoint",
+            "Lưu TOÀN BỘ dữ liệu (các bảng nhập liệu, cấu hình, thời gian biểu, kết quả thời khoá biểu, "
+            "phòng thi, dạy thay) lên thư viện tài liệu SharePoint của trường. Mỗi lần lưu tạo 2 file "
+            "cùng tên: <b>.json</b> (để tải lại vào ứng dụng) và <b>.xlsx</b> (mở xem trực tiếp trên "
+            "SharePoint). Có 2 cách kết nối: gọi thẳng Microsoft Graph, hoặc qua flow Power Automate.",
         )
-    else:
-        if len(ds_ket_noi) > 1:
-            chon = st.radio(
-                "Chọn cách kết nối", [k for k, _, _ in ds_ket_noi], horizontal=True,
-                format_func=lambda k: {"sharepoint": "Microsoft Graph", "power_automate": "Power Automate"}[k],
-                key="storage_backend",
+        ket_noi = None
+        if not ds_ket_noi:
+            st.warning(
+                "Chưa cấu hình kết nối SharePoint. Quản trị viên cần thêm mục **[sharepoint]** hoặc "
+                "**[power_automate]** vào Secrets của ứng dụng (Streamlit Cloud: *Manage app → Settings "
+                "→ Secrets*; chạy trên máy: file `.streamlit/secrets.toml`). Hướng dẫn từng bước trong "
+                "file `HUONG_DAN_SHAREPOINT.md` của repo. Trong lúc chờ, bạn vẫn dùng được mục 3 "
+                "(sao lưu trên máy)."
             )
         else:
-            chon = ds_ket_noi[0][0]
-        khoa, cfg, lop = next(x for x in ds_ket_noi if x[0] == chon)
-        try:
-            ket_noi = lop(cfg)
-            st.success(f"✅ Đã cấu hình: **{ket_noi.ten_hien_thi}**")
-        except storage.LoiLuuTru as e:
-            st.error(str(e))
-    st.markdown('</div>', unsafe_allow_html=True)
+            if len(ds_ket_noi) > 1:
+                chon = st.radio(
+                    "Chọn cách kết nối", [k for k, _, _ in ds_ket_noi], horizontal=True,
+                    format_func=lambda k: {"sharepoint": "Microsoft Graph", "power_automate": "Power Automate"}[k],
+                    key="storage_backend",
+                )
+            else:
+                chon = ds_ket_noi[0][0]
+            khoa, cfg, lop = next(x for x in ds_ket_noi if x[0] == chon)
+            try:
+                ket_noi = lop(cfg)
+                st.success(f"✅ Đã cấu hình: **{ket_noi.ten_hien_thi}**")
+            except storage.LoiLuuTru as e:
+                st.error(str(e))
 
     if ket_noi is not None and ket_noi.co_luu_file:
-        st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        section_header("2", "Lưu & tải file sao lưu trên SharePoint")
-        l1, l2 = st.columns([3, 1])
-        with l1:
-            ten_ban_luu = st.text_input(
-                "Tên bản lưu", value=f"TKB_{date.today().strftime('%Y-%m-%d')}", key="storage_ten",
-                help="Trùng tên với bản đã có thì bản cũ bị ghi đè (SharePoint vẫn giữ lịch sử "
-                     "phiên bản của file).",
-            )
-        with l2:
-            st.write("")
-            st.write("")
-            luu_btn = st.button("💾 Lưu lên SharePoint", type="primary", use_container_width=True)
-        if luu_btn:
-            try:
-                with st.spinner("Đang lưu lên SharePoint..."):
-                    duong_dan = ket_noi.luu(ten_ban_luu, storage.dong_goi(st.session_state))
-                st.success(f"✅ Đã lưu: `{duong_dan}` (kèm bản .xlsx cùng tên).")
-                st.session_state.pop("storage_ds", None)
-            except (storage.LoiLuuTru, requests.RequestException) as e:
-                st.error(f"Lưu thất bại: {e}")
-
-        st.divider()
-        if isinstance(ket_noi, storage.PowerAutomate) and not ket_noi.co_the_tai():
-            st.info("Để tải dữ liệu ngược từ SharePoint về, cấu hình thêm list_url và load_url "
-                    "trong mục [power_automate] (xem hướng dẫn).")
-        else:
-            if st.button("🔄 Xem các bản đã lưu") or "storage_ds" in st.session_state:
+        with the_khung():
+            section_header("2", "Lưu & tải file sao lưu trên SharePoint")
+            l1, l2 = st.columns([3, 1])
+            with l1:
+                ten_ban_luu = st.text_input(
+                    "Tên bản lưu", value=f"TKB_{date.today().strftime('%Y-%m-%d')}", key="storage_ten",
+                    help="Trùng tên với bản đã có thì bản cũ bị ghi đè (SharePoint vẫn giữ lịch sử "
+                         "phiên bản của file).",
+                )
+            with l2:
+                st.write("")
+                st.write("")
+                luu_btn = st.button("💾 Lưu lên SharePoint", type="primary", use_container_width=True)
+            if luu_btn:
                 try:
-                    if "storage_ds" not in st.session_state:
-                        with st.spinner("Đang đọc danh sách..."):
-                            st.session_state.storage_ds = ket_noi.danh_sach()
-                    ds = st.session_state.storage_ds
-                    if not ds:
-                        st.info("Chưa có bản lưu nào trên SharePoint.")
-                    else:
-                        t1, t2 = st.columns([3, 1])
-                        with t1:
-                            ban_chon = st.selectbox(
-                                "Chọn bản lưu", [x["ten"] for x in ds], key="storage_chon",
-                                format_func=lambda t: t + next(
-                                    (f"  —  sửa lúc {x['sua_luc'][:16].replace('T', ' ')}"
-                                     for x in ds if x["ten"] == t and x["sua_luc"]), ""),
-                            )
-                        with t2:
-                            st.write("")
-                            st.write("")
-                            tai_btn = st.button("📂 Tải vào ứng dụng", use_container_width=True)
-                        st.caption("⚠️ Tải bản lưu sẽ THAY THẾ toàn bộ dữ liệu đang có trong ứng dụng.")
-                        if tai_btn:
-                            with st.spinner("Đang tải..."):
-                                goi = ket_noi.tai(ban_chon)
-                            st.session_state["_ghi_chu_storage"] = [f"✅ Đã tải bản lưu '{ban_chon}'."] + \
-                                storage.giai_nen(goi, st.session_state, TimetableResult, SchoolClass, ScheduleConfig)
-                            st.rerun()
-                except (storage.LoiLuuTru, requests.RequestException, ValueError) as e:
-                    st.error(f"Không đọc được dữ liệu từ SharePoint: {e}")
-        st.markdown('</div>', unsafe_allow_html=True)
+                    with st.spinner("Đang lưu lên SharePoint..."):
+                        duong_dan = ket_noi.luu(ten_ban_luu, storage.dong_goi(st.session_state))
+                    st.success(f"✅ Đã lưu: `{duong_dan}` (kèm bản .xlsx cùng tên).")
+                    st.session_state.pop("storage_ds", None)
+                except (storage.LoiLuuTru, requests.RequestException) as e:
+                    st.error(f"Lưu thất bại: {e}")
+
+            st.divider()
+            if isinstance(ket_noi, storage.PowerAutomate) and not ket_noi.co_the_tai():
+                st.info("Để tải dữ liệu ngược từ SharePoint về, cấu hình thêm list_url và load_url "
+                        "trong mục [power_automate] (xem hướng dẫn).")
+            else:
+                if st.button("🔄 Xem các bản đã lưu") or "storage_ds" in st.session_state:
+                    try:
+                        if "storage_ds" not in st.session_state:
+                            with st.spinner("Đang đọc danh sách..."):
+                                st.session_state.storage_ds = ket_noi.danh_sach()
+                        ds = st.session_state.storage_ds
+                        if not ds:
+                            st.info("Chưa có bản lưu nào trên SharePoint.")
+                        else:
+                            t1, t2 = st.columns([3, 1])
+                            with t1:
+                                ban_chon = st.selectbox(
+                                    "Chọn bản lưu", [x["ten"] for x in ds], key="storage_chon",
+                                    format_func=lambda t: t + next(
+                                        (f"  —  sửa lúc {x['sua_luc'][:16].replace('T', ' ')}"
+                                         for x in ds if x["ten"] == t and x["sua_luc"]), ""),
+                                )
+                            with t2:
+                                st.write("")
+                                st.write("")
+                                tai_btn = st.button("📂 Tải vào ứng dụng", use_container_width=True)
+                            st.caption("⚠️ Tải bản lưu sẽ THAY THẾ toàn bộ dữ liệu đang có trong ứng dụng.")
+                            if tai_btn:
+                                with st.spinner("Đang tải..."):
+                                    goi = ket_noi.tai(ban_chon)
+                                st.session_state["_ghi_chu_storage"] = [f"✅ Đã tải bản lưu '{ban_chon}'."] + \
+                                    storage.giai_nen(goi, st.session_state, TimetableResult, SchoolClass, ScheduleConfig)
+                                st.rerun()
+                    except (storage.LoiLuuTru, requests.RequestException, ValueError) as e:
+                        st.error(f"Không đọc được dữ liệu từ SharePoint: {e}")
 
     # ------------------------------------------------------------------
     # Đồng bộ trực tiếp từng bảng <-> SharePoint List
@@ -2955,340 +2998,336 @@ elif module == "☁️ Lưu trữ SharePoint":
         b: (ket_noi_list.ten_list(b) if ket_noi_list else storage.LIST_MAC_DINH[b]) for b in ds_bang
     }
 
-    st.markdown('<div class="section-card">', unsafe_allow_html=True)
-    section_header(
-        "2b", "Đồng bộ trực tiếp với SharePoint Lists",
-        "Mỗi bảng nhập liệu tương ứng 1 List trên SharePoint, mỗi dòng = 1 mục (item). Cột của List "
-        "được khớp theo <b>tên hiển thị</b> — không phân biệt dấu, hoa/thường, bỏ qua phần trong "
-        "ngoặc (VD cột <i>Họ và tên</i> hay <i>Ho va ten</i> đều khớp <i>Họ và tên (không bắt buộc)</i>). "
-        "Cột <i>Tiêu đề</i> mặc định của List không cần dùng — ứng dụng tự điền. Cách nhanh nhất để "
-        "tạo đúng các List: tải file Excel mẫu bên dưới, rồi trong Microsoft Lists chọn "
-        "<b>+ Danh sách mới → Từ Excel</b> cho từng sheet.",
-    )
-    st.dataframe(pd.DataFrame([
-        {"Bảng trong ứng dụng": TEN_BANG_VN.get(b, b), "Tên List": ten_list_cua[b],
-         "Các cột cần có": " | ".join(cot_cua_bang[b])}
-        for b in ds_bang
-    ]), use_container_width=True, hide_index=True)
-    st.download_button(
-        "📄 Tải file Excel mẫu để tạo List (mỗi List 1 sheet, kèm dữ liệu hiện tại)",
-        data=storage.mau_excel_tao_list({b: st.session_state[b] for b in ds_bang}, ten_list_cua),
-        file_name="mau_tao_sharepoint_lists.xlsx", use_container_width=True,
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
+    with the_khung():
+        section_header(
+            "2b", "Đồng bộ trực tiếp với SharePoint Lists",
+            "Mỗi bảng nhập liệu tương ứng 1 List trên SharePoint, mỗi dòng = 1 mục (item). Cột của List "
+            "được khớp theo <b>tên hiển thị</b> — không phân biệt dấu, hoa/thường, bỏ qua phần trong "
+            "ngoặc (VD cột <i>Họ và tên</i> hay <i>Ho va ten</i> đều khớp <i>Họ và tên (không bắt buộc)</i>). "
+            "Cột <i>Tiêu đề</i> mặc định của List không cần dùng — ứng dụng tự điền. Cách nhanh nhất để "
+            "tạo đúng các List: tải file Excel mẫu bên dưới, rồi trong Microsoft Lists chọn "
+            "<b>+ Danh sách mới → Từ Excel</b> cho từng sheet.",
+        )
+        st.dataframe(pd.DataFrame([
+            {"Bảng trong ứng dụng": TEN_BANG_VN.get(b, b), "Tên List": ten_list_cua[b],
+             "Các cột cần có": " | ".join(cot_cua_bang[b])}
+            for b in ds_bang
+        ]), use_container_width=True, hide_index=True)
+        st.download_button(
+            "📄 Tải file Excel mẫu để tạo List (mỗi List 1 sheet, kèm dữ liệu hiện tại)",
+            data=storage.mau_excel_tao_list({b: st.session_state[b] for b in ds_bang}, ten_list_cua),
+            file_name="mau_tao_sharepoint_lists.xlsx", use_container_width=True,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
 
-    if ket_noi_list is None:
-        st.info(
-            "Để đồng bộ với List, cấu hình 1 trong 2: **sp_url** trong mục [power_automate] (1 flow "
-            "Power Automate chạy bằng tài khoản của bạn — dùng được với *Danh sách của tôi*, không "
-            "cần admin), hoặc mục [sharepoint] (Microsoft Graph). Xem HUONG_DAN_SHAREPOINT.md."
-        )
-    else:
-        bang_chon = st.multiselect(
-            "Chọn bảng cần đồng bộ", ds_bang, default=ds_bang, key="list_bang_chon",
-            format_func=lambda b: f"{TEN_BANG_VN.get(b, b)} ⇄ {ten_list_cua[b]}",
-        )
-        k1, k2, k3 = st.columns(3)
-        with k1:
-            kiem_tra_btn = st.button("🔍 Kiểm tra List & cột", use_container_width=True)
-        with k2:
-            ghi_list_btn = st.button("⬆️ Ghi các bảng lên List", type="primary", use_container_width=True)
-        with k3:
-            doc_list_btn = st.button("⬇️ Đọc từ List vào ứng dụng", use_container_width=True)
-        dong_y_ghi = st.checkbox(
-            "Tôi hiểu: khi ghi, TOÀN BỘ mục cũ trong các List đã chọn sẽ bị thay bằng dữ liệu hiện tại "
-            "của ứng dụng.", key="list_dong_y_ghi",
-        )
-        try:
-            if kiem_tra_btn:
-                with st.spinner("Đang kiểm tra các List..."):
-                    kq_kt = ket_noi_list.kiem_tra_list({b: cot_cua_bang[b] for b in bang_chon})
-                st.dataframe(pd.DataFrame([
-                    {"Bảng": TEN_BANG_VN.get(x["bang"], x["bang"]), "List": x["list"],
-                     "Trạng thái": ("✅ Đủ cột" if not x["thieu"] else "⚠️ Thiếu cột") if x["co_list"]
-                     else "❌ Không tìm thấy List",
-                     "Cột thiếu": ", ".join(x["thieu"]) if x["co_list"] else "",
-                     "Cột đã khớp": "; ".join(x["khop"])}
-                    for x in kq_kt
-                ]), use_container_width=True, hide_index=True)
-            if ghi_list_btn:
-                if not dong_y_ghi:
-                    st.warning("Tick ô xác nhận bên dưới các nút trước khi ghi lên List.")
-                else:
-                    tien_do = st.progress(0.0, text="Đang ghi lên SharePoint Lists...")
-                    for n, b in enumerate(bang_chon, start=1):
-                        so_dong, cb = ket_noi_list.ghi_list(b, st.session_state[b])
-                        st.success(f"✅ {TEN_BANG_VN.get(b, b)} → List '{ten_list_cua[b]}': {so_dong} dòng.")
-                        for c in cb:
-                            st.warning(c)
-                        tien_do.progress(n / max(len(bang_chon), 1))
-            if doc_list_btn:
-                ghi_chu = []
-                with st.spinner("Đang đọc các List..."):
-                    for b in bang_chon:
-                        df_moi, cb = ket_noi_list.doc_list(b, cot_cua_bang[b])
-                        if b == "grade_times":
-                            df_moi = chuan_hoa_bang_gio(df_moi)
-                        st.session_state[b] = df_moi
-                        st.session_state.pop(f"editor_{b}", None)
-                        ghi_chu.append(f"✅ Đã đọc {len(df_moi)} dòng từ List '{ten_list_cua[b]}' "
-                                       f"vào bảng {TEN_BANG_VN.get(b, b)}.")
-                        ghi_chu += [f"⚠️ {c}" for c in cb]
-                st.session_state["_ghi_chu_storage"] = ghi_chu
-                st.rerun()
-        except (storage.LoiLuuTru, requests.RequestException) as e:
-            st.error(f"Lỗi đồng bộ List: {e}")
-    st.markdown('</div>', unsafe_allow_html=True)
+        if ket_noi_list is None:
+            st.info(
+                "Để đồng bộ với List, cấu hình 1 trong 2: **sp_url** trong mục [power_automate] (1 flow "
+                "Power Automate chạy bằng tài khoản của bạn — dùng được với *Danh sách của tôi*, không "
+                "cần admin), hoặc mục [sharepoint] (Microsoft Graph). Xem HUONG_DAN_SHAREPOINT.md."
+            )
+        else:
+            bang_chon = st.multiselect(
+                "Chọn bảng cần đồng bộ", ds_bang, default=ds_bang, key="list_bang_chon",
+                format_func=lambda b: f"{TEN_BANG_VN.get(b, b)} ⇄ {ten_list_cua[b]}",
+            )
+            k1, k2, k3 = st.columns(3)
+            with k1:
+                kiem_tra_btn = st.button("🔍 Kiểm tra List & cột", use_container_width=True)
+            with k2:
+                ghi_list_btn = st.button("⬆️ Ghi các bảng lên List", type="primary", use_container_width=True)
+            with k3:
+                doc_list_btn = st.button("⬇️ Đọc từ List vào ứng dụng", use_container_width=True)
+            dong_y_ghi = st.checkbox(
+                "Tôi hiểu: khi ghi, TOÀN BỘ mục cũ trong các List đã chọn sẽ bị thay bằng dữ liệu hiện tại "
+                "của ứng dụng.", key="list_dong_y_ghi",
+            )
+            try:
+                if kiem_tra_btn:
+                    with st.spinner("Đang kiểm tra các List..."):
+                        kq_kt = ket_noi_list.kiem_tra_list({b: cot_cua_bang[b] for b in bang_chon})
+                    st.dataframe(pd.DataFrame([
+                        {"Bảng": TEN_BANG_VN.get(x["bang"], x["bang"]), "List": x["list"],
+                         "Trạng thái": ("✅ Đủ cột" if not x["thieu"] else "⚠️ Thiếu cột") if x["co_list"]
+                         else "❌ Không tìm thấy List",
+                         "Cột thiếu": ", ".join(x["thieu"]) if x["co_list"] else "",
+                         "Cột đã khớp": "; ".join(x["khop"])}
+                        for x in kq_kt
+                    ]), use_container_width=True, hide_index=True)
+                if ghi_list_btn:
+                    if not dong_y_ghi:
+                        st.warning("Tick ô xác nhận bên dưới các nút trước khi ghi lên List.")
+                    else:
+                        tien_do = st.progress(0.0, text="Đang ghi lên SharePoint Lists...")
+                        for n, b in enumerate(bang_chon, start=1):
+                            so_dong, cb = ket_noi_list.ghi_list(b, st.session_state[b])
+                            st.success(f"✅ {TEN_BANG_VN.get(b, b)} → List '{ten_list_cua[b]}': {so_dong} dòng.")
+                            for c in cb:
+                                st.warning(c)
+                            tien_do.progress(n / max(len(bang_chon), 1))
+                if doc_list_btn:
+                    ghi_chu = []
+                    with st.spinner("Đang đọc các List..."):
+                        for b in bang_chon:
+                            df_moi, cb = ket_noi_list.doc_list(b, cot_cua_bang[b])
+                            if b == "grade_times":
+                                df_moi = chuan_hoa_bang_gio(df_moi)
+                            st.session_state[b] = df_moi
+                            st.session_state.pop(f"editor_{b}", None)
+                            ghi_chu.append(f"✅ Đã đọc {len(df_moi)} dòng từ List '{ten_list_cua[b]}' "
+                                           f"vào bảng {TEN_BANG_VN.get(b, b)}.")
+                            ghi_chu += [f"⚠️ {c}" for c in cb]
+                    st.session_state["_ghi_chu_storage"] = ghi_chu
+                    st.rerun()
+            except (storage.LoiLuuTru, requests.RequestException) as e:
+                st.error(f"Lỗi đồng bộ List: {e}")
 
     for gc in st.session_state.pop("_ghi_chu_storage", []):
         (st.warning if gc.startswith("⚠️") else st.success)(gc)
 
-    st.markdown('<div class="section-card">', unsafe_allow_html=True)
-    section_header(
-        "3", "Sao lưu trên máy (không cần SharePoint)",
-        "Tải toàn bộ dữ liệu về máy dưới dạng file .json, hoặc khôi phục lại từ file đó.",
-    )
-    b1, b2 = st.columns(2)
-    with b1:
-        goi_may = storage.dong_goi(st.session_state)
-        st.download_button(
-            "📥 Tải file sao lưu (.json)",
-            data=json.dumps(goi_may, ensure_ascii=False, indent=1).encode("utf-8"),
-            file_name=f"{storage.ten_file_an_toan(st.session_state.get('storage_ten', 'TKB'))}.json",
-            mime="application/json", use_container_width=True,
+    with the_khung():
+        section_header(
+            "3", "Sao lưu trên máy (không cần SharePoint)",
+            "Tải toàn bộ dữ liệu về máy dưới dạng file .json, hoặc khôi phục lại từ file đó.",
         )
-        st.download_button(
-            "📊 Tải bản Excel (mỗi bảng 1 sheet)", data=storage.sang_excel(goi_may),
-            file_name="du_lieu_tkb.xlsx", use_container_width=True,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-    with b2:
-        file_sao_luu = st.file_uploader("📤 Khôi phục từ file sao lưu (.json)", type=["json"],
-                                        key="up_sao_luu")
-        if file_sao_luu is not None:
-            marker = f"{file_sao_luu.name}:{file_sao_luu.size}"
-            if st.session_state.get("_imported_sao_luu") != marker:
-                try:
-                    goi = json.loads(file_sao_luu.getvalue().decode("utf-8-sig"))
-                    ghi_chu = storage.giai_nen(goi, st.session_state, TimetableResult, SchoolClass, ScheduleConfig)
-                    st.session_state["_imported_sao_luu"] = marker
-                    st.session_state["_ghi_chu_storage"] = [f"✅ Đã khôi phục từ '{file_sao_luu.name}'."] + ghi_chu
-                    st.rerun()
-                except (ValueError, storage.LoiLuuTru) as e:
-                    st.error(f"Không khôi phục được: {e}")
-    st.markdown('</div>', unsafe_allow_html=True)
+        b1, b2 = st.columns(2)
+        with b1:
+            goi_may = storage.dong_goi(st.session_state)
+            st.download_button(
+                "📥 Tải file sao lưu (.json)",
+                data=json.dumps(goi_may, ensure_ascii=False, indent=1).encode("utf-8"),
+                file_name=f"{storage.ten_file_an_toan(st.session_state.get('storage_ten', 'TKB'))}.json",
+                mime="application/json", use_container_width=True,
+            )
+            st.download_button(
+                "📊 Tải bản Excel (mỗi bảng 1 sheet)", data=storage.sang_excel(goi_may),
+                file_name="du_lieu_tkb.xlsx", use_container_width=True,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        with b2:
+            file_sao_luu = st.file_uploader("📤 Khôi phục từ file sao lưu (.json)", type=["json"],
+                                            key="up_sao_luu")
+            if file_sao_luu is not None:
+                marker = f"{file_sao_luu.name}:{file_sao_luu.size}"
+                if st.session_state.get("_imported_sao_luu") != marker:
+                    try:
+                        goi = json.loads(file_sao_luu.getvalue().decode("utf-8-sig"))
+                        ghi_chu = storage.giai_nen(goi, st.session_state, TimetableResult, SchoolClass, ScheduleConfig)
+                        st.session_state["_imported_sao_luu"] = marker
+                        st.session_state["_ghi_chu_storage"] = [f"✅ Đã khôi phục từ '{file_sao_luu.name}'."] + ghi_chu
+                        st.rerun()
+                    except (ValueError, storage.LoiLuuTru) as e:
+                        st.error(f"Không khôi phục được: {e}")
 
 # ---------------------------------------------------------------------
 # MODULE 5 — Tài khoản & Công bố (chỉ admin)
 # ---------------------------------------------------------------------
 elif module == "👥 Tài khoản & Công bố":
-    st.markdown('<div class="section-card">', unsafe_allow_html=True)
-    section_header(
-        "1", "Công bố cho người dùng",
-        "Người dùng (user) chỉ xem được dữ liệu admin đã <b>công bố</b>: thời khoá biểu, kết quả "
-        "phòng thi, lịch dạy thay (kèm các bảng dữ liệu). Mỗi lần công bố thay bản cũ; người dùng "
-        "đang mở app sẽ thấy bản mới ở lần thao tác kế tiếp.",
-    )
-    kho = _kho_cong_bo()
-    goi_cb = kho["goi"]
-    if goi_cb:
-        kq_cb = goi_cb.get("ket_qua", {})
-        st.success(
-            f"📢 Đang công bố bản lúc **{str(goi_cb.get('thoi_gian_luu', '')).replace('T', ' ')[:16]}**"
-            + (f" — bởi {goi_cb['nguoi_cong_bo']}" if goi_cb.get("nguoi_cong_bo") else "")
-            + f" · TKB: {'có' if kq_cb.get('tkb') else 'chưa có'}"
-            + f" · Phòng thi: {len(kq_cb.get('phong_thi', {}))} môn"
-            + f" · Dạy thay: {len(kq_cb.get('day_thay', {}))} ngày"
+    with the_khung():
+        section_header(
+            "1", "Công bố cho người dùng",
+            "Người dùng (user) chỉ xem được dữ liệu admin đã <b>công bố</b>: thời khoá biểu, kết quả "
+            "phòng thi, lịch dạy thay (kèm các bảng dữ liệu). Mỗi lần công bố thay bản cũ; người dùng "
+            "đang mở app sẽ thấy bản mới ở lần thao tác kế tiếp.",
         )
-    else:
-        st.info("Chưa có bản công bố nào — người dùng đang không xem được dữ liệu.")
-        if kho.get("loi_nap"):
-            st.caption(f"Lần nạp từ SharePoint gần nhất bị lỗi: {kho['loi_nap']}")
-
-    ket_qua_hien_tai = st.session_state.get("result")
-    if not ket_qua_hien_tai or ket_qua_hien_tai.status in ("INFEASIBLE", "ERROR"):
-        st.warning("Phiên của bạn chưa có thời khoá biểu xếp thành công — công bố lúc này người dùng "
-                   "sẽ không thấy thời khoá biểu.")
-    if not _ds_ket_noi_luu_tru():
-        st.warning("Chưa cấu hình SharePoint: bản công bố chỉ nằm trên máy chủ ứng dụng và sẽ MẤT khi "
-                   "Streamlit khởi động lại app. Nên cấu hình SharePoint (module ☁️) để lưu bền.")
-    elif not any(kn.co_luu_file for kn in _ds_ket_noi_luu_tru()):
-        st.caption(f"Bản công bố sẽ lưu vào SharePoint List **{storage.LIST_MAC_DINH['cong_bo']}** "
-                   "(cần 1 cột 'NoiDung' kiểu Nhiều dòng văn bản).")
-
-    def _dang_len_teams():
-        """Tạo tệp TKB / coi thi rồi gửi flow Teams; hiện kết quả."""
-        moc = teams.bay_gio_vn()
-        with st.spinner("Đang tạo tệp và đăng lên Teams..."):
-            tep, ghi_chu = tao_tep_dang_teams(st.session_state, school_name, moc)
-            for g in ghi_chu:
-                st.warning(g)
-            if not tep:
-                st.error("Không có tệp nào để đăng lên Teams.")
-                return
-            thong_diep = teams.tao_thong_diep(
-                f"📅 {school_name + ' — ' if school_name else ''}Thời khoá biểu / lịch mới đã được công bố",
-                [f"Áp dụng từ: {st.session_state.tuan_bat_dau.strftime('%d/%m/%Y')}",
-                 f"Công bố bởi {NGUOI_DUNG['ten']} lúc {moc.strftime('%H:%M %d/%m/%Y')}"],
-                [t for t, _ in tep], CAU_HINH_TEAMS["thu_muc"], CAU_HINH_TEAMS["app_url"],
+        kho = _kho_cong_bo()
+        goi_cb = kho["goi"]
+        if goi_cb:
+            kq_cb = goi_cb.get("ket_qua", {})
+            st.success(
+                f"📢 Đang công bố bản lúc **{str(goi_cb.get('thoi_gian_luu', '')).replace('T', ' ')[:16]}**"
+                + (f" — bởi {goi_cb['nguoi_cong_bo']}" if goi_cb.get("nguoi_cong_bo") else "")
+                + f" · TKB: {'có' if kq_cb.get('tkb') else 'chưa có'}"
+                + f" · Phòng thi: {len(kq_cb.get('phong_thi', {}))} môn"
+                + f" · Dạy thay: {len(kq_cb.get('day_thay', {}))} ngày"
             )
-            try:
-                if CAU_HINH_TEAMS["che_do"] == "graph":
-                    # bài đăng kiểu Teams: ảnh TKB nhúng + thẻ tệp
-                    tep_da_luu = teams.luu_tep(CAU_HINH_TEAMS, tep)
-                    anh = anh_tkb_lop(st.session_state, st.session_state.get("teams_lop_anh", []), school_name)
-                    bai = teams.tao_bai_dang(
-                        f"📅 {school_name + ' — ' if school_name else ''}Thời khoá biểu mới",
-                        [f"Áp dụng từ: {st.session_state.tuan_bat_dau.strftime('%d/%m/%Y')} — công bố bởi "
-                         f"{NGUOI_DUNG['ten']} lúc {moc.strftime('%H:%M %d/%m/%Y')}"],
-                        anh, tep_da_luu, CAU_HINH_TEAMS["app_url"],
-                    )
-                    teams.dang_tin(CAU_HINH_TEAMS, bai)
-                    so_the = len(bai.get("attachments", []))
-                    st.success(f"📤 Đã lưu {len(tep)} tệp vào thư mục '{CAU_HINH_TEAMS['thu_muc']}' và đăng bài "
-                               f"lên kênh Teams ({len(anh)} ảnh TKB, {so_the} thẻ tệp).")
-                    if so_the < len(tep):
-                        st.warning("Một số tệp không hiện dạng thẻ (flow chưa trả về ETag) — bài đăng dùng đường "
-                                   "link thay thế. Xem bước 'Append to array variable' trong TEAMS.md.")
-                else:
-                    teams.gui(CAU_HINH_TEAMS, tep, thong_diep)
-                    st.success(f"📤 Đã đăng {len(tep)} tệp lên Teams (thư mục '{CAU_HINH_TEAMS['thu_muc']}') "
-                               "và gửi thông báo vào kênh.")
-            except storage.LoiLuuTru as e:
-                st.error(f"Đăng Teams thất bại: {e}")
-
-    dang_teams = False
-    if CAU_HINH_TEAMS:
-        if CAU_HINH_TEAMS.get("loi_cau_hinh"):
-            st.warning(f"Cấu hình [teams] chưa đúng: {CAU_HINH_TEAMS['loi_cau_hinh']} — đang dùng chế độ đơn giản.")
-        dang_teams = st.checkbox(
-            f"📤 Đồng thời đăng lên Microsoft Teams (thư mục '{CAU_HINH_TEAMS['thu_muc']}' + "
-            + ("bài đăng có ảnh TKB và thẻ tệp)" if CAU_HINH_TEAMS["che_do"] == "graph" else "tin nhắn thông báo)"),
-            value=True, key="cb_dang_teams",
-        )
-        if CAU_HINH_TEAMS["che_do"] == "graph":
-            ds_lop_anh = [c.name for c in (st.session_state.get("result_classes") or [])]
-            st.multiselect(
-                "🖼️ Lớp hiện ảnh thời khoá biểu ngay trong bài đăng (nên chọn ít, VD 1–4 lớp)",
-                ds_lop_anh, default=ds_lop_anh[:2], key="teams_lop_anh",
-                help="Toàn bộ các lớp vẫn nằm trong tệp PDF/Excel đính kèm.",
-            )
-    else:
-        st.caption("📤 Muốn tự đăng thời khoá biểu lên Teams khi công bố: xem hướng dẫn TEAMS.md (mục [teams] trong Secrets).")
-
-    cb1, cb2, cb3 = st.columns(3)
-    with cb1:
-        if st.button("📢 Công bố dữ liệu hiện tại", type="primary", use_container_width=True):
-            goi_moi = storage.dong_goi(st.session_state)
-            goi_moi["nguoi_cong_bo"] = NGUOI_DUNG["ten"]
-            with st.spinner("Đang công bố..."):
-                da_luu, loi = cong_bo(goi_moi)
-            st.session_state["_ban_cong_bo_da_nap"] = goi_moi["thoi_gian_luu"]
-            st.success("✅ Đã công bố. Đã lưu: " + " · ".join(da_luu))
-            for e in loi:
-                st.warning(e)
-            if dang_teams:
-                _dang_len_teams()
-    with cb2:
-        if st.button("📥 Nạp bản công bố vào phiên của tôi", use_container_width=True,
-                     disabled=not goi_cb,
-                     help="Thay dữ liệu đang sửa trong phiên của bạn bằng bản đang công bố."):
-            storage.giai_nen(goi_cb, st.session_state, TimetableResult, SchoolClass, ScheduleConfig)
-            st.session_state["_ban_cong_bo_da_nap"] = goi_cb.get("thoi_gian_luu")
-            st.rerun()
-    with cb3:
-        if st.button("🔄 Nạp lại từ SharePoint", use_container_width=True,
-                     help="Đọc lại bản công bố đang lưu trên SharePoint (VD sau khi app khởi động lại)."):
-            with st.spinner("Đang đọc SharePoint..."):
-                goi_sp = nap_ban_cong_bo(bat_buoc=True)
-            if goi_sp:
-                st.success("✅ Đã nạp bản công bố từ SharePoint.")
-            else:
-                st.error("Không đọc được bản công bố từ SharePoint. " + (kho.get("loi_nap") or ""))
-    if CAU_HINH_TEAMS and st.button("📤 Chỉ đăng lên Teams (không công bố lại)",
-                                    help="VD khi lần đăng trước bị lỗi."):
-        _dang_len_teams()
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown('<div class="section-card">', unsafe_allow_html=True)
-    section_header(
-        "2", "Tài khoản & quyền",
-        "Tài khoản khai báo trong <b>Secrets</b> của ứng dụng (Streamlit Cloud: Manage app → Settings → "
-        "Secrets) — không lưu trong code/GitHub. Thêm/xoá/đổi mật khẩu: sửa Secrets rồi bấm Save.",
-    )
-    st.dataframe(pd.DataFrame([
-        {"Quyền": "📅 Thời khoá biểu", "admin": "Nhập liệu, xếp lịch, xuất file", "user": "Xem & xuất PDF/Excel"},
-        {"Quyền": "🪑 Phòng thi", "admin": "Nhập liệu, xếp phòng, xuất file", "user": "Xem & xuất PDF/Excel"},
-        {"Quyền": "🔄 Dạy thay", "admin": "Phân công, lưu, xoá", "user": "Xem & xuất PDF"},
-        {"Quyền": "☁️ SharePoint", "admin": "Lưu / tải / đồng bộ List", "user": "—"},
-        {"Quyền": "👥 Tài khoản & Công bố", "admin": "Công bố, xem tài khoản", "user": "—"},
-    ]), use_container_width=True, hide_index=True)
-
-    st.markdown("**🟦 Đăng nhập bằng tài khoản Microsoft (email Outlook của trường)**")
-    if DANG_NHAP_MS:
-        st.success("Đã bật — giáo viên bấm 'Đăng nhập bằng tài khoản Microsoft của trường'.")
-        st.dataframe(pd.DataFrame([
-            {"Quy tắc": "Email là admin", "Giá trị": ", ".join(sorted(PHAN_QUYEN["admin_emails"])) or "— (chưa có!)"},
-            {"Quy tắc": "Tên miền là user", "Giá trị": ", ".join(sorted(PHAN_QUYEN["domains"])) or "—"},
-            {"Quy tắc": "Email user thêm", "Giá trị": ", ".join(sorted(PHAN_QUYEN["user_emails"])) or "—"},
-        ]), use_container_width=True, hide_index=True)
-        if not PHAN_QUYEN["domains"] and not PHAN_QUYEN["user_emails"]:
-            st.warning("Chưa giới hạn tên miền: MỌI tài khoản Microsoft đăng nhập được đều thành user. "
-                       "Nên khai báo domains = [\"tenmien-truong.edu.vn\"] trong mục [phan_quyen].")
-        if not PHAN_QUYEN["admin_emails"] and not any(t["vai_tro"] == "admin" for t in TAI_KHOAN.values()):
-            st.error("Chưa có admin nào: khai báo admin_emails trong mục [phan_quyen].")
-    else:
-        st.info("Chưa bật. Cách bật: xem file PHAN_QUYEN.md (tạo App Registration trên Microsoft Entra, "
-                "rồi dán mục [auth] và [phan_quyen] vào Secrets).")
-        if st.button("🎲 Tạo cookie_secret ngẫu nhiên"):
-            import secrets as _sec
-            st.code(f'cookie_secret = "{_sec.token_urlsafe(32)}"', language="toml")
-
-    st.markdown("**📨 Đăng nhập bằng mã gửi qua email trường** (không cần quyền admin Microsoft)")
-    if DANG_NHAP_OTP:
-        st.success("Đã bật — giáo viên nhập email trường, nhận mã 6 số trong Outlook để đăng nhập. "
-                   "Quyền admin/user theo quy tắc email dưới đây.")
-        st.dataframe(pd.DataFrame([
-            {"Quy tắc": "Email là admin", "Giá trị": ", ".join(sorted(PHAN_QUYEN["admin_emails"])) or "— (chưa có!)"},
-            {"Quy tắc": "Tên miền là user", "Giá trị": ", ".join(sorted(PHAN_QUYEN["domains"])) or "—"},
-            {"Quy tắc": "Email user thêm", "Giá trị": ", ".join(sorted(PHAN_QUYEN["user_emails"])) or "—"},
-        ]), use_container_width=True, hide_index=True)
-        if not PHAN_QUYEN["admin_emails"] and not any(t["vai_tro"] == "admin" for t in TAI_KHOAN.values()):
-            st.error("Chưa có admin nào: khai báo admin_emails trong mục [phan_quyen].")
-        if not PHAN_QUYEN["domains"] and not PHAN_QUYEN["user_emails"]:
-            st.warning("Chưa giới hạn tên miền: email bất kỳ cũng nhận được mã và thành user. "
-                       "Khai báo domains = [\"tenmien-truong.edu.vn\"] trong mục [phan_quyen].")
-    else:
-        st.info("Chưa bật. Tạo flow gửi mã (xem PHAN_QUYEN.md, mục C) rồi thêm otp_url vào [phan_quyen].")
-
-    st.markdown("**🔐 Tài khoản nội bộ (tên đăng nhập + mật khẩu)** — không bắt buộc, dùng làm admin dự phòng")
-    if TAI_KHOAN:
-        st.dataframe(pd.DataFrame([
-            {"Tên đăng nhập": tk["ten_dn"], "Tên hiển thị": tk["ten"], "Vai trò": TEN_VAI_TRO[tk["vai_tro"]],
-             "Mật khẩu": "mã băm ✅" if tk.get("password_hash") else "chữ thường ⚠️"}
-            for tk in TAI_KHOAN.values()
-        ]), use_container_width=True, hide_index=True)
-    else:
-        st.caption("Chưa có. Mẫu khai báo trong Secrets:")
-        st.code(
-            '[phan_quyen.users.admin]\nname = "Quản trị viên"\nrole = "admin"\npassword_hash = "..."',
-            language="toml",
-        )
-
-    st.markdown("**🔑 Tạo mã băm mật khẩu** (dán vào `password_hash` trong Secrets):")
-    with st.form("form_bam_mat_khau", clear_on_submit=True):
-        mk_moi = st.text_input("Mật khẩu mới", type="password")
-        mk_lai = st.text_input("Nhập lại mật khẩu", type="password")
-        tao_bam = st.form_submit_button("Tạo mã băm")
-    if tao_bam:
-        if len(mk_moi) < 8:
-            st.error("Mật khẩu cần ít nhất 8 ký tự.")
-        elif mk_moi != mk_lai:
-            st.error("Hai lần nhập không khớp.")
         else:
-            st.code(f'password_hash = "{auth.bam_mat_khau(mk_moi)}"', language="toml")
-            st.caption("Mật khẩu không được lưu ở đâu cả — chỉ mã băm này được dùng để kiểm tra.")
-    st.markdown('</div>', unsafe_allow_html=True)
+            st.info("Chưa có bản công bố nào — người dùng đang không xem được dữ liệu.")
+            if kho.get("loi_nap"):
+                st.caption(f"Lần nạp từ SharePoint gần nhất bị lỗi: {kho['loi_nap']}")
+
+        ket_qua_hien_tai = st.session_state.get("result")
+        if not ket_qua_hien_tai or ket_qua_hien_tai.status in ("INFEASIBLE", "ERROR"):
+            st.warning("Phiên của bạn chưa có thời khoá biểu xếp thành công — công bố lúc này người dùng "
+                       "sẽ không thấy thời khoá biểu.")
+        if not _ds_ket_noi_luu_tru():
+            st.warning("Chưa cấu hình SharePoint: bản công bố chỉ nằm trên máy chủ ứng dụng và sẽ MẤT khi "
+                       "Streamlit khởi động lại app. Nên cấu hình SharePoint (module ☁️) để lưu bền.")
+        elif not any(kn.co_luu_file for kn in _ds_ket_noi_luu_tru()):
+            st.caption(f"Bản công bố sẽ lưu vào SharePoint List **{storage.LIST_MAC_DINH['cong_bo']}** "
+                       "(cần 1 cột 'NoiDung' kiểu Nhiều dòng văn bản).")
+
+        def _dang_len_teams():
+            """Tạo tệp TKB / coi thi rồi gửi flow Teams; hiện kết quả."""
+            moc = teams.bay_gio_vn()
+            with st.spinner("Đang tạo tệp và đăng lên Teams..."):
+                tep, ghi_chu = tao_tep_dang_teams(st.session_state, school_name, moc)
+                for g in ghi_chu:
+                    st.warning(g)
+                if not tep:
+                    st.error("Không có tệp nào để đăng lên Teams.")
+                    return
+                thong_diep = teams.tao_thong_diep(
+                    f"📅 {school_name + ' — ' if school_name else ''}Thời khoá biểu / lịch mới đã được công bố",
+                    [f"Áp dụng từ: {st.session_state.tuan_bat_dau.strftime('%d/%m/%Y')}",
+                     f"Công bố bởi {NGUOI_DUNG['ten']} lúc {moc.strftime('%H:%M %d/%m/%Y')}"],
+                    [t for t, _ in tep], CAU_HINH_TEAMS["thu_muc"], CAU_HINH_TEAMS["app_url"],
+                )
+                try:
+                    if CAU_HINH_TEAMS["che_do"] == "graph":
+                        # bài đăng kiểu Teams: ảnh TKB nhúng + thẻ tệp
+                        tep_da_luu = teams.luu_tep(CAU_HINH_TEAMS, tep)
+                        anh = anh_tkb_lop(st.session_state, st.session_state.get("teams_lop_anh", []), school_name)
+                        bai = teams.tao_bai_dang(
+                            f"📅 {school_name + ' — ' if school_name else ''}Thời khoá biểu mới",
+                            [f"Áp dụng từ: {st.session_state.tuan_bat_dau.strftime('%d/%m/%Y')} — công bố bởi "
+                             f"{NGUOI_DUNG['ten']} lúc {moc.strftime('%H:%M %d/%m/%Y')}"],
+                            anh, tep_da_luu, CAU_HINH_TEAMS["app_url"],
+                        )
+                        teams.dang_tin(CAU_HINH_TEAMS, bai)
+                        so_the = len(bai.get("attachments", []))
+                        st.success(f"📤 Đã lưu {len(tep)} tệp vào thư mục '{CAU_HINH_TEAMS['thu_muc']}' và đăng bài "
+                                   f"lên kênh Teams ({len(anh)} ảnh TKB, {so_the} thẻ tệp).")
+                        if so_the < len(tep):
+                            st.warning("Một số tệp không hiện dạng thẻ (flow chưa trả về ETag) — bài đăng dùng đường "
+                                       "link thay thế. Xem bước 'Append to array variable' trong TEAMS.md.")
+                    else:
+                        teams.gui(CAU_HINH_TEAMS, tep, thong_diep)
+                        st.success(f"📤 Đã đăng {len(tep)} tệp lên Teams (thư mục '{CAU_HINH_TEAMS['thu_muc']}') "
+                                   "và gửi thông báo vào kênh.")
+                except storage.LoiLuuTru as e:
+                    st.error(f"Đăng Teams thất bại: {e}")
+
+        dang_teams = False
+        if CAU_HINH_TEAMS:
+            if CAU_HINH_TEAMS.get("loi_cau_hinh"):
+                st.warning(f"Cấu hình [teams] chưa đúng: {CAU_HINH_TEAMS['loi_cau_hinh']} — đang dùng chế độ đơn giản.")
+            dang_teams = st.checkbox(
+                f"📤 Đồng thời đăng lên Microsoft Teams (thư mục '{CAU_HINH_TEAMS['thu_muc']}' + "
+                + ("bài đăng có ảnh TKB và thẻ tệp)" if CAU_HINH_TEAMS["che_do"] == "graph" else "tin nhắn thông báo)"),
+                value=True, key="cb_dang_teams",
+            )
+            if CAU_HINH_TEAMS["che_do"] == "graph":
+                ds_lop_anh = [c.name for c in (st.session_state.get("result_classes") or [])]
+                st.multiselect(
+                    "🖼️ Lớp hiện ảnh thời khoá biểu ngay trong bài đăng (nên chọn ít, VD 1–4 lớp)",
+                    ds_lop_anh, default=ds_lop_anh[:2], key="teams_lop_anh",
+                    help="Toàn bộ các lớp vẫn nằm trong tệp PDF/Excel đính kèm.",
+                )
+        else:
+            st.caption("📤 Muốn tự đăng thời khoá biểu lên Teams khi công bố: xem hướng dẫn TEAMS.md (mục [teams] trong Secrets).")
+
+        cb1, cb2, cb3 = st.columns(3)
+        with cb1:
+            if st.button("📢 Công bố dữ liệu hiện tại", type="primary", use_container_width=True):
+                goi_moi = storage.dong_goi(st.session_state)
+                goi_moi["nguoi_cong_bo"] = NGUOI_DUNG["ten"]
+                with st.spinner("Đang công bố..."):
+                    da_luu, loi = cong_bo(goi_moi)
+                st.session_state["_ban_cong_bo_da_nap"] = goi_moi["thoi_gian_luu"]
+                st.success("✅ Đã công bố. Đã lưu: " + " · ".join(da_luu))
+                for e in loi:
+                    st.warning(e)
+                if dang_teams:
+                    _dang_len_teams()
+        with cb2:
+            if st.button("📥 Nạp bản công bố vào phiên của tôi", use_container_width=True,
+                         disabled=not goi_cb,
+                         help="Thay dữ liệu đang sửa trong phiên của bạn bằng bản đang công bố."):
+                storage.giai_nen(goi_cb, st.session_state, TimetableResult, SchoolClass, ScheduleConfig)
+                st.session_state["_ban_cong_bo_da_nap"] = goi_cb.get("thoi_gian_luu")
+                st.rerun()
+        with cb3:
+            if st.button("🔄 Nạp lại từ SharePoint", use_container_width=True,
+                         help="Đọc lại bản công bố đang lưu trên SharePoint (VD sau khi app khởi động lại)."):
+                with st.spinner("Đang đọc SharePoint..."):
+                    goi_sp = nap_ban_cong_bo(bat_buoc=True)
+                if goi_sp:
+                    st.success("✅ Đã nạp bản công bố từ SharePoint.")
+                else:
+                    st.error("Không đọc được bản công bố từ SharePoint. " + (kho.get("loi_nap") or ""))
+        if CAU_HINH_TEAMS and st.button("📤 Chỉ đăng lên Teams (không công bố lại)",
+                                        help="VD khi lần đăng trước bị lỗi."):
+            _dang_len_teams()
+
+    with the_khung():
+        section_header(
+            "2", "Tài khoản & quyền",
+            "Tài khoản khai báo trong <b>Secrets</b> của ứng dụng (Streamlit Cloud: Manage app → Settings → "
+            "Secrets) — không lưu trong code/GitHub. Thêm/xoá/đổi mật khẩu: sửa Secrets rồi bấm Save.",
+        )
+        st.dataframe(pd.DataFrame([
+            {"Quyền": "📅 Thời khoá biểu", "admin": "Nhập liệu, xếp lịch, xuất file", "user": "Xem & xuất PDF/Excel"},
+            {"Quyền": "🪑 Phòng thi", "admin": "Nhập liệu, xếp phòng, xuất file", "user": "Xem & xuất PDF/Excel"},
+            {"Quyền": "🔄 Dạy thay", "admin": "Phân công, lưu, xoá", "user": "Xem & xuất PDF"},
+            {"Quyền": "☁️ SharePoint", "admin": "Lưu / tải / đồng bộ List", "user": "—"},
+            {"Quyền": "👥 Tài khoản & Công bố", "admin": "Công bố, xem tài khoản", "user": "—"},
+        ]), use_container_width=True, hide_index=True)
+
+        st.markdown("**🟦 Đăng nhập bằng tài khoản Microsoft (email Outlook của trường)**")
+        if DANG_NHAP_MS:
+            st.success("Đã bật — giáo viên bấm 'Đăng nhập bằng tài khoản Microsoft của trường'.")
+            st.dataframe(pd.DataFrame([
+                {"Quy tắc": "Email là admin", "Giá trị": ", ".join(sorted(PHAN_QUYEN["admin_emails"])) or "— (chưa có!)"},
+                {"Quy tắc": "Tên miền là user", "Giá trị": ", ".join(sorted(PHAN_QUYEN["domains"])) or "—"},
+                {"Quy tắc": "Email user thêm", "Giá trị": ", ".join(sorted(PHAN_QUYEN["user_emails"])) or "—"},
+            ]), use_container_width=True, hide_index=True)
+            if not PHAN_QUYEN["domains"] and not PHAN_QUYEN["user_emails"]:
+                st.warning("Chưa giới hạn tên miền: MỌI tài khoản Microsoft đăng nhập được đều thành user. "
+                           "Nên khai báo domains = [\"tenmien-truong.edu.vn\"] trong mục [phan_quyen].")
+            if not PHAN_QUYEN["admin_emails"] and not any(t["vai_tro"] == "admin" for t in TAI_KHOAN.values()):
+                st.error("Chưa có admin nào: khai báo admin_emails trong mục [phan_quyen].")
+        else:
+            st.info("Chưa bật. Cách bật: xem file PHAN_QUYEN.md (tạo App Registration trên Microsoft Entra, "
+                    "rồi dán mục [auth] và [phan_quyen] vào Secrets).")
+            if st.button("🎲 Tạo cookie_secret ngẫu nhiên"):
+                import secrets as _sec
+                st.code(f'cookie_secret = "{_sec.token_urlsafe(32)}"', language="toml")
+
+        st.markdown("**📨 Đăng nhập bằng mã gửi qua email trường** (không cần quyền admin Microsoft)")
+        if DANG_NHAP_OTP:
+            st.success("Đã bật — giáo viên nhập email trường, nhận mã 6 số trong Outlook để đăng nhập. "
+                       "Quyền admin/user theo quy tắc email dưới đây.")
+            st.dataframe(pd.DataFrame([
+                {"Quy tắc": "Email là admin", "Giá trị": ", ".join(sorted(PHAN_QUYEN["admin_emails"])) or "— (chưa có!)"},
+                {"Quy tắc": "Tên miền là user", "Giá trị": ", ".join(sorted(PHAN_QUYEN["domains"])) or "—"},
+                {"Quy tắc": "Email user thêm", "Giá trị": ", ".join(sorted(PHAN_QUYEN["user_emails"])) or "—"},
+            ]), use_container_width=True, hide_index=True)
+            if not PHAN_QUYEN["admin_emails"] and not any(t["vai_tro"] == "admin" for t in TAI_KHOAN.values()):
+                st.error("Chưa có admin nào: khai báo admin_emails trong mục [phan_quyen].")
+            if not PHAN_QUYEN["domains"] and not PHAN_QUYEN["user_emails"]:
+                st.warning("Chưa giới hạn tên miền: email bất kỳ cũng nhận được mã và thành user. "
+                           "Khai báo domains = [\"tenmien-truong.edu.vn\"] trong mục [phan_quyen].")
+        else:
+            st.info("Chưa bật. Tạo flow gửi mã (xem PHAN_QUYEN.md, mục C) rồi thêm otp_url vào [phan_quyen].")
+
+        st.markdown("**🔐 Tài khoản nội bộ (tên đăng nhập + mật khẩu)** — không bắt buộc, dùng làm admin dự phòng")
+        if TAI_KHOAN:
+            st.dataframe(pd.DataFrame([
+                {"Tên đăng nhập": tk["ten_dn"], "Tên hiển thị": tk["ten"], "Vai trò": TEN_VAI_TRO[tk["vai_tro"]],
+                 "Mật khẩu": "mã băm ✅" if tk.get("password_hash") else "chữ thường ⚠️"}
+                for tk in TAI_KHOAN.values()
+            ]), use_container_width=True, hide_index=True)
+        else:
+            st.caption("Chưa có. Mẫu khai báo trong Secrets:")
+            st.code(
+                '[phan_quyen.users.admin]\nname = "Quản trị viên"\nrole = "admin"\npassword_hash = "..."',
+                language="toml",
+            )
+
+        st.markdown("**🔑 Tạo mã băm mật khẩu** (dán vào `password_hash` trong Secrets):")
+        with st.form("form_bam_mat_khau", clear_on_submit=True):
+            mk_moi = st.text_input("Mật khẩu mới", type="password")
+            mk_lai = st.text_input("Nhập lại mật khẩu", type="password")
+            tao_bam = st.form_submit_button("Tạo mã băm")
+        if tao_bam:
+            if len(mk_moi) < 8:
+                st.error("Mật khẩu cần ít nhất 8 ký tự.")
+            elif mk_moi != mk_lai:
+                st.error("Hai lần nhập không khớp.")
+            else:
+                st.code(f'password_hash = "{auth.bam_mat_khau(mk_moi)}"', language="toml")
+                st.caption("Mật khẩu không được lưu ở đâu cả — chỉ mã băm này được dùng để kiểm tra.")
 
 # ---------------------------------------------------------------------
 # MODULE — Lịch của tôi (giáo viên): TKB cá nhân, TKB lớp chủ nhiệm,
@@ -3345,7 +3384,7 @@ elif module == "👤 Lịch của tôi":
                 )
                 so_tiet = sum(1 for l in kq.lessons if tid in l.teacher_ids)
                 st.caption(f"Tổng số tiết/tuần: **{so_tiet}**")
-                st.dataframe(luoi, use_container_width=True, height=(len(luoi) + 1) * 38)
+                st.markdown(bang_tkb_html(luoi), unsafe_allow_html=True)
                 bai_gv = [
                     l.model_copy(update={
                         "class_ids": ["__gv__"], "teacher_ids": [],
@@ -3388,7 +3427,7 @@ elif module == "👤 Lịch của tôi":
                     lambda l: f"{l.activity_name} ({', '.join(ten_gv_theo_id.get(t, t) for t in l.teacher_ids)})",
                     gt_df, tuan,
                 )
-                st.dataframe(luoi, use_container_width=True, height=(len(luoi) + 1) * 38)
+                st.markdown(bang_tkb_html(luoi), unsafe_allow_html=True)
                 cfg_kq = st.session_state.result_config
                 st.download_button(
                     "📄 PDF lớp chủ nhiệm", mime="application/pdf", key="pdf_tkb_cn",
@@ -3445,8 +3484,4 @@ elif module == "👤 Lịch của tôi":
             else:
                 st.success("Không có lịch dạy thay liên quan đến bạn.")
 
-st.markdown(
-    '<div class="app-footer">Ứng dụng được phát triển bởi Chuyên viên Quản lý hệ thống — '
-    'Trường TH, THCS và THPT Tân Phú</div>',
-    unsafe_allow_html=True,
-)
+hien_chan_trang()
