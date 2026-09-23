@@ -238,20 +238,29 @@ def tao_token(khoa: bytes, nguon: str, dinh_danh: str, so_ngay: int, bay_gio: fl
     return f"{ma_hoa(than)}.{ma_hoa(ky)}"
 
 
-def doc_token(khoa: bytes | None, token: str | None, bay_gio: float) -> tuple[str, str] | None:
-    """-> (nguồn, định danh) nếu token hợp lệ và chưa hết hạn, ngược lại None."""
+def kiem_tra_token(khoa: bytes | None, token: str | None, bay_gio: float) -> tuple[tuple[str, str] | None, str]:
+    """-> ((nguồn, định danh), "") nếu hợp lệ, hoặc (None, lý do) để chẩn đoán."""
     import base64
-    if not khoa or not token or "." not in token:
-        return None
+    if not khoa:
+        return None, "chưa có khoá ký (thiếu otp_url / cookie_secret trong Secrets)"
+    if not token:
+        return None, "không có"
+    if "." not in token:
+        return None, "sai định dạng"
     try:
         giai = lambda s: base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
         phan_than, phan_ky = token.strip().split(".", 1)
         than = giai(phan_than)
         if not hmac.compare_digest(giai(phan_ky), hmac.new(khoa, than, hashlib.sha256).digest()):
-            return None
+            return None, "sai chữ ký (Secrets đã đổi?)"
         nguon, dinh_danh, het_han = than.decode("utf-8").rsplit("|", 2)
         if bay_gio > int(het_han):
-            return None
-        return nguon, dinh_danh
+            return None, "đã hết hạn"
+        return (nguon, dinh_danh), ""
     except (ValueError, UnicodeDecodeError):
-        return None
+        return None, "sai định dạng"
+
+
+def doc_token(khoa: bytes | None, token: str | None, bay_gio: float) -> tuple[str, str] | None:
+    """-> (nguồn, định danh) nếu token hợp lệ và chưa hết hạn, ngược lại None."""
+    return kiem_tra_token(khoa, token, bay_gio)[0]
