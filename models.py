@@ -61,7 +61,11 @@ class GradeDayCapacity(BaseModel):
     đúng ngày đó (tiết 1..periods_count vẫn dùng bình thường)."""
     grade: int
     day: int
-    periods_count: int
+    periods_count: int = 0
+    # Nếu điền: khối đó ngày đó CHỈ học đúng các tiết trong danh sách này
+    # (VD [1,2,3,6,7] = 3 tiết sáng + 2 tiết chiều), bỏ qua periods_count.
+    # Dùng khi cấu hình thời gian biểu chi tiết theo từng khối, từng ngày.
+    allowed_periods: Optional[list[int]] = None
 
 
 class Activity(BaseModel):

@@ -24,10 +24,15 @@ Bản Streamlit (`streamlit_app/`) còn có thêm:
   Giờ học theo khối) và cho chính kết quả thời khoá biểu.
 - Xuất kết quả ra **PDF** (font tiếng Việt đầy đủ, nhúng sẵn font — chạy tốt cả
   khi deploy Streamlit Cloud).
-- **Giờ học riêng theo từng khối** (VD Khối 6 học Tiết 1 lúc 07:15–08:00, Khối 7
-  học Tiết 1 lúc 07:30–08:15) — đây là nhãn hiển thị trên PDF/Excel/màn hình;
-  việc xếp lịch bên trong vẫn dùng chung số Tiết 1..N cho toàn trường để tránh
-  trùng giờ GV dạy nhiều khối cùng lúc.
+- **Thời gian biểu theo từng khối, từng ngày** (tab Cấu hình chung, mục 2): mỗi
+  dòng = Khối | Thứ | Tiết | Giờ bắt đầu | Giờ kết thúc. Cột Thứ chọn "Tất cả các
+  ngày" để dùng chung cả tuần, dòng của ngày cụ thể được ưu tiên; Tiết = 0 là
+  khối nghỉ cả ngày. Khối đã khai báo thì ngày đó CHỈ được xếp vào đúng các
+  tiết có trong bảng (ràng buộc thật cho bộ giải — thay cho bảng "Số tiết mỗi
+  ngày theo khối" cũ). Có nút **⚡ Tạo nhanh** sinh giờ tự động theo giờ vào
+  học, thời lượng tiết, giờ ra chơi cho nhiều khối/ngày cùng lúc, và bảng xem
+  lại dạng lưới cho từng khối. Nếu giờ của 1 tiết khác nhau giữa các ngày thì
+  kết quả TKB (màn hình/PDF/Excel) ghi giờ ngay trong từng ô.
 - Checkbox bật/tắt từng ràng buộc tuỳ chọn, ràng buộc cốt lõi hiện khoá 🔒 để
   biết hệ thống luôn áp dụng gì.
 - **"🔀 Xếp phương án khác"**: sau khi xếp thành công, bấm nút này để CP-SAT tìm
@@ -37,19 +42,25 @@ Bản Streamlit (`streamlit_app/`) còn có thêm:
   phân công, Ràng buộc & Xếp lịch, Kết quả, **Phòng thi** — dễ theo dõi hơn so
   với 1 trang dài. Giao diện dùng hiệu ứng đổ bóng nhiều lớp kiểu 3D (nút bấm
   nổi khi hover, ấn xuống khi bấm, card có glow nhẹ) tông xanh navy + xám.
-- **Xếp phòng thi** (tab mới, độc lập với việc xếp thời khoá biểu): nhập danh
-  sách học sinh dự thi + danh sách phòng thi + môn thi (khối áp dụng, ngày,
-  ca), bấm 1 nút là tự chia học sinh vào từng phòng theo sức chứa, tự sinh số
-  báo danh (SBD) nếu học sinh chưa có sẵn mã. Hỗ trợ 2 chế độ xếp chỗ chọn
-  theo từng môn thi:
+- **Xếp phòng thi** (độc lập với việc xếp thời khoá biểu): **upload file danh
+  sách học sinh** (Excel/CSV) gồm SBD (hoặc Mã HS, để trống thì tự sinh), Lớp,
+  Môn thi — KHÔNG cần họ tên. Vì 1 lớp có thể có nhiều môn lựa chọn, môn thi
+  khai báo riêng cho từng học sinh theo 1 trong 3 kiểu: cột "Môn thi" ghi nhiều
+  môn cách nhau dấu phẩy / mỗi môn 1 dòng (tự gộp theo SBD) / mỗi môn 1 cột
+  đánh dấu x. Mỗi môn thi tự lấy đúng học sinh đăng ký môn đó ("Lớp áp dụng"
+  chỉ còn là bộ lọc tuỳ chọn). SBD được sinh 1 lần cho mỗi học sinh nên giữ
+  nguyên ở mọi môn; có cảnh báo SBD trùng và học sinh trùng lịch thi (cùng
+  ngày, cùng ca). **Sơ đồ chỗ ngồi chỉ ghi số báo danh**; danh sách phòng /
+  thẻ báo danh mặc định không có họ tên (bật checkbox nếu cần). Hỗ trợ 2 chế
+  độ xếp chỗ theo từng môn thi:
   - **Theo lớp**: giữ nguyên từng lớp, chỉ tách sang phòng khác khi 1 lớp
     đông hơn sức chứa 1 phòng.
-  - **Trộn theo khối**: xáo học sinh từ các lớp khác nhau (cùng khối) ngồi
-    xen kẽ nhau trong phòng, hạn chế quay cóp giữa các bạn cùng lớp.
+  - **Trộn theo khối**: xáo học sinh từ các lớp khác nhau ngồi xen kẽ nhau
+    trong phòng, hạn chế quay cóp giữa các bạn cùng lớp.
 
-  Xuất được cả **PDF** (danh sách theo từng phòng có cột ký tên, kèm trang
-  thẻ báo danh cho từng học sinh) và **Excel** (mỗi phòng 1 sheet + 1 sheet
-  tổng hợp toàn bộ).
+  Xuất được **PDF** (danh sách theo từng phòng có cột ký tên, sơ đồ chỗ ngồi,
+  thẻ báo danh), **Excel** theo phòng, và 1 file Excel tổng hợp SBD + phòng
+  thi từng môn của mỗi học sinh.
 - **Ngày thực tế theo lịch**: chọn "Ngày bắt đầu tuần (Thứ 2)" ở tab Cấu hình
   chung, mọi nơi hiển thị "Thứ 2/3/4..." sẽ kèm luôn ngày thật (VD "Thứ 2
   (08/09)") trên màn hình, PDF và Excel.
