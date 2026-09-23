@@ -185,6 +185,17 @@ https://make.powerautomate.com → **+ Tạo (Create) → Luồng đám mây t�
     "items": {"type": "array", "items": {"type": "object"}}}}
   ```
 
+> **Cách nhập ô Uri** (quan trọng — nhập sai sẽ bị lỗi 401/404):
+> - *Site Address* luôn là địa chỉ **site** ở Bước 0, KHÔNG dán link của 1 List
+>   (link có `/Lists/.../AllItems.aspx` là sai).
+> - Ô *Uri*: KHÔNG gõ/dán nguyên chữ `concat(...)` vào ô. Chọn 1 trong 2 cách:
+>   1. **Dễ nhất — ghép chữ với Dynamic content**: gõ phần chữ, chèn các ô xanh
+>      `list`, `duong_dan` (thuộc trigger) và `Current item` (thuộc vòng lặp) bằng
+>      nút ⚡ Dynamic content, VD Doc_SharePoint:
+>      `_api/web/lists/getbytitle('`**`list`**`')/`**`duong_dan`**
+>   2. Bấm nút **fx** (Insert expression) → dán biểu thức `concat(...)` → **Add**;
+>      ô Uri phải hiện 1 **ô màu** `concat(...)`, không phải dòng chữ.
+
 ### Bước 3 — Điều kiện (Condition)
 Thêm **Condition**: ô trái nhập biểu thức (fx) `triggerBody()?['thao_tac']`,
 toán tử **is equal to**, ô phải gõ `doc`.

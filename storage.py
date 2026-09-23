@@ -555,10 +555,31 @@ def _giai_thich_loi_xac_thuc_flow(r: requests.Response, url: str) -> str:
     """Power Automate trả 401/403 khi chặn request ngay ở trigger (flow chưa
     chạy). Đọc mã lỗi để chỉ đúng nguyên nhân."""
     try:
-        loi = r.json().get("error", {})
-        ma, thong_diep = str(loi.get("code", "")), str(loi.get("message", ""))
+        data = r.json()
     except ValueError:
-        ma, thong_diep = "", r.text[:200]
+        data = {}
+    # Flow ĐÃ chạy, nhưng bước "Send an HTTP request to SharePoint" bị SharePoint
+    # từ chối (Response chuyển tiếp mã lỗi) -> body có trường "source" = URL đã gọi.
+    nguon = str(data.get("source", "")) if isinstance(data, dict) else ""
+    if "sharepoint.com" in nguon:
+        loi_flow = []
+        if re.search(r"/Lists/[^/]+/", nguon) or ".aspx" in nguon:
+            loi_flow.append(
+                "ô 'Site Address' đang là link của 1 List — sửa thành địa chỉ SITE (phần trước "
+                f"'/Lists/'): {nguon.split('/Lists/')[0]}"
+            )
+        if "concat(" in nguon or "triggerBody()" in nguon:
+            loi_flow.append(
+                "ô 'Uri' đang chứa biểu thức dạng CHỮ THƯỜNG — xoá đi, nhập lại bằng nút fx (Insert "
+                "expression) hoặc ghép chữ với ô 'list' / 'duong_dan' từ Dynamic content"
+            )
+        if not loi_flow:
+            loi_flow.append("kiểm tra Site Address / Uri của các bước SharePoint trong flow")
+        return (f"Flow đã chạy nhưng SharePoint từ chối ({r.status_code}) ở bước 'Send an HTTP request "
+                f"to SharePoint': " + "; ".join(loi_flow) + f". [URL flow đã gọi: {nguon[:250]}]")
+    loi = data.get("error", {}) if isinstance(data, dict) else {}
+    loi = loi if isinstance(loi, dict) else {}
+    ma, thong_diep = str(loi.get("code", "")), str(loi.get("message", "") or r.text[:200])
     chi_tiet = f" [mã lỗi: {ma or r.status_code}{' — ' + thong_diep[:200] if thong_diep else ''}]"
     if "sig=" not in url:
         goi_y = ("URL trong Secrets bị THIẾU phần '&sig=...' ở cuối (copy chưa hết). Copy lại toàn bộ "
