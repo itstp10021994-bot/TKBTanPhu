@@ -72,6 +72,10 @@ Bản Streamlit (`streamlit_app/`) còn có thêm:
   admin, dùng được với "Danh sách của tôi")
   (ToChuyenMon, GiaoVien, LopHoc, ... — cột khớp theo tên hiển thị), kèm nút
   kiểm tra List/cột và file Excel mẫu để tạo List bằng "Từ Excel".
+- **Đăng nhập & phân quyền admin / user** (xem **PHAN_QUYEN.md**): tài khoản khai
+  báo trong Secrets (mật khẩu dạng mã băm). Admin toàn quyền và **📢 công bố** dữ
+  liệu; user chỉ xem & xuất file thời khoá biểu / phòng thi / dạy thay đã công bố.
+  Bản công bố lưu trên máy chủ và SharePoint (file hoặc List `TKB_CongBo`).
 - **Ngày thực tế theo lịch**: chọn "Ngày bắt đầu tuần (Thứ 2)" ở tab Cấu hình
   chung, mọi nơi hiển thị "Thứ 2/3/4..." sẽ kèm luôn ngày thật (VD "Thứ 2
   (08/09)") trên màn hình, PDF và Excel.
