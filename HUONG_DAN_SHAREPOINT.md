@@ -291,7 +291,7 @@ admin) hoặc **Cách 1** (Microsoft Graph, App Registration có quyền **write
 | Tên List | Các cột (tên hiển thị) | Cột kiểu **Số** |
 |---|---|---|
 | `ToChuyenMon` | Tên tổ | |
-| `GiaoVien` | Tên giáo viên · Tổ chuyên môn | |
+| `GiaoVien` | Tên giáo viên · Tổ chuyên môn · Email · Lớp chủ nhiệm · Quyền | |
 | `LopHoc` | Tên lớp · Khối · Nhóm thứ tự | Khối, Nhóm thứ tự |
 | `PhongDacBiet` | Tên phòng · Loại phòng · Số phòng cùng loại | Số phòng cùng loại |
 | `MonHocPhanCong` | Tên hoạt động · Môn · Số tiết/tuần · Lớp · GV chính · GV phụ · Loại phòng cần · Mã đồng bộ · Cố định trước | Số tiết/tuần |

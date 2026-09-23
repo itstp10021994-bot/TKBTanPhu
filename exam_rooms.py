@@ -319,3 +319,74 @@ def xep_phong_thi(danh_sach_hs: list[dict], danh_sach_phong: list[dict], che_do:
     co_sbd = sinh_sbd_tu_dong(danh_sach_hs)
     da_sap = sap_xep_thu_tu_hoc_sinh(co_sbd, che_do)
     return chia_vao_phong(da_sap, danh_sach_phong)
+
+
+# ---------------------------------------------------------------------
+# Phân công giáo viên coi thi (giám thị)
+# ---------------------------------------------------------------------
+_THU_TU_CA = {"sang": 0, "chieu": 1, "toi": 2}
+
+
+def _khoa_ngay_ca(ngay: str, ca: str):
+    """Sắp các buổi thi theo thời gian: ngày dạng dd/mm/yyyy, ca Sáng/Chiều/Tối."""
+    so = re.findall(r"\d+", str(ngay or ""))
+    if len(so) >= 3:
+        khoa_ngay = (int(so[2]), int(so[1]), int(so[0]))
+    elif len(so) == 2:
+        khoa_ngay = (0, int(so[1]), int(so[0]))
+    else:
+        khoa_ngay = (9999, 0, 0)
+    return khoa_ngay, _THU_TU_CA.get(khoa(ca), 9), str(ngay)
+
+
+def _cung_mon(mon_thi: str, cac_mon_day: set[str]) -> bool:
+    """Môn thi có trùng môn giáo viên dạy không (so khớp mềm: 'Ngữ văn' ~ 'van')."""
+    k = khoa(mon_thi).replace("_", "")
+    return any(m and (m in k or k in m) for m in (x.replace("_", "") for x in cac_mon_day))
+
+
+def phan_cong_coi_thi(
+    buoi_thi: list[dict], ds_giao_vien: list[str], so_giam_thi: int = 2,
+    mon_gv_day: dict[str, set[str]] | None = None, tranh_mon_minh_day: bool = True,
+    seed: int | None = None,
+) -> tuple[list[dict], list[str]]:
+    """buoi_thi: [{"mon", "ngay", "ca", "phong"}] — mỗi phòng thi của mỗi môn.
+
+    Chia đều: ưu tiên GV đang có ít buổi coi nhất; 1 GV không coi 2 phòng
+    trong cùng (ngày, ca); nếu tranh_mon_minh_day thì tránh xếp GV coi môn
+    mình dạy (thiếu người mới nới điều kiện này).
+    Trả về (danh sách {..., "giam_thi": [tên,...]}, cảnh báo)."""
+    rng = random.Random(seed)
+    mon_gv_day = {gv: {khoa(m) for m in ms} for gv, ms in (mon_gv_day or {}).items()}
+    so_buoi = {gv: 0 for gv in ds_giao_vien}
+    canh_bao: list[str] = []
+    theo_buoi: dict[tuple, list[dict]] = {}
+    for b in buoi_thi:
+        theo_buoi.setdefault((b["ngay"], b["ca"]), []).append(b)
+
+    ket_qua = []
+    for (ngay, ca) in sorted(theo_buoi, key=lambda k: _khoa_ngay_ca(*k)):
+        da_dung: set[str] = set()
+        for b in theo_buoi[(ngay, ca)]:
+            chon: list[str] = []
+            for nghiem_ngat in ((True, False) if tranh_mon_minh_day else (False,)):
+                ung_vien = [
+                    gv for gv in ds_giao_vien
+                    if gv not in da_dung and gv not in chon
+                    and not (nghiem_ngat and _cung_mon(b["mon"], mon_gv_day.get(gv, set())))
+                ]
+                rng.shuffle(ung_vien)
+                ung_vien.sort(key=lambda gv: so_buoi[gv])
+                chon += ung_vien[:so_giam_thi - len(chon)]
+                if len(chon) >= so_giam_thi:
+                    break
+            for gv in chon:
+                da_dung.add(gv)
+                so_buoi[gv] += 1
+            if len(chon) < so_giam_thi:
+                canh_bao.append(
+                    f"{b['mon']} — {ngay} ca {ca} — phòng {b['phong']}: chỉ đủ {len(chon)}/{so_giam_thi} "
+                    "giám thị (không đủ giáo viên rảnh trong buổi này)."
+                )
+            ket_qua.append({**b, "giam_thi": chon})
+    return ket_qua, canh_bao

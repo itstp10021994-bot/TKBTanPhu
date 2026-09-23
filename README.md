@@ -75,7 +75,9 @@ Bản Streamlit (`streamlit_app/`) còn có thêm:
 - **Đăng nhập & phân quyền admin / user** (xem **PHAN_QUYEN.md**): giáo viên đăng
   nhập bằng **email trường** (mã 6 số gửi vào Outlook qua flow Power Automate —
   không cần admin; hoặc nút đăng nhập Microsoft nếu có App Registration); vai trò gán theo email
-  (`admin_emails`, tên miền trường = user); thêm tài khoản nội bộ dự phòng. Admin toàn quyền và **📢 công bố** dữ
+  (`admin_emails`, hoặc cột Quyền trong bảng Giáo viên). Giáo viên (user) chỉ thấy
+  trang **👤 Lịch của tôi**: TKB cá nhân, TKB lớp chủ nhiệm, lịch coi thi, dạy thay.
+  Có thêm **phân công coi thi** tự động trong module Phòng thi. Admin toàn quyền và **📢 công bố** dữ
   liệu; user chỉ xem & xuất file thời khoá biểu / phòng thi / dạy thay đã công bố.
   Bản công bố lưu trên máy chủ và SharePoint (file hoặc List `TKB_CongBo`).
 - **Ngày thực tế theo lịch**: chọn "Ngày bắt đầu tuần (Thứ 2)" ở tab Cấu hình

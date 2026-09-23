@@ -493,6 +493,64 @@ def thu_tu_tiet_co_ngan_buoi(config) -> list:
 
 
 # ---------------------------------------------------------------------
+# Bảng giáo viên: thêm Email (để gắn tài khoản đăng nhập), Lớp chủ nhiệm, Quyền
+# ---------------------------------------------------------------------
+COT_GIAO_VIEN = ["Tên giáo viên", "Tổ chuyên môn", "Email", "Lớp chủ nhiệm", "Quyền"]
+
+
+def chuan_hoa_bang_gv(df: pd.DataFrame) -> pd.DataFrame:
+    """Thêm các cột mới nếu bảng cũ / file Excel cũ chưa có."""
+    df = df.copy()
+    for c in COT_GIAO_VIEN:
+        if c not in df.columns:
+            df[c] = "user" if c == "Quyền" else ""
+    df["Quyền"] = df["Quyền"].apply(lambda v: "admin" if str(v).strip().lower() == "admin" else "user")
+    df["Email"] = df["Email"].apply(lambda v: "" if _o_trong(v) else str(v).strip().lower())
+    return df[COT_GIAO_VIEN + [c for c in df.columns if c not in COT_GIAO_VIEN]]
+
+
+def gv_theo_email(teachers_df: pd.DataFrame | None) -> dict[str, dict]:
+    """{email: {"ten", "quyen", "lop_cn"}} từ bảng Giáo viên."""
+    if teachers_df is None or teachers_df.empty or "Email" not in teachers_df.columns:
+        return {}
+    ket_qua = {}
+    for _, r in teachers_df.iterrows():
+        email = "" if _o_trong(r.get("Email")) else str(r["Email"]).strip().lower()
+        ten = "" if _o_trong(r.get("Tên giáo viên")) else str(r["Tên giáo viên"]).strip()
+        if email and ten:
+            ket_qua[email] = {
+                "ten": ten,
+                "quyen": "admin" if str(r.get("Quyền", "")).strip().lower() == "admin" else "user",
+                "lop_cn": "" if _o_trong(r.get("Lớp chủ nhiệm")) else str(r["Lớp chủ nhiệm"]).strip(),
+            }
+    return ket_qua
+
+
+def luoi_tkb(result, classes, config, loc, noi_dung, grade_times_df, tuan_bat_dau):
+    """Lưới thời khoá biểu (dòng = tiết, cột = ngày thực tế) cho các tiết thoả
+    `loc(lesson)`; ô ghi `noi_dung(lesson)` kèm giờ học của khối lớp đó.
+    -> (DataFrame, {(ngày, tiết): giờ})."""
+    khoi_cua = {c.id: c.grade for c in classes}
+    lich, _ = lich_hoc_theo_khoi_ngay(grade_times_df, config.days)
+    cot = {d: nhan_ngay_thuc_te(d, tuan_bat_dau) for d in config.days}
+    dong = [x if isinstance(x, str) else f"Tiết {x}" for x in thu_tu_tiet_co_ngan_buoi(config)]
+    luoi = pd.DataFrame("", index=dong, columns=list(cot.values()))
+    gio_o = {}
+    for l in result.lessons:
+        if not loc(l):
+            continue
+        khoi = khoi_cua.get(l.class_ids[0]) if l.class_ids else None
+        gio = (lich.get((khoi, l.day)) or {}).get(l.period, "")
+        r, c = f"Tiết {l.period}", cot.get(l.day)
+        if r in luoi.index and c in luoi.columns:
+            chu = noi_dung(l) + (f" · {gio}" if gio else "")
+            luoi.loc[r, c] = f"{luoi.loc[r, c]} / {chu}" if luoi.loc[r, c] else chu
+        if gio:
+            gio_o[(l.day, l.period)] = gio
+    return luoi, gio_o
+
+
+# ---------------------------------------------------------------------
 # Dữ liệu mẫu ban đầu (dạng bảng thân thiện) để người dùng có ví dụ sẵn
 # ---------------------------------------------------------------------
 SAMPLE_DEPARTMENTS = pd.DataFrame([
@@ -502,16 +560,16 @@ SAMPLE_DEPARTMENTS = pd.DataFrame([
 ])
 
 SAMPLE_TEACHERS = pd.DataFrame([
-    {"Tên giáo viên": "Cô Lan (Toán)", "Tổ chuyên môn": "Tổ Toán"},
-    {"Tên giáo viên": "Thầy Minh (Toán)", "Tổ chuyên môn": "Tổ Toán"},
-    {"Tên giáo viên": "Cô Hoa (Văn - dạy toàn trường)", "Tổ chuyên môn": "Tổ Văn"},
-    {"Tên giáo viên": "Thầy Nam (Tiếng Anh)", "Tổ chuyên môn": "Tổ Ngoại ngữ"},
-    {"Tên giáo viên": "Cô Mai (Tiếng Anh + CLB Debate)", "Tổ chuyên môn": "Tổ Ngoại ngữ"},
-    {"Tên giáo viên": "Thầy Đức (Tin học)", "Tổ chuyên môn": ""},
-    {"Tên giáo viên": "Mr. John (GVNN)", "Tổ chuyên môn": "Tổ Ngoại ngữ"},
-    {"Tên giáo viên": "Cô Thu (GVTG - Kỹ năng sống)", "Tổ chuyên môn": ""},
-    {"Tên giáo viên": "Thầy Hùng (trợ giảng Toán)", "Tổ chuyên môn": "Tổ Toán"},
-])
+    {"Tên giáo viên": "Cô Lan (Toán)", "Tổ chuyên môn": "Tổ Toán", "Email": "lan.toan@truong.edu.vn", "Lớp chủ nhiệm": "10A1", "Quyền": "user"},
+    {"Tên giáo viên": "Thầy Minh (Toán)", "Tổ chuyên môn": "Tổ Toán", "Email": "minh.toan@truong.edu.vn", "Lớp chủ nhiệm": "11A1", "Quyền": "user"},
+    {"Tên giáo viên": "Cô Hoa (Văn - dạy toàn trường)", "Tổ chuyên môn": "Tổ Văn", "Email": "hoa.van@truong.edu.vn", "Lớp chủ nhiệm": "6A1", "Quyền": "user"},
+    {"Tên giáo viên": "Thầy Nam (Tiếng Anh)", "Tổ chuyên môn": "Tổ Ngoại ngữ", "Email": "nam.anh@truong.edu.vn", "Lớp chủ nhiệm": "7A1", "Quyền": "user"},
+    {"Tên giáo viên": "Cô Mai (Tiếng Anh + CLB Debate)", "Tổ chuyên môn": "Tổ Ngoại ngữ", "Email": "mai.anh@truong.edu.vn", "Lớp chủ nhiệm": "12A1", "Quyền": "user"},
+    {"Tên giáo viên": "Thầy Đức (Tin học)", "Tổ chuyên môn": "", "Email": "duc.tin@truong.edu.vn", "Lớp chủ nhiệm": "", "Quyền": "user"},
+    {"Tên giáo viên": "Mr. John (GVNN)", "Tổ chuyên môn": "Tổ Ngoại ngữ", "Email": "", "Lớp chủ nhiệm": "", "Quyền": "user"},
+    {"Tên giáo viên": "Cô Thu (GVTG - Kỹ năng sống)", "Tổ chuyên môn": "", "Email": "", "Lớp chủ nhiệm": "", "Quyền": "user"},
+    {"Tên giáo viên": "Thầy Hùng (trợ giảng Toán)", "Tổ chuyên môn": "Tổ Toán", "Email": "", "Lớp chủ nhiệm": "", "Quyền": "user"},
+], columns=COT_GIAO_VIEN)
 
 SAMPLE_CLASSES = pd.DataFrame([
     {"Tên lớp": "10A1", "Khối": 10, "Nhóm thứ tự": 1},
@@ -676,167 +734,6 @@ if "substitutions" not in st.session_state:
     st.session_state.substitutions = {}  # {(ngay_thu, tiet, lop_key): {...}}
 
 # =======================================================================
-# ĐĂNG NHẬP & PHÂN QUYỀN
-#   - admin: toàn quyền (nhập liệu, xếp lịch, xếp phòng thi, dạy thay,
-#            SharePoint, công bố).
-#   - user : chỉ XEM & tải về thời khoá biểu / phòng thi / dạy thay mà admin
-#            đã CÔNG BỐ.
-# Tài khoản khai báo trong Secrets ([auth.users.<tên>]) — xem auth.py.
-# =======================================================================
-TAI_KHOAN = auth.doc_tai_khoan(st.secrets)
-PHAN_QUYEN = auth.doc_phan_quyen(st.secrets)
-DANG_NHAP_MS = auth.dang_nhap_microsoft_bat(st.secrets)
-DANG_NHAP_OTP = bool(PHAN_QUYEN["otp_url"])
-BAT_DANG_NHAP = bool(TAI_KHOAN) or DANG_NHAP_MS or DANG_NHAP_OTP
-TEN_VAI_TRO = {"admin": "Quản trị (admin)", "user": "Người dùng (user)"}
-
-
-@st.cache_resource
-def _dem_dang_nhap_sai() -> dict:
-    """Đếm số lần sai mật khẩu theo tên đăng nhập, dùng chung mọi phiên."""
-    return {}
-
-
-def _email_microsoft() -> str:
-    """Email của người đã đăng nhập Microsoft (st.user), '' nếu chưa."""
-    try:
-        if not st.user.is_logged_in:
-            return ""
-        return str(st.user.get("email") or st.user.get("preferred_username")
-                   or st.user.get("upn") or "").strip().lower()
-    except Exception:
-        return ""
-
-
-def _form_tai_khoan_noi_bo():
-    with st.form("form_dang_nhap"):
-        ten_dn = st.text_input("Tên đăng nhập")
-        mat_khau = st.text_input("Mật khẩu", type="password")
-        dang_nhap = st.form_submit_button("Đăng nhập", use_container_width=True,
-                                          type="secondary" if DANG_NHAP_MS else "primary")
-    if dang_nhap:
-        dem = _dem_dang_nhap_sai()
-        khoa = (ten_dn or "").strip().lower()
-        so_lan, khoa_den = dem.get(khoa, (0, 0.0))
-        if time_mod.time() < khoa_den:
-            st.error(f"Sai mật khẩu quá nhiều lần — thử lại sau {int(khoa_den - time_mod.time()) + 1} giây.")
-            return
-        nguoi_dung = auth.xac_thuc(TAI_KHOAN, ten_dn, mat_khau)
-        if nguoi_dung:
-            dem.pop(khoa, None)
-            st.session_state.nguoi_dung = {**nguoi_dung, "nguon": "noi_bo"}
-            st.rerun()
-        so_lan += 1
-        dem[khoa] = (0, time_mod.time() + 60) if so_lan >= 5 else (so_lan, 0.0)
-        st.error("Sai tên đăng nhập hoặc mật khẩu.")
-
-
-@st.cache_resource
-def _kho_otp() -> auth.KhoMaOTP:
-    return auth.KhoMaOTP()
-
-
-def _form_ma_email():
-    """Đăng nhập bằng mã 6 số gửi vào email trường (qua flow Power Automate)."""
-    email_cho = st.session_state.get("_otp_email")
-    if not email_cho:
-        with st.form("form_otp_email"):
-            email = st.text_input("Email của trường", placeholder="ten.giaovien@truong.edu.vn")
-            gui = st.form_submit_button("📨 Gửi mã đăng nhập", type="primary", use_container_width=True)
-        if gui:
-            email = (email or "").strip().lower()
-            if not auth.vai_tro_theo_email(email, PHAN_QUYEN):
-                st.error("Email này không thuộc trường hoặc chưa được cấp quyền.")
-                return
-            ma, ly_do = _kho_otp().tao_ma(email, time_mod.time())
-            if not ma:
-                st.error(ly_do)
-                return
-            try:
-                r = requests.post(PHAN_QUYEN["otp_url"], timeout=60, json={
-                    "email": email, "ma": ma, "het_han_phut": auth.KhoMaOTP.HAN_PHUT,
-                    "ten_truong": st.session_state.get("cfg_school_name") or "",
-                })
-                if r.status_code >= 300:
-                    raise requests.RequestException(f"flow trả lỗi {r.status_code}: {r.text[:200]}")
-            except requests.RequestException as e:
-                _kho_otp().huy_ma(email)
-                st.error(f"Không gửi được email chứa mã: {e}")
-                return
-            st.session_state["_otp_email"] = email
-            st.rerun()
-        return
-
-    st.info(f"Đã gửi mã 6 số tới **{email_cho}** — kiểm tra hộp thư Outlook "
-            f"(cả mục Thư rác/Other). Mã có hiệu lực {auth.KhoMaOTP.HAN_PHUT} phút.")
-    with st.form("form_otp_ma"):
-        ma = st.text_input("Mã đăng nhập", max_chars=6)
-        xac_nhan = st.form_submit_button("Đăng nhập", type="primary", use_container_width=True)
-    if xac_nhan:
-        dung, ly_do = _kho_otp().kiem_tra(email_cho, ma, time_mod.time())
-        if dung:
-            st.session_state.pop("_otp_email", None)
-            st.session_state.nguoi_dung = {
-                "ten_dn": email_cho, "ten": email_cho.split("@")[0],
-                "vai_tro": auth.vai_tro_theo_email(email_cho, PHAN_QUYEN) or "user", "nguon": "email",
-            }
-            st.rerun()
-        st.error(ly_do)
-    if st.button("↩ Đổi email / gửi lại mã", use_container_width=True):
-        st.session_state.pop("_otp_email", None)
-        st.rerun()
-
-
-def man_hinh_dang_nhap():
-    _, giua, _ = st.columns([1, 1.3, 1])
-    with giua:
-        st.markdown("### 🔐 Đăng nhập")
-        if DANG_NHAP_OTP:
-            st.caption("Nhập email của trường, hệ thống gửi mã đăng nhập vào hộp thư Outlook của bạn.")
-            _form_ma_email()
-            if TAI_KHOAN:
-                with st.expander("Đăng nhập bằng tài khoản nội bộ"):
-                    _form_tai_khoan_noi_bo()
-        elif DANG_NHAP_MS:
-            st.caption("Giáo viên đăng nhập bằng tài khoản email Outlook (Microsoft 365) của trường.")
-            if st.button("🟦 Đăng nhập bằng tài khoản Microsoft của trường", type="primary",
-                         use_container_width=True):
-                st.login()
-            if TAI_KHOAN:
-                with st.expander("Đăng nhập bằng tài khoản nội bộ"):
-                    _form_tai_khoan_noi_bo()
-        else:
-            _form_tai_khoan_noi_bo()
-
-
-if BAT_DANG_NHAP and not st.session_state.get("nguoi_dung") and DANG_NHAP_MS:
-    _email = _email_microsoft()
-    if _email:
-        _vai_tro = auth.vai_tro_theo_email(_email, PHAN_QUYEN)
-        if _vai_tro:
-            st.session_state.nguoi_dung = {
-                "ten_dn": _email, "ten": str(st.user.get("name") or _email),
-                "vai_tro": _vai_tro, "nguon": "microsoft",
-            }
-        else:
-            _, giua, _ = st.columns([1, 1.3, 1])
-            with giua:
-                st.error(f"Tài khoản **{_email}** chưa được cấp quyền sử dụng ứng dụng. "
-                         "Liên hệ quản trị viên, hoặc đăng nhập bằng email của trường.")
-                if st.button("🔄 Đăng nhập bằng tài khoản khác", use_container_width=True):
-                    st.logout()
-            st.stop()
-
-if BAT_DANG_NHAP and not st.session_state.get("nguoi_dung"):
-    man_hinh_dang_nhap()
-    st.stop()
-
-NGUOI_DUNG = st.session_state.get("nguoi_dung") or {
-    "ten_dn": "", "ten": "Chưa bật đăng nhập", "vai_tro": "admin",
-}
-LA_ADMIN = NGUOI_DUNG["vai_tro"] == "admin"
-
-# =======================================================================
 # BẢN CÔNG BỐ — dữ liệu + kết quả admin công bố, dùng CHUNG cho mọi người.
 # Lưu 3 nơi: bộ nhớ máy chủ (mọi phiên dùng chung), file du_lieu/cong_bo.json
 # (còn đến khi app khởi động lại), và SharePoint (file hoặc List TKB_CongBo)
@@ -930,6 +827,193 @@ def cong_bo(goi: dict) -> tuple[list[str], list[str]]:
     return da_luu, loi
 
 
+# =======================================================================
+# ĐĂNG NHẬP & PHÂN QUYỀN
+#   - admin: toàn quyền (nhập liệu, xếp lịch, xếp phòng thi, dạy thay,
+#            SharePoint, công bố).
+#   - user : chỉ XEM & tải về thời khoá biểu / phòng thi / dạy thay mà admin
+#            đã CÔNG BỐ.
+# Tài khoản khai báo trong Secrets ([auth.users.<tên>]) — xem auth.py.
+# =======================================================================
+TAI_KHOAN = auth.doc_tai_khoan(st.secrets)
+PHAN_QUYEN = auth.doc_phan_quyen(st.secrets)
+DANG_NHAP_MS = auth.dang_nhap_microsoft_bat(st.secrets)
+DANG_NHAP_OTP = bool(PHAN_QUYEN["otp_url"])
+BAT_DANG_NHAP = bool(TAI_KHOAN) or DANG_NHAP_MS or DANG_NHAP_OTP
+TEN_VAI_TRO = {"admin": "Quản trị (admin)", "user": "Người dùng (user)"}
+
+
+def _gv_cong_bo_theo_email() -> dict[str, dict]:
+    """Email -> giáo viên theo bảng Giáo viên trong BẢN CÔNG BỐ."""
+    goi = nap_ban_cong_bo()
+    try:
+        return gv_theo_email(storage._json_sang_df(goi["bang"]["teachers"])) if goi else {}
+    except (KeyError, TypeError, ValueError):
+        return {}
+
+
+def xac_dinh_vai_tro(email: str) -> str | None:
+    """admin: email trong admin_emails (Secrets) HOẶC cột Quyền = admin trong bảng
+    Giáo viên đã công bố. user: email thuộc tên miền trường / user_emails, hoặc
+    có trong cột Email của bảng Giáo viên đã công bố. Khác: None (từ chối)."""
+    email = (email or "").strip().lower()
+    vai_tro = auth.vai_tro_theo_email(email, PHAN_QUYEN)
+    gv = _gv_cong_bo_theo_email().get(email)
+    if gv and gv["quyen"] == "admin":
+        return "admin"
+    return vai_tro or ("user" if gv else None)
+
+
+def _ten_hien_thi(email: str, mac_dinh: str) -> str:
+    gv = _gv_cong_bo_theo_email().get((email or "").lower())
+    return gv["ten"] if gv else mac_dinh
+
+
+@st.cache_resource
+def _dem_dang_nhap_sai() -> dict:
+    """Đếm số lần sai mật khẩu theo tên đăng nhập, dùng chung mọi phiên."""
+    return {}
+
+
+def _email_microsoft() -> str:
+    """Email của người đã đăng nhập Microsoft (st.user), '' nếu chưa."""
+    try:
+        if not st.user.is_logged_in:
+            return ""
+        return str(st.user.get("email") or st.user.get("preferred_username")
+                   or st.user.get("upn") or "").strip().lower()
+    except Exception:
+        return ""
+
+
+def _form_tai_khoan_noi_bo():
+    with st.form("form_dang_nhap"):
+        ten_dn = st.text_input("Tên đăng nhập")
+        mat_khau = st.text_input("Mật khẩu", type="password")
+        dang_nhap = st.form_submit_button("Đăng nhập", use_container_width=True,
+                                          type="secondary" if DANG_NHAP_MS else "primary")
+    if dang_nhap:
+        dem = _dem_dang_nhap_sai()
+        khoa = (ten_dn or "").strip().lower()
+        so_lan, khoa_den = dem.get(khoa, (0, 0.0))
+        if time_mod.time() < khoa_den:
+            st.error(f"Sai mật khẩu quá nhiều lần — thử lại sau {int(khoa_den - time_mod.time()) + 1} giây.")
+            return
+        nguoi_dung = auth.xac_thuc(TAI_KHOAN, ten_dn, mat_khau)
+        if nguoi_dung:
+            dem.pop(khoa, None)
+            st.session_state.nguoi_dung = {**nguoi_dung, "nguon": "noi_bo"}
+            st.rerun()
+        so_lan += 1
+        dem[khoa] = (0, time_mod.time() + 60) if so_lan >= 5 else (so_lan, 0.0)
+        st.error("Sai tên đăng nhập hoặc mật khẩu.")
+
+
+@st.cache_resource
+def _kho_otp() -> auth.KhoMaOTP:
+    return auth.KhoMaOTP()
+
+
+def _form_ma_email():
+    """Đăng nhập bằng mã 6 số gửi vào email trường (qua flow Power Automate)."""
+    email_cho = st.session_state.get("_otp_email")
+    if not email_cho:
+        with st.form("form_otp_email"):
+            email = st.text_input("Email của trường", placeholder="ten.giaovien@truong.edu.vn")
+            gui = st.form_submit_button("📨 Gửi mã đăng nhập", type="primary", use_container_width=True)
+        if gui:
+            email = (email or "").strip().lower()
+            if not xac_dinh_vai_tro(email):
+                st.error("Email này không thuộc trường hoặc chưa được cấp quyền.")
+                return
+            ma, ly_do = _kho_otp().tao_ma(email, time_mod.time())
+            if not ma:
+                st.error(ly_do)
+                return
+            try:
+                r = requests.post(PHAN_QUYEN["otp_url"], timeout=60, json={
+                    "email": email, "ma": ma, "het_han_phut": auth.KhoMaOTP.HAN_PHUT,
+                    "ten_truong": st.session_state.get("cfg_school_name") or "",
+                })
+                if r.status_code >= 300:
+                    raise requests.RequestException(f"flow trả lỗi {r.status_code}: {r.text[:200]}")
+            except requests.RequestException as e:
+                _kho_otp().huy_ma(email)
+                st.error(f"Không gửi được email chứa mã: {e}")
+                return
+            st.session_state["_otp_email"] = email
+            st.rerun()
+        return
+
+    st.info(f"Đã gửi mã 6 số tới **{email_cho}** — kiểm tra hộp thư Outlook "
+            f"(cả mục Thư rác/Other). Mã có hiệu lực {auth.KhoMaOTP.HAN_PHUT} phút.")
+    with st.form("form_otp_ma"):
+        ma = st.text_input("Mã đăng nhập", max_chars=6)
+        xac_nhan = st.form_submit_button("Đăng nhập", type="primary", use_container_width=True)
+    if xac_nhan:
+        dung, ly_do = _kho_otp().kiem_tra(email_cho, ma, time_mod.time())
+        if dung:
+            st.session_state.pop("_otp_email", None)
+            st.session_state.nguoi_dung = {
+                "ten_dn": email_cho, "ten": _ten_hien_thi(email_cho, email_cho.split("@")[0]),
+                "vai_tro": xac_dinh_vai_tro(email_cho) or "user", "nguon": "email",
+            }
+            st.rerun()
+        st.error(ly_do)
+    if st.button("↩ Đổi email / gửi lại mã", use_container_width=True):
+        st.session_state.pop("_otp_email", None)
+        st.rerun()
+
+
+def man_hinh_dang_nhap():
+    _, giua, _ = st.columns([1, 1.3, 1])
+    with giua:
+        st.markdown("### 🔐 Đăng nhập")
+        if DANG_NHAP_OTP:
+            st.caption("Nhập email của trường, hệ thống gửi mã đăng nhập vào hộp thư Outlook của bạn.")
+            _form_ma_email()
+            if TAI_KHOAN:
+                with st.expander("Đăng nhập bằng tài khoản nội bộ"):
+                    _form_tai_khoan_noi_bo()
+        elif DANG_NHAP_MS:
+            st.caption("Giáo viên đăng nhập bằng tài khoản email Outlook (Microsoft 365) của trường.")
+            if st.button("🟦 Đăng nhập bằng tài khoản Microsoft của trường", type="primary",
+                         use_container_width=True):
+                st.login()
+            if TAI_KHOAN:
+                with st.expander("Đăng nhập bằng tài khoản nội bộ"):
+                    _form_tai_khoan_noi_bo()
+        else:
+            _form_tai_khoan_noi_bo()
+
+
+if BAT_DANG_NHAP and not st.session_state.get("nguoi_dung") and DANG_NHAP_MS:
+    _email = _email_microsoft()
+    if _email:
+        _vai_tro = xac_dinh_vai_tro(_email)
+        if _vai_tro:
+            st.session_state.nguoi_dung = {
+                "ten_dn": _email, "ten": _ten_hien_thi(_email, str(st.user.get("name") or _email)),
+                "vai_tro": _vai_tro, "nguon": "microsoft",
+            }
+        else:
+            _, giua, _ = st.columns([1, 1.3, 1])
+            with giua:
+                st.error(f"Tài khoản **{_email}** chưa được cấp quyền sử dụng ứng dụng. "
+                         "Liên hệ quản trị viên, hoặc đăng nhập bằng email của trường.")
+                if st.button("🔄 Đăng nhập bằng tài khoản khác", use_container_width=True):
+                    st.logout()
+            st.stop()
+
+if BAT_DANG_NHAP and not st.session_state.get("nguoi_dung"):
+    man_hinh_dang_nhap()
+    st.stop()
+
+NGUOI_DUNG = st.session_state.get("nguoi_dung") or {
+    "ten_dn": "", "ten": "Chưa bật đăng nhập", "vai_tro": "admin",
+}
+LA_ADMIN = NGUOI_DUNG["vai_tro"] == "admin"
+
 # Nạp bản công bố vào phiên: user luôn theo bản mới nhất; admin chỉ nạp 1 lần
 # lúc mở app (không đè dữ liệu admin đang chỉnh sửa).
 _goi_cong_bo = nap_ban_cong_bo()
@@ -944,6 +1028,10 @@ if _goi_cong_bo:
             st.session_state["_ban_cong_bo_da_nap"] = _phien_cb
             if LA_ADMIN:
                 st.warning(f"Không nạp được bản công bố: {e}")
+
+if not set(COT_GIAO_VIEN).issubset(st.session_state.teachers.columns):
+    st.session_state.teachers = chuan_hoa_bang_gv(st.session_state.teachers)
+    st.session_state.pop("editor_teachers", None)
 
 # Giá trị cấu hình gắn với widget: khởi tạo mặc định 1 lần, và gán lại mỗi
 # lần chạy để Streamlit KHÔNG xoá mất khi người dùng chuyển sang module khác
@@ -988,8 +1076,9 @@ with st.sidebar:
         "🔄 Phân Công Dạy Thay",
         "☁️ Lưu trữ SharePoint",
         "👥 Tài khoản & Công bố",
+        "👤 Lịch của tôi",
     ]
-    MODULE_USER = MODULE_ADMIN[:3]
+    MODULE_USER = ["👤 Lịch của tôi"]
     TEN_MODULE_USER = {
         "📅 Xếp Thời Khoá Biểu": "📅 Thời khoá biểu",
         "🪑 Xếp Phòng Thi": "🪑 Phòng thi",
@@ -1034,7 +1123,9 @@ with st.sidebar:
             st.session_state.exam_results = {}
             st.session_state.exam_all_students = []
             st.session_state.substitutions = {}
-            for k in ("editor_grade_times", "editor_exam_students", "editor_exam_subjects"):
+            st.session_state.pop("exam_proctors", None)
+            for k in ("editor_grade_times", "editor_exam_students", "editor_exam_subjects",
+                      "editor_teachers", "editor_exam_proctors"):
                 st.session_state.pop(k, None)
             st.rerun()
     st.caption(
@@ -1247,14 +1338,24 @@ if module == "📅 Xếp Thời Khoá Biểu":
             dept_names = [d for d in st.session_state.departments["Tên tổ"].dropna().tolist() if d.strip()]
 
             st.markdown('<div class="section-card">', unsafe_allow_html=True)
-            section_header("2", "Giáo viên")
-            excel_io_row("teachers", "Giao_vien")
+            section_header(
+                "2", "Giáo viên",
+                "<b>Email</b>: email trường để GV đăng nhập và xem lịch của mình. <b>Lớp chủ nhiệm</b>: GV "
+                "thấy thêm TKB lớp này. <b>Quyền</b>: admin/user — có hiệu lực sau khi 📢 Công bố.",
+            )
+            excel_io_row("teachers", "Giao_vien", transform=chuan_hoa_bang_gv)
             st.session_state.teachers = st.data_editor(
                 st.session_state.teachers, num_rows="dynamic", use_container_width=True,
                 key="editor_teachers",
                 column_config={
                     "Tên giáo viên": st.column_config.TextColumn(required=True),
                     "Tổ chuyên môn": st.column_config.SelectboxColumn(options=[""] + dept_names),
+                    "Email": st.column_config.TextColumn(
+                        help="Email trường của GV — dùng để đăng nhập và xem 'Lịch của tôi'."),
+                    "Lớp chủ nhiệm": st.column_config.SelectboxColumn(options=[""] + class_names),
+                    "Quyền": st.column_config.SelectboxColumn(
+                        options=["user", "admin"], required=True,
+                        help="admin = toàn quyền (có hiệu lực sau khi 📢 Công bố). user = chỉ xem lịch của mình."),
                 },
             )
             st.markdown('</div>', unsafe_allow_html=True)
@@ -2209,6 +2310,87 @@ elif module == "🪑 Xếp Phòng Thi":
                     st.markdown(ve_so_do_cho_ngoi_html(hang_ghe), unsafe_allow_html=True)
 
 
+    # ------------------------------------------------------------------
+    # Phân công coi thi (giám thị) — chỉ admin
+    # ------------------------------------------------------------------
+    if LA_ADMIN and st.session_state.exam_results:
+        st.divider()
+        st.markdown('<div class="section-card">', unsafe_allow_html=True)
+        section_header(
+            "4", "Phân công coi thi (giám thị)",
+            "Tự chia đều số buổi coi thi cho giáo viên: 1 giáo viên không coi 2 phòng trong cùng buổi (ngày + "
+            "ca), tránh coi môn mình dạy nếu đủ người. Sau khi phân công có thể sửa tay trong bảng. Giáo viên "
+            "xem lịch coi thi của mình ở trang 👤 Lịch của tôi (sau khi công bố).",
+        )
+        ds_gv_coi = [t for t in teacher_names]
+        p1, p2, p3 = st.columns([1, 2, 1])
+        with p1:
+            so_gt = st.number_input("Số giám thị mỗi phòng", 1, 4, 2, key="ct_so_giam_thi")
+        with p2:
+            gv_loai_tru = st.multiselect("Giáo viên KHÔNG tham gia coi thi", ds_gv_coi, key="ct_loai_tru")
+        with p3:
+            tranh_mon = st.checkbox("Không coi môn mình dạy", value=True, key="ct_tranh_mon")
+        if st.button("🎲 Phân công coi thi tự động", type="primary"):
+            mon_gv: dict[str, set] = {}
+            for _, a in st.session_state.activities.iterrows():
+                for cot_gv in ("GV chính", "GV phụ (đồng giảng)"):
+                    g = a.get(cot_gv)
+                    if not _o_trong(g):
+                        mon_gv.setdefault(str(g), set()).update(
+                            {str(a.get("Môn") or ""), str(a.get("Tên hoạt động") or "").split(" ")[0]})
+            buoi = [
+                {"mon": mon, "ngay": e["ngay"], "ca": e["ca"], "phong": r["ten_phong"]}
+                for mon, e in st.session_state.exam_results.items() for r in e["rooms"]
+            ]
+            kq_ct, cb_ct = er.phan_cong_coi_thi(
+                buoi, [g for g in ds_gv_coi if g not in gv_loai_tru], int(so_gt), mon_gv, tranh_mon,
+                seed=random.randint(1, 10**9),
+            )
+            st.session_state.exam_proctors = pd.DataFrame([
+                {"Môn thi": b["mon"], "Ngày thi": b["ngay"], "Ca thi": b["ca"], "Phòng": b["phong"],
+                 **{f"Giám thị {i + 1}": (b["giam_thi"][i] if i < len(b["giam_thi"]) else "")
+                    for i in range(int(so_gt))}}
+                for b in kq_ct
+            ])
+            st.session_state["_canh_bao_coi_thi"] = cb_ct
+            st.session_state.pop("editor_exam_proctors", None)
+            st.rerun()
+        for cb in st.session_state.get("_canh_bao_coi_thi", []):
+            st.warning(cb)
+
+        ct_df = st.session_state.get("exam_proctors")
+        if ct_df is not None and not ct_df.empty:
+            cot_gt = [c for c in ct_df.columns if str(c).startswith("Giám thị")]
+            st.session_state.exam_proctors = st.data_editor(
+                ct_df, use_container_width=True, hide_index=True, key="editor_exam_proctors",
+                disabled=["Môn thi", "Ngày thi", "Ca thi", "Phòng"],
+                column_config={c: st.column_config.SelectboxColumn(options=[""] + ds_gv_coi) for c in cot_gt},
+            )
+            ct_df = st.session_state.exam_proctors
+            # kiểm tra trùng: 1 GV coi 2 phòng cùng buổi
+            trung = []
+            for (ngay, ca), nhom in ct_df.groupby(["Ngày thi", "Ca thi"]):
+                ten = [str(v).strip() for c in cot_gt for v in nhom[c] if not _o_trong(v)]
+                trung += [f"{t} ({ngay} ca {ca})" for t in sorted({t for t in ten if ten.count(t) > 1})]
+            if trung:
+                st.error("Giáo viên bị xếp 2 phòng trong cùng buổi: " + "; ".join(trung))
+            dem = {}
+            for c in cot_gt:
+                for v in ct_df[c]:
+                    if not _o_trong(v):
+                        dem[str(v).strip()] = dem.get(str(v).strip(), 0) + 1
+            with st.expander(f"📊 Số buổi coi thi của từng giáo viên ({len(dem)} GV)"):
+                st.dataframe(pd.DataFrame(
+                    sorted(({"Giáo viên": k, "Số buổi": v} for k, v in dem.items()), key=lambda x: -x["Số buổi"])
+                ), use_container_width=True, hide_index=True)
+            st.download_button(
+                "📊 Xuất Excel phân công coi thi", data=df_to_excel_bytes(ct_df, "Phan_cong_coi_thi"),
+                file_name="phan_cong_coi_thi.xlsx", key="xls_phan_cong_coi_thi",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+            st.caption("Xếp lại phòng thi thì nên bấm phân công coi thi lại. Nhớ 📢 Công bố để giáo viên thấy.")
+        st.markdown('</div>', unsafe_allow_html=True)
+
 # ---------------------------------------------------------------------
 # MODULE 3 — Phân công dạy thay
 # ---------------------------------------------------------------------
@@ -2783,6 +2965,161 @@ elif module == "👥 Tài khoản & Công bố":
             st.code(f'password_hash = "{auth.bam_mat_khau(mk_moi)}"', language="toml")
             st.caption("Mật khẩu không được lưu ở đâu cả — chỉ mã băm này được dùng để kiểm tra.")
     st.markdown('</div>', unsafe_allow_html=True)
+
+# ---------------------------------------------------------------------
+# MODULE — Lịch của tôi (giáo viên): TKB cá nhân, TKB lớp chủ nhiệm,
+# lịch coi thi, lịch dạy thay liên quan. User chỉ thấy module này.
+# ---------------------------------------------------------------------
+elif module == "👤 Lịch của tôi":
+    gv_df = st.session_state.teachers
+    ds_ten_gv = [t for t in gv_df["Tên giáo viên"].dropna().astype(str).tolist() if t.strip()]
+    ban_do_email = gv_theo_email(gv_df)
+    thong_tin = ban_do_email.get(NGUOI_DUNG.get("ten_dn", ""), {})
+
+    if LA_ADMIN:
+        mac_dinh = ds_ten_gv.index(thong_tin["ten"]) if thong_tin.get("ten") in ds_ten_gv else 0
+        ten_gv = st.selectbox("👁️ (Admin) Xem lịch của giáo viên", ds_ten_gv, index=mac_dinh,
+                              key="cuatoi_chon_gv") if ds_ten_gv else ""
+        dong_gv = gv_df[gv_df["Tên giáo viên"].astype(str) == ten_gv]
+        lop_cn = "" if dong_gv.empty or _o_trong(dong_gv.iloc[0].get("Lớp chủ nhiệm")) \
+            else str(dong_gv.iloc[0]["Lớp chủ nhiệm"]).strip()
+    else:
+        ten_gv, lop_cn = thong_tin.get("ten", ""), thong_tin.get("lop_cn", "")
+
+    if not ten_gv:
+        st.warning(
+            f"Email **{NGUOI_DUNG.get('ten_dn', '')}** chưa được gắn với giáo viên nào trong dữ liệu đã "
+            "công bố. Nhờ admin điền email này vào cột **Email** của bảng Giáo viên rồi công bố lại."
+        )
+    else:
+        st.markdown(
+            f'<div class="section-title"><h3>👤 {html.escape(ten_gv)}'
+            + (f' — Chủ nhiệm lớp {html.escape(lop_cn)}' if lop_cn else "") + '</h3></div>',
+            unsafe_allow_html=True,
+        )
+        kq = st.session_state.get("result")
+        co_tkb = kq is not None and kq.status not in ("INFEASIBLE", "ERROR") \
+            and st.session_state.get("result_config") is not None
+        tid = slugify(ten_gv, "gv_")
+        gt_df = st.session_state.get("grade_times")
+        tuan = st.session_state.tuan_bat_dau
+        tab_toi, tab_cn, tab_thi, tab_thay = st.tabs([
+            "📅 TKB của tôi", f"🏫 Lớp chủ nhiệm{': ' + lop_cn if lop_cn else ''}",
+            "🪑 Lịch coi thi", "🔄 Dạy thay",
+        ])
+
+        with tab_toi:
+            if not co_tkb:
+                st.info("Chưa có thời khoá biểu được công bố.")
+            else:
+                lop_ten = {c.id: c.name for c in st.session_state.result_classes}
+                luoi, gio_o = luoi_tkb(
+                    kq, st.session_state.result_classes, st.session_state.result_config,
+                    lambda l: tid in l.teacher_ids,
+                    lambda l: f"{l.activity_name} — {', '.join(lop_ten.get(c, c) for c in l.class_ids)}",
+                    gt_df, tuan,
+                )
+                so_tiet = sum(1 for l in kq.lessons if tid in l.teacher_ids)
+                st.caption(f"Tổng số tiết/tuần: **{so_tiet}**")
+                st.dataframe(luoi, use_container_width=True, height=(len(luoi) + 1) * 38)
+                bai_gv = [
+                    l.model_copy(update={
+                        "class_ids": ["__gv__"], "teacher_ids": [],
+                        "activity_name": f"{l.activity_name} — {', '.join(lop_ten.get(c, c) for c in l.class_ids)}",
+                    })
+                    for l in kq.lessons if tid in l.teacher_ids
+                ]
+                cfg_kq = st.session_state.result_config
+                d1, d2, _ = st.columns([1, 1, 2])
+                with d1:
+                    st.download_button(
+                        "📄 PDF", use_container_width=True, mime="application/pdf",
+                        file_name=f"tkb_{slugify(ten_gv)}.pdf", key="pdf_tkb_toi",
+                        data=timetable_to_pdf_bytes(
+                            [SchoolClass(id="__gv__", name=ten_gv, grade=0)], cfg_kq, bai_gv,
+                            {d: nhan_ngay_thuc_te(d, tuan) for d in cfg_kq.days}, {},
+                            school_name=school_name, cell_times_by_class={"__gv__": gio_o},
+                            tien_to_tieu_de="Thời khoá biểu GV",
+                        ),
+                    )
+                with d2:
+                    st.download_button(
+                        "📊 Excel", use_container_width=True, key="xls_tkb_toi",
+                        data=df_to_excel_bytes(luoi.reset_index().rename(columns={"index": "Tiết"}), "TKB"),
+                        file_name=f"tkb_{slugify(ten_gv)}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
+
+        with tab_cn:
+            lop_obj = next((c for c in (st.session_state.get("result_classes") or []) if c.name == lop_cn), None)
+            if not lop_cn:
+                st.info("Bạn chưa được phân công chủ nhiệm lớp nào (cột Lớp chủ nhiệm trong bảng Giáo viên).")
+            elif not co_tkb or lop_obj is None:
+                st.info(f"Chưa có thời khoá biểu được công bố cho lớp {lop_cn}.")
+            else:
+                ten_gv_theo_id = {slugify(n, "gv_"): n for n in ds_ten_gv}
+                luoi, gio_o = luoi_tkb(
+                    kq, st.session_state.result_classes, st.session_state.result_config,
+                    lambda l: lop_obj.id in l.class_ids,
+                    lambda l: f"{l.activity_name} ({', '.join(ten_gv_theo_id.get(t, t) for t in l.teacher_ids)})",
+                    gt_df, tuan,
+                )
+                st.dataframe(luoi, use_container_width=True, height=(len(luoi) + 1) * 38)
+                cfg_kq = st.session_state.result_config
+                st.download_button(
+                    "📄 PDF lớp chủ nhiệm", mime="application/pdf", key="pdf_tkb_cn",
+                    file_name=f"tkb_lop_{slugify(lop_cn)}.pdf",
+                    data=timetable_to_pdf_bytes(
+                        [lop_obj], cfg_kq, kq.lessons, {d: nhan_ngay_thuc_te(d, tuan) for d in cfg_kq.days},
+                        ten_gv_theo_id, school_name=school_name, cell_times_by_class={lop_obj.id: gio_o},
+                    ),
+                )
+
+        with tab_thi:
+            ct_df = st.session_state.get("exam_proctors")
+            if ct_df is None or ct_df.empty:
+                st.info("Chưa có lịch coi thi được công bố.")
+            else:
+                cot_gt = [c for c in ct_df.columns if str(c).startswith("Giám thị")]
+                dong = []
+                for _, r in ct_df.iterrows():
+                    ten_gt = [str(r[c]).strip() for c in cot_gt if not _o_trong(r[c])]
+                    if ten_gv in ten_gt:
+                        dong.append({
+                            "Ngày thi": r.get("Ngày thi", ""), "Ca thi": r.get("Ca thi", ""),
+                            "Môn thi": r.get("Môn thi", ""), "Phòng": r.get("Phòng", ""),
+                            "Coi cùng": ", ".join(t for t in ten_gt if t != ten_gv),
+                        })
+                if not dong:
+                    st.success("Bạn không có lịch coi thi.")
+                else:
+                    dong.sort(key=lambda x: er._khoa_ngay_ca(x["Ngày thi"], x["Ca thi"]))
+                    df_thi = pd.DataFrame(dong)
+                    st.caption(f"Số buổi coi thi: **{len(dong)}**")
+                    st.dataframe(df_thi, use_container_width=True, hide_index=True)
+                    st.download_button(
+                        "📊 Excel lịch coi thi", key="xls_coi_thi_toi",
+                        data=df_to_excel_bytes(df_thi, "Lich_coi_thi"),
+                        file_name=f"coi_thi_{slugify(ten_gv)}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
+
+        with tab_thay:
+            dong = []
+            for ban_ghi in st.session_state.get("substitutions", {}).values():
+                for pc in ban_ghi.get("phan_cong", []):
+                    if pc.get("gv_thay") == ten_gv or ban_ghi.get("gv_nghi") == ten_gv:
+                        dong.append({
+                            "Ngày": ban_ghi.get("ngay_hien_thi", ""), "Tiết": pc.get("tiet"),
+                            "Lớp": pc.get("lop"), "Môn": pc.get("mon"),
+                            "Vai trò": "Dạy thay" if pc.get("gv_thay") == ten_gv else "Nghỉ (có người dạy thay)",
+                            "GV nghỉ / GV dạy thay": ban_ghi.get("gv_nghi") if pc.get("gv_thay") == ten_gv
+                            else (pc.get("gv_thay") or "— chưa phân công —"),
+                        })
+            if dong:
+                st.dataframe(pd.DataFrame(dong), use_container_width=True, hide_index=True)
+            else:
+                st.success("Không có lịch dạy thay liên quan đến bạn.")
 
 st.markdown(
     '<div class="app-footer">Ứng dụng được phát triển bởi Chuyên viên Quản lý hệ thống — '
