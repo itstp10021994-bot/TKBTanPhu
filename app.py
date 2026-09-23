@@ -614,6 +614,28 @@ def tao_tep_dang_teams(ss, ten_truong: str, moc) -> tuple[list[tuple[str, bytes]
     return tep, ghi_chu
 
 
+def anh_tkb_lop(ss, ds_ten_lop: list[str], ten_truong: str) -> list[tuple[str, bytes]]:
+    """Ảnh PNG thời khoá biểu của các lớp được chọn (để nhúng vào bài đăng Teams)."""
+    kq, cfg = ss.get("result"), ss.get("result_config")
+    classes = ss.get("result_classes") or []
+    if kq is None or cfg is None:
+        return []
+    gt, tuan = ss.get("grade_times"), ss["tuan_bat_dau"]
+    ngay = {d: nhan_ngay_thuc_te(d, tuan) for d in cfg.days}
+    ten_gv = {slugify(n, "gv_"): n for n in ss["teachers"]["Tên giáo viên"].dropna().astype(str) if n.strip()}
+    anh = []
+    for c in classes:
+        if c.name not in ds_ten_lop:
+            continue
+        _, gio = luoi_tkb(kq, classes, cfg, lambda l, cid=c.id: cid in l.class_ids, lambda l: "", gt, tuan)
+        pdf = timetable_to_pdf_bytes([c], cfg, kq.lessons, ngay, ten_gv, school_name=ten_truong,
+                                     cell_times_by_class={c.id: gio})
+        png = teams.pdf_sang_png(pdf)
+        if png:
+            anh.append((f"Lớp {c.name}", png))
+    return anh
+
+
 # ---------------------------------------------------------------------
 # Dữ liệu mẫu ban đầu (dạng bảng thân thiện) để người dùng có ví dụ sẵn
 # ---------------------------------------------------------------------
@@ -3111,18 +3133,46 @@ elif module == "👥 Tài khoản & Công bố":
                 [t for t, _ in tep], CAU_HINH_TEAMS["thu_muc"], CAU_HINH_TEAMS["app_url"],
             )
             try:
-                teams.gui(CAU_HINH_TEAMS, tep, thong_diep)
-                st.success(f"📤 Đã đăng {len(tep)} tệp lên Teams (thư mục '{CAU_HINH_TEAMS['thu_muc']}') "
-                           "và gửi thông báo vào kênh.")
+                if CAU_HINH_TEAMS["che_do"] == "graph":
+                    # bài đăng kiểu Teams: ảnh TKB nhúng + thẻ tệp
+                    tep_da_luu = teams.luu_tep(CAU_HINH_TEAMS, tep)
+                    anh = anh_tkb_lop(st.session_state, st.session_state.get("teams_lop_anh", []), school_name)
+                    bai = teams.tao_bai_dang(
+                        f"📅 {school_name + ' — ' if school_name else ''}Thời khoá biểu mới",
+                        [f"Áp dụng từ: {st.session_state.tuan_bat_dau.strftime('%d/%m/%Y')} — công bố bởi "
+                         f"{NGUOI_DUNG['ten']} lúc {moc.strftime('%H:%M %d/%m/%Y')}"],
+                        anh, tep_da_luu, CAU_HINH_TEAMS["app_url"],
+                    )
+                    teams.dang_tin(CAU_HINH_TEAMS, bai)
+                    so_the = len(bai.get("attachments", []))
+                    st.success(f"📤 Đã lưu {len(tep)} tệp vào thư mục '{CAU_HINH_TEAMS['thu_muc']}' và đăng bài "
+                               f"lên kênh Teams ({len(anh)} ảnh TKB, {so_the} thẻ tệp).")
+                    if so_the < len(tep):
+                        st.warning("Một số tệp không hiện dạng thẻ (flow chưa trả về ETag) — bài đăng dùng đường "
+                                   "link thay thế. Xem bước 'Append to array variable' trong TEAMS.md.")
+                else:
+                    teams.gui(CAU_HINH_TEAMS, tep, thong_diep)
+                    st.success(f"📤 Đã đăng {len(tep)} tệp lên Teams (thư mục '{CAU_HINH_TEAMS['thu_muc']}') "
+                               "và gửi thông báo vào kênh.")
             except storage.LoiLuuTru as e:
                 st.error(f"Đăng Teams thất bại: {e}")
 
     dang_teams = False
     if CAU_HINH_TEAMS:
+        if CAU_HINH_TEAMS.get("loi_cau_hinh"):
+            st.warning(f"Cấu hình [teams] chưa đúng: {CAU_HINH_TEAMS['loi_cau_hinh']} — đang dùng chế độ đơn giản.")
         dang_teams = st.checkbox(
-            f"📤 Đồng thời đăng lên Microsoft Teams (thư mục '{CAU_HINH_TEAMS['thu_muc']}' + tin nhắn thông báo)",
+            f"📤 Đồng thời đăng lên Microsoft Teams (thư mục '{CAU_HINH_TEAMS['thu_muc']}' + "
+            + ("bài đăng có ảnh TKB và thẻ tệp)" if CAU_HINH_TEAMS["che_do"] == "graph" else "tin nhắn thông báo)"),
             value=True, key="cb_dang_teams",
         )
+        if CAU_HINH_TEAMS["che_do"] == "graph":
+            ds_lop_anh = [c.name for c in (st.session_state.get("result_classes") or [])]
+            st.multiselect(
+                "🖼️ Lớp hiện ảnh thời khoá biểu ngay trong bài đăng (nên chọn ít, VD 1–4 lớp)",
+                ds_lop_anh, default=ds_lop_anh[:2], key="teams_lop_anh",
+                help="Toàn bộ các lớp vẫn nằm trong tệp PDF/Excel đính kèm.",
+            )
     else:
         st.caption("📤 Muốn tự đăng thời khoá biểu lên Teams khi công bố: xem hướng dẫn TEAMS.md (mục [teams] trong Secrets).")
 
