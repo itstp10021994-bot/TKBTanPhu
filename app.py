@@ -901,29 +901,69 @@ def _ghi_nho(nguon: str, dinh_danh: str):
             KHOA_KY_TOKEN, nguon, dinh_danh, SO_NGAY_GHI_NHO, time_mod.time())
 
 
-def _dang_nhap_tu_cookie():
-    """Tự đăng nhập bằng cookie còn hạn — kiểm tra lại quyền theo dữ liệu hiện tại."""
-    if not CO_GHI_NHO or st.session_state.get("_da_dang_xuat"):
-        return
+THAM_SO_URL = "dn"  # ?dn=<token> trên địa chỉ trang — kênh ghi nhớ thứ 2, không cần cookie
+
+
+def _doc_cookie() -> str:
     try:
-        token = st.context.cookies.get(auth.TEN_COOKIE)
+        return str(st.context.cookies.get(auth.TEN_COOKIE) or "")
     except Exception:
-        return
-    ket_qua = auth.doc_token(KHOA_KY_TOKEN, token, time_mod.time())
-    if not ket_qua:
-        return
-    nguon, dinh_danh = ket_qua
+        return ""
+
+
+def _doc_tham_so_url() -> str:
+    try:
+        return str(st.query_params.get(THAM_SO_URL) or "")
+    except Exception:
+        return ""
+
+
+def _xoa_tham_so_url():
+    try:
+        if THAM_SO_URL in st.query_params:
+            del st.query_params[THAM_SO_URL]
+    except Exception:
+        pass
+
+
+def _nguoi_dung_tu_token(nguon: str, dinh_danh: str) -> dict | None:
     if nguon == "email":
         vai_tro = xac_dinh_vai_tro(dinh_danh)
         if vai_tro:
-            st.session_state.nguoi_dung = {
-                "ten_dn": dinh_danh, "ten": _ten_hien_thi(dinh_danh, dinh_danh.split("@")[0]),
-                "vai_tro": vai_tro, "nguon": "email",
-            }
+            return {"ten_dn": dinh_danh, "ten": _ten_hien_thi(dinh_danh, dinh_danh.split("@")[0]),
+                    "vai_tro": vai_tro, "nguon": "email"}
     elif nguon == "noi_bo" and dinh_danh in TAI_KHOAN:
         tk = TAI_KHOAN[dinh_danh]
-        st.session_state.nguoi_dung = {"ten_dn": tk["ten_dn"], "ten": tk["ten"],
-                                       "vai_tro": tk["vai_tro"], "nguon": "noi_bo"}
+        return {"ten_dn": tk["ten_dn"], "ten": tk["ten"], "vai_tro": tk["vai_tro"], "nguon": "noi_bo"}
+    return None
+
+
+def _chan_doan_ghi_nho() -> list[tuple[str, str]]:
+    """Trạng thái 2 kênh ghi nhớ (cookie, địa chỉ trang) — để hiện khi không tự đăng nhập được."""
+    ket_qua = []
+    for ten_kenh, token in (("Cookie trình duyệt", _doc_cookie()), ("Mã trên địa chỉ trang (?dn=)", _doc_tham_so_url())):
+        kq, ly_do = auth.kiem_tra_token(KHOA_KY_TOKEN, token, time_mod.time())
+        if kq and not _nguoi_dung_tu_token(*kq):
+            ly_do = f"hợp lệ nhưng {kq[1]} không còn quyền"
+        ket_qua.append((ten_kenh, "✅ hợp lệ" if kq and not ly_do else f"❌ {ly_do}"))
+    return ket_qua
+
+
+def _dang_nhap_tu_cookie():
+    """Tự đăng nhập bằng cookie hoặc ?dn= trên địa chỉ trang (còn hạn) — quyền được
+    kiểm tra lại theo dữ liệu hiện tại."""
+    if not CO_GHI_NHO or st.session_state.get("_da_dang_xuat"):
+        return
+    for token in (_doc_cookie(), _doc_tham_so_url()):
+        kq = auth.doc_token(KHOA_KY_TOKEN, token, time_mod.time())
+        nguoi_dung = _nguoi_dung_tu_token(*kq) if kq else None
+        if nguoi_dung:
+            st.session_state.nguoi_dung = nguoi_dung
+            # đảm bảo cả 2 kênh đều có token cho lần tải lại sau
+            st.session_state["_cookie_can_ghi"] = token
+            return
+    if _doc_tham_so_url():
+        _xoa_tham_so_url()  # mã trên địa chỉ không dùng được nữa
 
 
 def _o_ghi_nho(key: str):
@@ -1033,6 +1073,15 @@ def _form_ma_email():
         st.rerun()
 
 
+def _o_chan_doan():
+    if CO_GHI_NHO and not st.session_state.get("_da_dang_xuat"):
+        with st.expander("🔧 Đã tick ghi nhớ mà vẫn phải đăng nhập lại?"):
+            for ten_kenh, trang_thai in _chan_doan_ghi_nho():
+                st.markdown(f"- **{ten_kenh}**: {trang_thai}")
+            st.caption("Ứng dụng tự đăng nhập nếu 1 trong 2 kênh hợp lệ. Mở app bằng đúng địa chỉ có "
+                       "'?dn=...' (hoặc đánh dấu trang đó) để giữ đăng nhập khi trình duyệt chặn cookie.")
+
+
 def man_hinh_dang_nhap():
     _, giua, _ = st.columns([1, 1.3, 1])
     with giua:
@@ -1053,6 +1102,7 @@ def man_hinh_dang_nhap():
                     _form_tai_khoan_noi_bo()
         else:
             _form_tai_khoan_noi_bo()
+        _o_chan_doan()
 
 
 if BAT_DANG_NHAP and not st.session_state.get("nguoi_dung"):
@@ -1083,7 +1133,14 @@ if BAT_DANG_NHAP and not st.session_state.get("nguoi_dung"):
     st.stop()
 
 if st.session_state.get("_cookie_can_ghi"):
-    _js_cookie(st.session_state.pop("_cookie_can_ghi"), SO_NGAY_GHI_NHO * 86400)
+    _token_ghi = st.session_state.pop("_cookie_can_ghi")
+    if _doc_cookie() != _token_ghi:
+        _js_cookie(_token_ghi, SO_NGAY_GHI_NHO * 86400)
+    if _doc_tham_so_url() != _token_ghi:
+        try:
+            st.query_params[THAM_SO_URL] = _token_ghi
+        except Exception:
+            pass
 
 NGUOI_DUNG = st.session_state.get("nguoi_dung") or {
     "ten_dn": "", "ten": "Chưa bật đăng nhập", "vai_tro": "admin",
@@ -1179,6 +1236,7 @@ with st.sidebar:
             # không tự đăng nhập lại từ cookie trong phiên này, và xoá cookie ghi nhớ
             st.session_state["_da_dang_xuat"] = True
             st.session_state["_cookie_can_xoa"] = True
+            _xoa_tham_so_url()
             if dang_xuat_ms:
                 st.logout()  # xoá cookie đăng nhập Microsoft
             st.rerun()

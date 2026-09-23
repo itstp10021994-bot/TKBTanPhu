@@ -62,7 +62,12 @@ chỉ gửi được 1 mã/phút và 5 mã/giờ; chỉ gửi cho email hợp l�
 **Ghi nhớ đăng nhập**: tick "Ghi nhớ đăng nhập trên máy này" (mặc định bật) thì
 tải lại trang / mở lại app **không phải nhập mã lại** trong 30 ngày (cookie có chữ
 ký bảo mật). Đổi số ngày: `nho_dang_nhap_ngay = 60` trong `[phan_quyen]` (0 = tắt).
-Bấm **🚪 Đăng xuất** để xoá ghi nhớ; dùng máy tính chung thì bỏ tick. Mỗi lần tự
+Ghi nhớ lưu ở 2 nơi: cookie trình duyệt và mã `?dn=...` trên địa chỉ trang — tải
+lại trang vẫn giữ đăng nhập kể cả khi trình duyệt chặn cookie; nên **đánh dấu
+(bookmark) địa chỉ có `?dn=`** để mở lại app không cần nhập mã. Không gửi địa chỉ
+có `?dn=` cho người khác (ai có địa chỉ đó sẽ vào được bằng tài khoản của bạn).
+Bấm **🚪 Đăng xuất** để xoá ghi nhớ; dùng máy tính chung thì bỏ tick. Màn hình đăng
+nhập có mục **🔧 chẩn đoán** cho biết vì sao chưa tự đăng nhập được. Mỗi lần tự
 đăng nhập, quyền được kiểm tra lại theo dữ liệu mới nhất (gỡ email khỏi bảng Giáo
 viên + công bố là giáo viên đó mất quyền).
 
