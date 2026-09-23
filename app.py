@@ -879,19 +879,49 @@ except Exception:
 CO_GHI_NHO = bool(KHOA_KY_TOKEN) and SO_NGAY_GHI_NHO > 0
 
 
-def _js_cookie(gia_tri: str, max_age: int):
-    """Ghi / xoá cookie ghi nhớ đăng nhập trên trình duyệt."""
-    js = (
-        f"var c='{auth.TEN_COOKIE}={gia_tri}; path=/; max-age={max_age}; SameSite=Lax'"
-        "+(location.protocol==='https:'?'; Secure':'');"
-        "document.cookie=c; try{if(window.parent!==window){window.parent.document.cookie=c;}}catch(e){}"
-    )
+def _chay_js(js: str):
+    """Chạy 1 đoạn JavaScript trên trang app (không hiện gì). Lưu ý: KHÔNG dùng ký tự '<'
+    trong js — st.html lọc bằng DOMPurify sẽ bỏ cả thẻ script nếu gặp '<' + chữ/số."""
+    assert "<" not in js, "JavaScript chèn qua st.html không được chứa ký tự '<'"
     try:
         # Streamlit mới: chạy JavaScript thẳng trên trang app
         st.html(f"<script>{js}</script>", unsafe_allow_javascript=True)
     except TypeError:
         # Streamlit cũ: dùng iframe components (cùng nguồn với app)
         components.html(f"<script>{js}</script>", height=0)
+
+
+def _js_cookie(gia_tri: str, max_age: int):
+    """Ghi / xoá token ghi nhớ đăng nhập trên trình duyệt: cookie + localStorage."""
+    ten = auth.TEN_COOKIE
+    _chay_js(
+        f"var c='{ten}={gia_tri}; path=/; max-age={max_age}; SameSite=Lax'"
+        "+(location.protocol==='https:'?'; Secure':'');"
+        "document.cookie=c; try{if(window.parent!==window){window.parent.document.cookie=c;}}catch(e){}"
+        f"try{{if({max_age}>0){{localStorage.setItem('{ten}','{gia_tri}');}}"
+        f"else{{localStorage.removeItem('{ten}');}}}}catch(e){{}}"
+    )
+
+
+def _js_khoi_phuc_dang_nhap():
+    """Mở app bằng địa chỉ gốc (không có ?dn=): nếu trình duyệt còn token ghi nhớ
+    (localStorage / cookie) thì tự thêm ?dn=<token> vào địa chỉ để app đăng nhập —
+    dùng được cả khi máy chủ không nhận được cookie (VD Streamlit Cloud).
+    Chặn lặp: mỗi tab chỉ tự chuyển 1 lần trong 15 giây."""
+    ten = auth.TEN_COOKIE
+    _chay_js(
+        "(function(){try{"
+        f"var t=localStorage.getItem('{ten}');"
+        f"if(!t){{var m=document.cookie.match(/(?:^|;\\s*){ten}=([^;]+)/);if(m){{t=decodeURIComponent(m[1]);}}}}"
+        "if(!t){return;}"
+        "var u=new URL(location.href);"
+        f"if(u.searchParams.get('{THAM_SO_URL}')){{return;}}"
+        "var g=+(sessionStorage.getItem('tkb_khoi_phuc')||0);"
+        "if(15000>Date.now()-g){return;}"
+        "sessionStorage.setItem('tkb_khoi_phuc',String(Date.now()));"
+        f"u.searchParams.set('{THAM_SO_URL}',t);location.replace(u.toString());"
+        "}catch(e){}})();"
+    )
 
 
 def _ghi_nho(nguon: str, dinh_danh: str):
@@ -962,8 +992,11 @@ def _dang_nhap_tu_cookie():
             # đảm bảo cả 2 kênh đều có token cho lần tải lại sau
             st.session_state["_cookie_can_ghi"] = token
             return
-    if _doc_tham_so_url():
-        _xoa_tham_so_url()  # mã trên địa chỉ không dùng được nữa
+    if _doc_tham_so_url() or _doc_cookie():
+        # có token nhưng không dùng được (hết hạn / sai / mất quyền) -> xoá ở trình duyệt,
+        # tránh việc tự khôi phục chuyển trang lặp lại
+        _xoa_tham_so_url()
+        st.session_state["_cookie_can_xoa"] = True
 
 
 def _o_ghi_nho(key: str):
@@ -1078,8 +1111,9 @@ def _o_chan_doan():
         with st.expander("🔧 Đã tick ghi nhớ mà vẫn phải đăng nhập lại?"):
             for ten_kenh, trang_thai in _chan_doan_ghi_nho():
                 st.markdown(f"- **{ten_kenh}**: {trang_thai}")
-            st.caption("Ứng dụng tự đăng nhập nếu 1 trong 2 kênh hợp lệ. Mở app bằng đúng địa chỉ có "
-                       "'?dn=...' (hoặc đánh dấu trang đó) để giữ đăng nhập khi trình duyệt chặn cookie.")
+            st.caption("Trình duyệt còn lưu đăng nhập thì mở địa chỉ gốc app sẽ tự chuyển sang địa chỉ có "
+                       "'?dn=...' và đăng nhập. Nếu cả 2 kênh đều 'không có': trình duyệt đã xoá dữ liệu "
+                       "trang (chế độ ẩn danh, xoá lịch sử, hoặc chưa tick ghi nhớ).")
 
 
 def man_hinh_dang_nhap():
@@ -1129,6 +1163,8 @@ if BAT_DANG_NHAP and not st.session_state.get("nguoi_dung") and DANG_NHAP_MS:
 if BAT_DANG_NHAP and not st.session_state.get("nguoi_dung"):
     if st.session_state.pop("_cookie_can_xoa", False):
         _js_cookie("", 0)
+    elif CO_GHI_NHO and not st.session_state.get("_da_dang_xuat"):
+        _js_khoi_phuc_dang_nhap()
     man_hinh_dang_nhap()
     st.stop()
 
