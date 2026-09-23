@@ -48,7 +48,7 @@ BANG_DU_LIEU = {
 # Các giá trị đơn / cấu hình
 GIA_TRI_CAU_HINH = [
     "cfg_num_days", "cfg_periods_per_day", "cfg_morning_count", "cfg_max_seconds",
-    "cfg_school_name", "free_depts",
+    "cfg_school_name", "free_depts", "exam_show_names",
     "ct_period_spread", "ct_room_capacity", "ct_order_group", "ct_dept_free_session", "ct_no_gap",
 ]
 
@@ -65,7 +65,11 @@ LIST_MAC_DINH = {
     "exam_students": "DanhSachHocSinhThi",
     "exam_rooms": "DanhSachPhongThi",
     "exam_subjects": "MonThi",
+    # List chứa BẢN CÔNG BỐ (toàn bộ dữ liệu + kết quả, dạng JSON chia nhiều mục)
+    # — chỉ dùng khi kết nối không lưu được file (flow Power Automate sp_url)
+    "cong_bo": "TKB_CongBo",
 }
+KICH_THUOC_PHAN = 20_000  # số ký tự JSON mỗi mục của List công bố
 # Cột kiểu số của ứng dụng (đọc từ List về thì đổi sang số)
 COT_SO = {"Khối", "Tiết", "Nhóm thứ tự", "Số tiết/tuần", "Số phòng cùng loại", "Sức chứa", "Số cột bàn"}
 
@@ -338,6 +342,41 @@ class DongBoList:
         ids_cu = [i for i, _ in self._doc_items(ref)]
         self._thay_items(ref, ids_cu, items)
         return len(items), canh_bao
+
+    # ---- Bản công bố lưu trong 1 List: cột Tiêu đề + cột "NoiDung" (Nhiều dòng văn bản) ----
+    def _list_cong_bo(self):
+        ten = self.ten_list("cong_bo")
+        ref = self._tim_list(ten)
+        if ref is None:
+            raise LoiLuuTru(
+                f"Chưa có List '{ten}' để lưu bản công bố — tạo List này với 1 cột tên 'NoiDung' "
+                "kiểu Nhiều dòng văn bản (văn bản thuần, TẮT định dạng văn bản đa dạng thức)."
+            )
+        cot = next((c for c in self._cot_list(ref) if khoa_cot(c["displayName"]) == "noidung"
+                    or khoa_cot(c["name"]) == "noidung"), None)
+        if cot is None:
+            raise LoiLuuTru(f"List '{ten}' chưa có cột 'NoiDung' (Nhiều dòng văn bản).")
+        return ten, ref, cot["name"]
+
+    def luu_goi_list(self, goi: dict) -> str:
+        ten, ref, cot = self._list_cong_bo()
+        van_ban = json.dumps(goi, ensure_ascii=False, separators=(",", ":"))
+        phan = [van_ban[i:i + KICH_THUOC_PHAN] for i in range(0, len(van_ban), KICH_THUOC_PHAN)] or [""]
+        items = [{"Title": f"Phần {i + 1}/{len(phan)}", cot: p} for i, p in enumerate(phan)]
+        self._thay_items(ref, [i for i, _ in self._doc_items(ref)], items)
+        return f"List '{ten}' ({len(phan)} mục)"
+
+    def tai_goi_list(self) -> dict | None:
+        _, ref, cot = self._list_cong_bo()
+        van_ban = "".join(str(f.get(cot) or "") for _, f in self._doc_items(ref))
+        if not van_ban.strip():
+            return None
+        try:
+            return json.loads(van_ban)
+        except ValueError:
+            # cột bị để kiểu văn bản đa dạng thức -> SharePoint bọc HTML, bóc ra
+            import html as _html
+            return json.loads(_html.unescape(re.sub(r"<[^>]+>", "", van_ban)))
 
     def doc_list(self, bang: str, cot_app: list[str]) -> tuple[pd.DataFrame, list[str]]:
         """Đọc List -> DataFrame đúng các cột của ứng dụng. -> (df, cảnh báo)."""

@@ -329,6 +329,13 @@ site của trường, đặt tên List đúng như bảng trên.
 Kết quả xếp thời khoá biểu / phòng thi không nằm trong List — dùng nút
 **💾 Lưu lên SharePoint** (mục 2) để lưu cả kết quả dưới dạng file.
 
+## Lưu bản công bố (phân quyền admin / user)
+
+Khi admin bấm **📢 Công bố** (module 👥), bản công bố cũng được lưu lên SharePoint
+để không mất khi app khởi động lại: file `CongBo_TKB.json` (Cách 1, 2) hoặc List
+**`TKB_CongBo`** (Cách 3 — tạo List với 1 cột **`NoiDung`** kiểu Nhiều dòng văn
+bản, tắt rich text). Chi tiết trong `PHAN_QUYEN.md`.
+
 ## Không có SharePoint?
 
 Mục **3. Sao lưu trên máy** trong cùng module luôn dùng được: tải file `.json`
