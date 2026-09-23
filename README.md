@@ -73,7 +73,8 @@ Bản Streamlit (`streamlit_app/`) còn có thêm:
   (ToChuyenMon, GiaoVien, LopHoc, ... — cột khớp theo tên hiển thị), kèm nút
   kiểm tra List/cột và file Excel mẫu để tạo List bằng "Từ Excel".
 - **Đăng nhập & phân quyền admin / user** (xem **PHAN_QUYEN.md**): giáo viên đăng
-  nhập bằng **email Outlook (Microsoft 365) của trường**; vai trò gán theo email
+  nhập bằng **email trường** (mã 6 số gửi vào Outlook qua flow Power Automate —
+  không cần admin; hoặc nút đăng nhập Microsoft nếu có App Registration); vai trò gán theo email
   (`admin_emails`, tên miền trường = user); thêm tài khoản nội bộ dự phòng. Admin toàn quyền và **📢 công bố** dữ
   liệu; user chỉ xem & xuất file thời khoá biểu / phòng thi / dạy thay đã công bố.
   Bản công bố lưu trên máy chủ và SharePoint (file hoặc List `TKB_CongBo`).

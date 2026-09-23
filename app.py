@@ -686,7 +686,8 @@ if "substitutions" not in st.session_state:
 TAI_KHOAN = auth.doc_tai_khoan(st.secrets)
 PHAN_QUYEN = auth.doc_phan_quyen(st.secrets)
 DANG_NHAP_MS = auth.dang_nhap_microsoft_bat(st.secrets)
-BAT_DANG_NHAP = bool(TAI_KHOAN) or DANG_NHAP_MS
+DANG_NHAP_OTP = bool(PHAN_QUYEN["otp_url"])
+BAT_DANG_NHAP = bool(TAI_KHOAN) or DANG_NHAP_MS or DANG_NHAP_OTP
 TEN_VAI_TRO = {"admin": "Quản trị (admin)", "user": "Người dùng (user)"}
 
 
@@ -730,11 +731,73 @@ def _form_tai_khoan_noi_bo():
         st.error("Sai tên đăng nhập hoặc mật khẩu.")
 
 
+@st.cache_resource
+def _kho_otp() -> auth.KhoMaOTP:
+    return auth.KhoMaOTP()
+
+
+def _form_ma_email():
+    """Đăng nhập bằng mã 6 số gửi vào email trường (qua flow Power Automate)."""
+    email_cho = st.session_state.get("_otp_email")
+    if not email_cho:
+        with st.form("form_otp_email"):
+            email = st.text_input("Email của trường", placeholder="ten.giaovien@truong.edu.vn")
+            gui = st.form_submit_button("📨 Gửi mã đăng nhập", type="primary", use_container_width=True)
+        if gui:
+            email = (email or "").strip().lower()
+            if not auth.vai_tro_theo_email(email, PHAN_QUYEN):
+                st.error("Email này không thuộc trường hoặc chưa được cấp quyền.")
+                return
+            ma, ly_do = _kho_otp().tao_ma(email, time_mod.time())
+            if not ma:
+                st.error(ly_do)
+                return
+            try:
+                r = requests.post(PHAN_QUYEN["otp_url"], timeout=60, json={
+                    "email": email, "ma": ma, "het_han_phut": auth.KhoMaOTP.HAN_PHUT,
+                    "ten_truong": st.session_state.get("cfg_school_name") or "",
+                })
+                if r.status_code >= 300:
+                    raise requests.RequestException(f"flow trả lỗi {r.status_code}: {r.text[:200]}")
+            except requests.RequestException as e:
+                _kho_otp().huy_ma(email)
+                st.error(f"Không gửi được email chứa mã: {e}")
+                return
+            st.session_state["_otp_email"] = email
+            st.rerun()
+        return
+
+    st.info(f"Đã gửi mã 6 số tới **{email_cho}** — kiểm tra hộp thư Outlook "
+            f"(cả mục Thư rác/Other). Mã có hiệu lực {auth.KhoMaOTP.HAN_PHUT} phút.")
+    with st.form("form_otp_ma"):
+        ma = st.text_input("Mã đăng nhập", max_chars=6)
+        xac_nhan = st.form_submit_button("Đăng nhập", type="primary", use_container_width=True)
+    if xac_nhan:
+        dung, ly_do = _kho_otp().kiem_tra(email_cho, ma, time_mod.time())
+        if dung:
+            st.session_state.pop("_otp_email", None)
+            st.session_state.nguoi_dung = {
+                "ten_dn": email_cho, "ten": email_cho.split("@")[0],
+                "vai_tro": auth.vai_tro_theo_email(email_cho, PHAN_QUYEN) or "user", "nguon": "email",
+            }
+            st.rerun()
+        st.error(ly_do)
+    if st.button("↩ Đổi email / gửi lại mã", use_container_width=True):
+        st.session_state.pop("_otp_email", None)
+        st.rerun()
+
+
 def man_hinh_dang_nhap():
     _, giua, _ = st.columns([1, 1.3, 1])
     with giua:
         st.markdown("### 🔐 Đăng nhập")
-        if DANG_NHAP_MS:
+        if DANG_NHAP_OTP:
+            st.caption("Nhập email của trường, hệ thống gửi mã đăng nhập vào hộp thư Outlook của bạn.")
+            _form_ma_email()
+            if TAI_KHOAN:
+                with st.expander("Đăng nhập bằng tài khoản nội bộ"):
+                    _form_tai_khoan_noi_bo()
+        elif DANG_NHAP_MS:
             st.caption("Giáo viên đăng nhập bằng tài khoản email Outlook (Microsoft 365) của trường.")
             if st.button("🟦 Đăng nhập bằng tài khoản Microsoft của trường", type="primary",
                          use_container_width=True):
@@ -942,7 +1005,7 @@ with st.sidebar:
     st.divider()
     if BAT_DANG_NHAP:
         st.markdown(f"👤 **{NGUOI_DUNG['ten']}**  \n{TEN_VAI_TRO[NGUOI_DUNG['vai_tro']]}")
-        if NGUOI_DUNG.get("nguon") == "microsoft":
+        if NGUOI_DUNG.get("nguon") in ("microsoft", "email"):
             st.caption(f"✉️ {NGUOI_DUNG['ten_dn']}")
         if st.button("🚪 Đăng xuất", use_container_width=True):
             dang_xuat_ms = NGUOI_DUNG.get("nguon") == "microsoft"
@@ -2675,7 +2738,24 @@ elif module == "👥 Tài khoản & Công bố":
             import secrets as _sec
             st.code(f'cookie_secret = "{_sec.token_urlsafe(32)}"', language="toml")
 
-    st.markdown("**🔐 Tài khoản nội bộ (tên đăng nhập + mật khẩu)** — không bắt buộc khi đã dùng Microsoft")
+    st.markdown("**📨 Đăng nhập bằng mã gửi qua email trường** (không cần quyền admin Microsoft)")
+    if DANG_NHAP_OTP:
+        st.success("Đã bật — giáo viên nhập email trường, nhận mã 6 số trong Outlook để đăng nhập. "
+                   "Quyền admin/user theo quy tắc email dưới đây.")
+        st.dataframe(pd.DataFrame([
+            {"Quy tắc": "Email là admin", "Giá trị": ", ".join(sorted(PHAN_QUYEN["admin_emails"])) or "— (chưa có!)"},
+            {"Quy tắc": "Tên miền là user", "Giá trị": ", ".join(sorted(PHAN_QUYEN["domains"])) or "—"},
+            {"Quy tắc": "Email user thêm", "Giá trị": ", ".join(sorted(PHAN_QUYEN["user_emails"])) or "—"},
+        ]), use_container_width=True, hide_index=True)
+        if not PHAN_QUYEN["admin_emails"] and not any(t["vai_tro"] == "admin" for t in TAI_KHOAN.values()):
+            st.error("Chưa có admin nào: khai báo admin_emails trong mục [phan_quyen].")
+        if not PHAN_QUYEN["domains"] and not PHAN_QUYEN["user_emails"]:
+            st.warning("Chưa giới hạn tên miền: email bất kỳ cũng nhận được mã và thành user. "
+                       "Khai báo domains = [\"tenmien-truong.edu.vn\"] trong mục [phan_quyen].")
+    else:
+        st.info("Chưa bật. Tạo flow gửi mã (xem PHAN_QUYEN.md, mục C) rồi thêm otp_url vào [phan_quyen].")
+
+    st.markdown("**🔐 Tài khoản nội bộ (tên đăng nhập + mật khẩu)** — không bắt buộc, dùng làm admin dự phòng")
     if TAI_KHOAN:
         st.dataframe(pd.DataFrame([
             {"Tên đăng nhập": tk["ten_dn"], "Tên hiển thị": tk["ten"], "Vai trò": TEN_VAI_TRO[tk["vai_tro"]],

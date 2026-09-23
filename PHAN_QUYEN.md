@@ -8,12 +8,63 @@
 | ☁️ Lưu trữ SharePoint | Lưu / tải / đồng bộ List | — |
 | 👥 Tài khoản & Công bố | Công bố, xem cấu hình đăng nhập | — |
 
-Có 2 cách đăng nhập, dùng 1 hoặc cả 2:
-- **A. Tài khoản Microsoft của trường** (email Outlook) — khuyên dùng cho giáo viên.
+Các cách đăng nhập (dùng 1 hoặc kết hợp):
+- **C. Mã gửi qua email trường** — giáo viên nhập email trường, nhận mã 6 số trong
+  Outlook. **Không cần App Registration / quyền admin Microsoft** — khuyên dùng.
+- **A. Tài khoản Microsoft của trường** (nút đăng nhập Microsoft) — cần App
+  Registration trên Microsoft Entra (thường phải có IT hỗ trợ).
 - **B. Tài khoản nội bộ** (tên đăng nhập + mật khẩu trong Secrets) — dùng làm
   tài khoản admin dự phòng.
 
+Với cả A và C, vai trò gán theo email trong mục `[phan_quyen]`: email trong
+`admin_emails` → admin; email thuộc `domains` (hoặc trong `user_emails`) → user;
+email khác bị từ chối.
+
 Chưa cấu hình cách nào thì app không yêu cầu đăng nhập (ai mở cũng là admin).
+
+---
+
+## C. Mã đăng nhập gửi qua email trường (không cần App Registration, không cần admin) — khuyên dùng
+
+Giáo viên nhập **email trường** → 1 flow Power Automate gửi **mã 6 số** vào hộp thư
+Outlook của giáo viên đó → nhập mã là đăng nhập. Ai đọc được hộp thư trường mới
+đăng nhập được, nên đây vẫn là "đăng nhập bằng mail trường". Flow gửi thư từ hộp
+thư của người tạo flow (VD `it.stp@...`), dùng connector Outlook thường.
+
+Bảo mật: mã hết hạn sau 10 phút, dùng 1 lần, sai 5 lần phải gửi mã mới; mỗi email
+chỉ gửi được 1 mã/phút và 5 mã/giờ; chỉ gửi cho email hợp lệ theo `[phan_quyen]`.
+Đăng nhập giữ đến khi đóng/tải lại tab trình duyệt (tải lại trang thì nhập mã mới).
+
+### C1. Tạo flow gửi mã (1 lần)
+1. https://make.powerautomate.com → **+ Tạo → Luồng đám mây tức thì** → tên
+   `TKB_GuiMaDangNhap` → trigger **When a HTTP request is received** → **Tạo**.
+2. Trigger: *Who can trigger the flow* = **Anyone**; *Request Body JSON Schema*:
+   ```json
+   {"type": "object", "properties": {
+     "email": {"type": "string"}, "ma": {"type": "string"},
+     "het_han_phut": {"type": "integer"}, "ten_truong": {"type": "string"}}}
+   ```
+3. **+ Thêm bước → Office 365 Outlook → Send an email (V2)**:
+   - *To*: chọn ô **email** (Dynamic content ⚡ của trigger)
+   - *Subject*: gõ `Mã đăng nhập Thời khoá biểu: ` rồi chèn ô **ma**
+   - *Body*: VD `Mã đăng nhập của bạn là ` **ma** `. Mã có hiệu lực ` **het_han_phut**
+     ` phút. Nếu bạn không yêu cầu, hãy bỏ qua thư này.`
+4. **+ Thêm bước → Response**: *Status Code* `200`, *Body* `{"ok": true}`.
+5. **Save** → mở lại trigger → copy **HTTP URL**.
+
+### C2. Dán vào Secrets
+```toml
+[phan_quyen]
+otp_url      = "<HTTP URL của flow TKB_GuiMaDangNhap>"
+admin_emails = ["it.stp@igcschool.edu.vn"]   # email được làm admin
+domains      = ["igcschool.edu.vn"]          # mọi email @igcschool.edu.vn là user
+```
+**Save** (+ **Reboot app**) → màn hình đăng nhập hiện ô **Email của trường** và nút
+**📨 Gửi mã đăng nhập**. Không nhận được thư: xem mục Thư rác/Other, hoặc mở
+**Run history** của flow.
+
+> 🔒 Ai có URL của flow đều nhờ flow gửi thư được — chỉ dán vào Secrets, không gửi
+> qua chat/email.
 
 ---
 
