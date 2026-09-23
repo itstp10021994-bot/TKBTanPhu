@@ -2154,8 +2154,109 @@ elif module == "☁️ Lưu trữ SharePoint":
                     st.error(f"Không đọc được dữ liệu từ SharePoint: {e}")
         st.markdown('</div>', unsafe_allow_html=True)
 
+    # ------------------------------------------------------------------
+    # Đồng bộ trực tiếp từng bảng <-> SharePoint List
+    # ------------------------------------------------------------------
+    TEN_BANG_VN = {
+        "departments": "Tổ chuyên môn", "teachers": "Giáo viên", "classes": "Lớp học",
+        "rooms": "Phòng đặc biệt", "activities": "Môn học & phân công",
+        "grade_times": "Thời gian biểu theo khối/ngày", "exam_students": "Học sinh dự thi",
+        "exam_rooms": "Phòng thi", "exam_subjects": "Môn thi",
+    }
+    st.session_state.grade_times = chuan_hoa_bang_gio(st.session_state.grade_times)
+    ds_bang = [b for b in storage.LIST_MAC_DINH if b in st.session_state]
+    cot_cua_bang = {b: [str(c) for c in st.session_state[b].columns] for b in ds_bang}
+    ket_noi_graph = ket_noi if isinstance(ket_noi, storage.GraphSharePoint) else None
+    ten_list_cua = {
+        b: (ket_noi_graph.ten_list(b) if ket_noi_graph else storage.LIST_MAC_DINH[b]) for b in ds_bang
+    }
+
+    st.markdown('<div class="section-card">', unsafe_allow_html=True)
+    section_header(
+        "2b", "Đồng bộ trực tiếp với SharePoint Lists",
+        "Mỗi bảng nhập liệu tương ứng 1 List trên SharePoint, mỗi dòng = 1 mục (item). Cột của List "
+        "được khớp theo <b>tên hiển thị</b> — không phân biệt dấu, hoa/thường, bỏ qua phần trong "
+        "ngoặc (VD cột <i>Họ và tên</i> hay <i>Ho va ten</i> đều khớp <i>Họ và tên (không bắt buộc)</i>). "
+        "Cột <i>Tiêu đề</i> mặc định của List không cần dùng — ứng dụng tự điền. Cách nhanh nhất để "
+        "tạo đúng các List: tải file Excel mẫu bên dưới, rồi trong Microsoft Lists chọn "
+        "<b>+ Danh sách mới → Từ Excel</b> cho từng sheet.",
+    )
+    st.dataframe(pd.DataFrame([
+        {"Bảng trong ứng dụng": TEN_BANG_VN.get(b, b), "Tên List": ten_list_cua[b],
+         "Các cột cần có": " | ".join(cot_cua_bang[b])}
+        for b in ds_bang
+    ]), use_container_width=True, hide_index=True)
+    st.download_button(
+        "📄 Tải file Excel mẫu để tạo List (mỗi List 1 sheet, kèm dữ liệu hiện tại)",
+        data=storage.mau_excel_tao_list({b: st.session_state[b] for b in ds_bang}, ten_list_cua),
+        file_name="mau_tao_sharepoint_lists.xlsx", use_container_width=True,
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+    if ket_noi_graph is None:
+        st.info(
+            "Đồng bộ trực tiếp với List cần kết nối **Microsoft Graph** (mục [sharepoint] trong "
+            "Secrets, xem HUONG_DAN_SHAREPOINT.md). Cách Power Automate hiện chỉ hỗ trợ lưu file ở mục 2."
+        )
+    else:
+        bang_chon = st.multiselect(
+            "Chọn bảng cần đồng bộ", ds_bang, default=ds_bang, key="list_bang_chon",
+            format_func=lambda b: f"{TEN_BANG_VN.get(b, b)} ⇄ {ten_list_cua[b]}",
+        )
+        k1, k2, k3 = st.columns(3)
+        with k1:
+            kiem_tra_btn = st.button("🔍 Kiểm tra List & cột", use_container_width=True)
+        with k2:
+            ghi_list_btn = st.button("⬆️ Ghi các bảng lên List", type="primary", use_container_width=True)
+        with k3:
+            doc_list_btn = st.button("⬇️ Đọc từ List vào ứng dụng", use_container_width=True)
+        dong_y_ghi = st.checkbox(
+            "Tôi hiểu: khi ghi, TOÀN BỘ mục cũ trong các List đã chọn sẽ bị thay bằng dữ liệu hiện tại "
+            "của ứng dụng.", key="list_dong_y_ghi",
+        )
+        try:
+            if kiem_tra_btn:
+                with st.spinner("Đang kiểm tra các List..."):
+                    kq_kt = ket_noi_graph.kiem_tra_list({b: cot_cua_bang[b] for b in bang_chon})
+                st.dataframe(pd.DataFrame([
+                    {"Bảng": TEN_BANG_VN.get(x["bang"], x["bang"]), "List": x["list"],
+                     "Trạng thái": ("✅ Đủ cột" if not x["thieu"] else "⚠️ Thiếu cột") if x["co_list"]
+                     else "❌ Không tìm thấy List",
+                     "Cột thiếu": ", ".join(x["thieu"]) if x["co_list"] else "",
+                     "Cột đã khớp": "; ".join(x["khop"])}
+                    for x in kq_kt
+                ]), use_container_width=True, hide_index=True)
+            if ghi_list_btn:
+                if not dong_y_ghi:
+                    st.warning("Tick ô xác nhận bên dưới các nút trước khi ghi lên List.")
+                else:
+                    tien_do = st.progress(0.0, text="Đang ghi lên SharePoint Lists...")
+                    for n, b in enumerate(bang_chon, start=1):
+                        so_dong, cb = ket_noi_graph.ghi_list(b, st.session_state[b])
+                        st.success(f"✅ {TEN_BANG_VN.get(b, b)} → List '{ten_list_cua[b]}': {so_dong} dòng.")
+                        for c in cb:
+                            st.warning(c)
+                        tien_do.progress(n / max(len(bang_chon), 1))
+            if doc_list_btn:
+                ghi_chu = []
+                with st.spinner("Đang đọc các List..."):
+                    for b in bang_chon:
+                        df_moi, cb = ket_noi_graph.doc_list(b, cot_cua_bang[b])
+                        if b == "grade_times":
+                            df_moi = chuan_hoa_bang_gio(df_moi)
+                        st.session_state[b] = df_moi
+                        st.session_state.pop(f"editor_{b}", None)
+                        ghi_chu.append(f"✅ Đã đọc {len(df_moi)} dòng từ List '{ten_list_cua[b]}' "
+                                       f"vào bảng {TEN_BANG_VN.get(b, b)}.")
+                        ghi_chu += [f"⚠️ {c}" for c in cb]
+                st.session_state["_ghi_chu_storage"] = ghi_chu
+                st.rerun()
+        except (storage.LoiLuuTru, requests.RequestException) as e:
+            st.error(f"Lỗi đồng bộ List: {e}")
+    st.markdown('</div>', unsafe_allow_html=True)
+
     for gc in st.session_state.pop("_ghi_chu_storage", []):
-        st.success(gc)
+        (st.warning if gc.startswith("⚠️") else st.success)(gc)
 
     st.markdown('<div class="section-card">', unsafe_allow_html=True)
     section_header(

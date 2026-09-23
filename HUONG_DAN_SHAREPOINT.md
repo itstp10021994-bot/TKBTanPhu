@@ -144,6 +144,59 @@ hiệu mỗi khi có bản thời khoá biểu mới, hoặc *Start and wait for
 
 ---
 
+## Đồng bộ trực tiếp với SharePoint Lists (mục 2b trong module ☁️)
+
+Ngoài lưu file, ứng dụng ghi/đọc thẳng từng bảng vào **SharePoint List** —
+mỗi dòng của bảng = 1 mục của List. Cần kết nối **Cách 1 (Microsoft Graph)**
+và App Registration có quyền **write** trên site chứa các List.
+
+> Nên tạo List trong 1 **site** (VD Team Site của trường), không để ở "Danh sách
+> của tôi" (OneDrive cá nhân). Khi đó `site_url` trong Secrets là địa chỉ site,
+> VD `https://tenmien.sharepoint.com/sites/TKB` (dán cả link của 1 List cũng được,
+> ứng dụng tự lấy phần địa chỉ site).
+
+### Tên List & tên cột
+| Tên List | Các cột (tên hiển thị) | Cột kiểu **Số** |
+|---|---|---|
+| `ToChuyenMon` | Tên tổ | |
+| `GiaoVien` | Tên giáo viên · Tổ chuyên môn | |
+| `LopHoc` | Tên lớp · Khối · Nhóm thứ tự | Khối, Nhóm thứ tự |
+| `PhongDacBiet` | Tên phòng · Loại phòng · Số phòng cùng loại | Số phòng cùng loại |
+| `MonHocPhanCong` | Tên hoạt động · Môn · Số tiết/tuần · Lớp · GV chính · GV phụ · Loại phòng cần · Mã đồng bộ · Cố định trước | Số tiết/tuần |
+| `GioHocTheoKhoi` | Khối · Thứ · Tiết · Giờ bắt đầu · Giờ kết thúc | Khối, Tiết |
+| `DanhSachHocSinhThi` | SBD · Họ và tên · Lớp · Môn thi | |
+| `DanhSachPhongThi` | Tên phòng · Sức chứa · Số cột bàn | Sức chứa, Số cột bàn |
+| `MonThi` | Môn thi · Lớp áp dụng · Ngày thi · Ca thi · Chế độ xếp | |
+
+- Tên cột được khớp **không phân biệt dấu, hoa/thường, bỏ qua phần trong
+  ngoặc**: `Số tiết/tuần`, `So tiet tuan`, `Số tiết (tuần)`... đều khớp.
+- Các cột không phải số tạo kiểu **Một dòng văn bản** (Single line of text).
+  Cột "Môn thi" của học sinh có thể dài → chọn **Nhiều dòng văn bản**.
+- Cột **Tiêu đề** (Title) mặc định của List: có thể đổi tên thành cột đầu tiên
+  (VD "Tên lớp") hoặc để nguyên — ứng dụng tự điền giá trị cột đầu tiên vào đó.
+- List `SoTietTheoKhoiNgay` **không còn dùng** — đã gộp vào `GioHocTheoKhoi`.
+- Muốn dùng tên List khác, khai báo trong Secrets:
+  ```toml
+  [sharepoint.lists]
+  classes = "DanhSachLop"      # departments, teachers, classes, rooms, activities,
+                               # grade_times, exam_students, exam_rooms, exam_subjects
+  ```
+
+**Cách nhanh nhất**: trong module ☁️ bấm **📄 Tải file Excel mẫu để tạo List**
+(mỗi List 1 sheet, đã kèm dữ liệu hiện tại), rồi vào Microsoft Lists →
+**+ Danh sách mới → Từ Excel** → chọn file → chọn đúng bảng (table) → **Lưu vào**
+site của trường, đặt tên List đúng như bảng trên.
+
+### Sử dụng
+1. **🔍 Kiểm tra List & cột** — xem List nào chưa có, thiếu cột nào.
+2. **⬆️ Ghi các bảng lên List** — tick ô xác nhận trước; toàn bộ mục cũ trong
+   List được thay bằng dữ liệu hiện tại của ứng dụng (giữ đúng thứ tự dòng).
+3. **⬇️ Đọc từ List vào ứng dụng** — nạp dữ liệu từ List vào các bảng (VD sau
+   khi nhiều người cùng nhập liệu trực tiếp trên SharePoint).
+
+Kết quả xếp thời khoá biểu / phòng thi không nằm trong List — dùng nút
+**💾 Lưu lên SharePoint** (mục 2) để lưu cả kết quả dưới dạng file.
+
 ## Không có SharePoint?
 
 Mục **3. Sao lưu trên máy** trong cùng module luôn dùng được: tải file `.json`
