@@ -8,6 +8,7 @@ Deploy:      đẩy lên GitHub rồi deploy trên https://share.streamlit.io
 
 import html
 import io
+import json
 import random
 import re
 import unicodedata
@@ -15,6 +16,7 @@ from datetime import date, datetime, time, timedelta
 
 import streamlit as st
 import pandas as pd
+import requests
 
 from models import (
     TimetableInput, ScheduleConfig, Department, Teacher, SchoolClass,
@@ -26,6 +28,8 @@ from exports import (
     exam_rooms_to_pdf_bytes, substitution_to_pdf_bytes,
 )
 import exam_rooms as er
+import storage
+from models import TimetableResult
 
 st.set_page_config(page_title="Xếp Thời Khoá Biểu", layout="wide", page_icon="🗓️")
 
@@ -668,6 +672,16 @@ if "exam_results" not in st.session_state:
 if "substitutions" not in st.session_state:
     st.session_state.substitutions = {}  # {(ngay_thu, tiet, lop_key): {...}}
 
+# Giá trị cấu hình gắn với widget: khởi tạo mặc định 1 lần, và gán lại mỗi
+# lần chạy để Streamlit KHÔNG xoá mất khi người dùng chuyển sang module khác
+# (widget không được hiển thị thì Streamlit dọn state của nó).
+CFG_DEFAULTS = dict(
+    cfg_num_days=6, cfg_periods_per_day=5, cfg_morning_count=3, cfg_max_seconds=30,
+    cfg_school_name="",
+)
+for key, default in CFG_DEFAULTS.items():
+    st.session_state[key] = st.session_state.get(key, default)
+
 num_days = st.session_state.get("cfg_num_days", 6)
 periods_per_day = st.session_state.get("cfg_periods_per_day", 5)
 morning_count = st.session_state.get("cfg_morning_count", 3)
@@ -701,6 +715,7 @@ with st.sidebar:
             "📅 Xếp Thời Khoá Biểu",
             "🪑 Xếp Phòng Thi",
             "🔄 Phân Công Dạy Thay",
+            "☁️ Lưu trữ SharePoint",
         ],
         key="active_module",
         label_visibility="visible",
@@ -743,26 +758,30 @@ if module == "📅 Xếp Thời Khoá Biểu":
         section_header("1", "Cấu hình lịch học")
         c1, c2, c3 = st.columns(3)
         with c1:
-            num_days = st.selectbox("Số ngày học/tuần", [5, 6], index=1, key="cfg_num_days")
+            num_days = st.selectbox("Số ngày học/tuần", [5, 6], key="cfg_num_days")
         with c2:
             periods_per_day = st.number_input(
-                "Số tiết/ngày TỐI ĐA", min_value=1, max_value=15, value=5,
+                "Số tiết/ngày TỐI ĐA", min_value=1, max_value=15,
                 help="Số tiết của ngày học DÀI NHẤT trong tuần (tính trên toàn trường). "
-                     "Nếu 1 số khối có ít tiết hơn vào 1 số ngày, khai báo ở mục '3. Số tiết mỗi "
-                     "ngày theo từng khối' bên dưới — không cần đổi số này xuống thấp.",
+                     "Nếu 1 số khối có ít tiết hơn vào 1 số ngày, khai báo ở mục '2. Thời gian "
+                     "biểu theo từng khối, từng ngày' bên dưới — không cần đổi số này xuống thấp.",
                 key="cfg_periods_per_day",
             )
         with c3:
+            # số tiết buổi sáng không được vượt số tiết/ngày vừa chọn
+            st.session_state.cfg_morning_count = min(
+                int(st.session_state.cfg_morning_count), int(periods_per_day)
+            )
             morning_count = st.number_input(
                 "Số tiết buổi sáng (còn lại là buổi chiều)", min_value=1,
-                max_value=int(periods_per_day), value=min(3, int(periods_per_day)),
+                max_value=int(periods_per_day),
                 key="cfg_morning_count",
             )
         max_seconds = st.slider(
-            "Thời gian tối đa cho solver tìm lời giải (giây)", 5, 120, 30, key="cfg_max_seconds"
+            "Thời gian tối đa cho solver tìm lời giải (giây)", 5, 120, key="cfg_max_seconds"
         )
         school_name = st.text_input(
-            "Tên trường (hiển thị trên PDF xuất ra, không bắt buộc)", value="",
+            "Tên trường (hiển thị trên PDF xuất ra, không bắt buộc)",
             key="cfg_school_name",
         )
         st.session_state.tuan_bat_dau = st.date_input(
@@ -2031,6 +2050,147 @@ elif module == "🔄 Phân Công Dạy Thay":
                             st.rerun()
 
             st.markdown('</div>', unsafe_allow_html=True)
+
+# ---------------------------------------------------------------------
+# MODULE 4 — Lưu trữ dữ liệu lên SharePoint (Graph API / Power Automate)
+# ---------------------------------------------------------------------
+elif module == "☁️ Lưu trữ SharePoint":
+    try:
+        ds_ket_noi = storage.tao_ket_noi(st.secrets)
+    except Exception:
+        ds_ket_noi = []
+
+    st.markdown('<div class="section-card">', unsafe_allow_html=True)
+    section_header(
+        "1", "Kết nối SharePoint",
+        "Lưu TOÀN BỘ dữ liệu (các bảng nhập liệu, cấu hình, thời gian biểu, kết quả thời khoá biểu, "
+        "phòng thi, dạy thay) lên thư viện tài liệu SharePoint của trường. Mỗi lần lưu tạo 2 file "
+        "cùng tên: <b>.json</b> (để tải lại vào ứng dụng) và <b>.xlsx</b> (mở xem trực tiếp trên "
+        "SharePoint). Có 2 cách kết nối: gọi thẳng Microsoft Graph, hoặc qua flow Power Automate.",
+    )
+    ket_noi = None
+    if not ds_ket_noi:
+        st.warning(
+            "Chưa cấu hình kết nối SharePoint. Quản trị viên cần thêm mục **[sharepoint]** hoặc "
+            "**[power_automate]** vào Secrets của ứng dụng (Streamlit Cloud: *Manage app → Settings "
+            "→ Secrets*; chạy trên máy: file `.streamlit/secrets.toml`). Hướng dẫn từng bước trong "
+            "file `HUONG_DAN_SHAREPOINT.md` của repo. Trong lúc chờ, bạn vẫn dùng được mục 3 "
+            "(sao lưu trên máy)."
+        )
+    else:
+        if len(ds_ket_noi) > 1:
+            chon = st.radio(
+                "Chọn cách kết nối", [k for k, _, _ in ds_ket_noi], horizontal=True,
+                format_func=lambda k: {"sharepoint": "Microsoft Graph", "power_automate": "Power Automate"}[k],
+                key="storage_backend",
+            )
+        else:
+            chon = ds_ket_noi[0][0]
+        khoa, cfg, lop = next(x for x in ds_ket_noi if x[0] == chon)
+        try:
+            ket_noi = lop(cfg)
+            st.success(f"✅ Đã cấu hình: **{ket_noi.ten_hien_thi}**")
+        except storage.LoiLuuTru as e:
+            st.error(str(e))
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    if ket_noi is not None:
+        st.markdown('<div class="section-card">', unsafe_allow_html=True)
+        section_header("2", "Lưu & tải dữ liệu trên SharePoint")
+        l1, l2 = st.columns([3, 1])
+        with l1:
+            ten_ban_luu = st.text_input(
+                "Tên bản lưu", value=f"TKB_{date.today().strftime('%Y-%m-%d')}", key="storage_ten",
+                help="Trùng tên với bản đã có thì bản cũ bị ghi đè (SharePoint vẫn giữ lịch sử "
+                     "phiên bản của file).",
+            )
+        with l2:
+            st.write("")
+            st.write("")
+            luu_btn = st.button("💾 Lưu lên SharePoint", type="primary", use_container_width=True)
+        if luu_btn:
+            try:
+                with st.spinner("Đang lưu lên SharePoint..."):
+                    duong_dan = ket_noi.luu(ten_ban_luu, storage.dong_goi(st.session_state))
+                st.success(f"✅ Đã lưu: `{duong_dan}` (kèm bản .xlsx cùng tên).")
+                st.session_state.pop("storage_ds", None)
+            except (storage.LoiLuuTru, requests.RequestException) as e:
+                st.error(f"Lưu thất bại: {e}")
+
+        st.divider()
+        if isinstance(ket_noi, storage.PowerAutomate) and not ket_noi.co_the_tai():
+            st.info("Để tải dữ liệu ngược từ SharePoint về, cấu hình thêm list_url và load_url "
+                    "trong mục [power_automate] (xem hướng dẫn).")
+        else:
+            if st.button("🔄 Xem các bản đã lưu") or "storage_ds" in st.session_state:
+                try:
+                    if "storage_ds" not in st.session_state:
+                        with st.spinner("Đang đọc danh sách..."):
+                            st.session_state.storage_ds = ket_noi.danh_sach()
+                    ds = st.session_state.storage_ds
+                    if not ds:
+                        st.info("Chưa có bản lưu nào trên SharePoint.")
+                    else:
+                        t1, t2 = st.columns([3, 1])
+                        with t1:
+                            ban_chon = st.selectbox(
+                                "Chọn bản lưu", [x["ten"] for x in ds], key="storage_chon",
+                                format_func=lambda t: t + next(
+                                    (f"  —  sửa lúc {x['sua_luc'][:16].replace('T', ' ')}"
+                                     for x in ds if x["ten"] == t and x["sua_luc"]), ""),
+                            )
+                        with t2:
+                            st.write("")
+                            st.write("")
+                            tai_btn = st.button("📂 Tải vào ứng dụng", use_container_width=True)
+                        st.caption("⚠️ Tải bản lưu sẽ THAY THẾ toàn bộ dữ liệu đang có trong ứng dụng.")
+                        if tai_btn:
+                            with st.spinner("Đang tải..."):
+                                goi = ket_noi.tai(ban_chon)
+                            st.session_state["_ghi_chu_storage"] = [f"✅ Đã tải bản lưu '{ban_chon}'."] + \
+                                storage.giai_nen(goi, st.session_state, TimetableResult, SchoolClass, ScheduleConfig)
+                            st.rerun()
+                except (storage.LoiLuuTru, requests.RequestException, ValueError) as e:
+                    st.error(f"Không đọc được dữ liệu từ SharePoint: {e}")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    for gc in st.session_state.pop("_ghi_chu_storage", []):
+        st.success(gc)
+
+    st.markdown('<div class="section-card">', unsafe_allow_html=True)
+    section_header(
+        "3", "Sao lưu trên máy (không cần SharePoint)",
+        "Tải toàn bộ dữ liệu về máy dưới dạng file .json, hoặc khôi phục lại từ file đó.",
+    )
+    b1, b2 = st.columns(2)
+    with b1:
+        goi_may = storage.dong_goi(st.session_state)
+        st.download_button(
+            "📥 Tải file sao lưu (.json)",
+            data=json.dumps(goi_may, ensure_ascii=False, indent=1).encode("utf-8"),
+            file_name=f"{storage.ten_file_an_toan(st.session_state.get('storage_ten', 'TKB'))}.json",
+            mime="application/json", use_container_width=True,
+        )
+        st.download_button(
+            "📊 Tải bản Excel (mỗi bảng 1 sheet)", data=storage.sang_excel(goi_may),
+            file_name="du_lieu_tkb.xlsx", use_container_width=True,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+    with b2:
+        file_sao_luu = st.file_uploader("📤 Khôi phục từ file sao lưu (.json)", type=["json"],
+                                        key="up_sao_luu")
+        if file_sao_luu is not None:
+            marker = f"{file_sao_luu.name}:{file_sao_luu.size}"
+            if st.session_state.get("_imported_sao_luu") != marker:
+                try:
+                    goi = json.loads(file_sao_luu.getvalue().decode("utf-8-sig"))
+                    ghi_chu = storage.giai_nen(goi, st.session_state, TimetableResult, SchoolClass, ScheduleConfig)
+                    st.session_state["_imported_sao_luu"] = marker
+                    st.session_state["_ghi_chu_storage"] = [f"✅ Đã khôi phục từ '{file_sao_luu.name}'."] + ghi_chu
+                    st.rerun()
+                except (ValueError, storage.LoiLuuTru) as e:
+                    st.error(f"Không khôi phục được: {e}")
+    st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown(
     '<div class="app-footer">Ứng dụng được phát triển bởi Chuyên viên Quản lý hệ thống — '
