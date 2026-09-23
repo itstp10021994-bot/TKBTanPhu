@@ -61,6 +61,12 @@ Bản Streamlit (`streamlit_app/`) còn có thêm:
   Xuất được **PDF** (danh sách theo từng phòng có cột ký tên, sơ đồ chỗ ngồi,
   thẻ báo danh), **Excel** theo phòng, và 1 file Excel tổng hợp SBD + phòng
   thi từng môn của mỗi học sinh.
+- **☁️ Lưu trữ SharePoint** (module mới ở thanh bên trái): lưu/tải toàn bộ dữ
+  liệu (bảng nhập liệu, cấu hình, kết quả TKB, phòng thi, dạy thay) lên thư
+  viện tài liệu SharePoint — mỗi lần lưu tạo `<tên>.json` (để nạp lại) và
+  `<tên>.xlsx` (xem trên SharePoint). Kết nối bằng Microsoft Graph (App
+  Registration) hoặc qua flow Power Automate; cấu hình trong Secrets, xem
+  **HUONG_DAN_SHAREPOINT.md**. Có thêm sao lưu/khôi phục file `.json` trên máy.
 - **Ngày thực tế theo lịch**: chọn "Ngày bắt đầu tuần (Thứ 2)" ở tab Cấu hình
   chung, mọi nơi hiển thị "Thứ 2/3/4..." sẽ kèm luôn ngày thật (VD "Thứ 2
   (08/09)") trên màn hình, PDF và Excel.
