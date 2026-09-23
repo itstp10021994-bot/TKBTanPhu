@@ -82,7 +82,7 @@ Bản Streamlit (`streamlit_app/`) còn có thêm:
   Bản công bố lưu trên máy chủ và SharePoint (file hoặc List `TKB_CongBo`).
 - **Đăng lên Microsoft Teams** khi công bố (xem **TEAMS.md**): tự tạo PDF/Excel thời
   khoá biểu các lớp, từng giáo viên, lịch coi thi → flow Power Automate lưu vào thư
-  mục chỉ định của kênh Teams và đăng tin nhắn thông báo.
+  mục chỉ định của kênh Teams và đăng **bài có ảnh TKB + thẻ tệp** như đăng tay.
 - **Ngày thực tế theo lịch**: chọn "Ngày bắt đầu tuần (Thứ 2)" ở tab Cấu hình
   chung, mọi nơi hiển thị "Thứ 2/3/4..." sẽ kèm luôn ngày thật (VD "Thứ 2
   (08/09)") trên màn hình, PDF và Excel.
