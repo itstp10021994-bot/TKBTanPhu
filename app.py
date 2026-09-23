@@ -2094,9 +2094,9 @@ elif module == "☁️ Lưu trữ SharePoint":
             st.error(str(e))
     st.markdown('</div>', unsafe_allow_html=True)
 
-    if ket_noi is not None:
+    if ket_noi is not None and ket_noi.co_luu_file:
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        section_header("2", "Lưu & tải dữ liệu trên SharePoint")
+        section_header("2", "Lưu & tải file sao lưu trên SharePoint")
         l1, l2 = st.columns([3, 1])
         with l1:
             ten_ban_luu = st.text_input(
@@ -2166,9 +2166,9 @@ elif module == "☁️ Lưu trữ SharePoint":
     st.session_state.grade_times = chuan_hoa_bang_gio(st.session_state.grade_times)
     ds_bang = [b for b in storage.LIST_MAC_DINH if b in st.session_state]
     cot_cua_bang = {b: [str(c) for c in st.session_state[b].columns] for b in ds_bang}
-    ket_noi_graph = ket_noi if isinstance(ket_noi, storage.GraphSharePoint) else None
+    ket_noi_list = ket_noi if (ket_noi is not None and ket_noi.co_dong_bo_list) else None
     ten_list_cua = {
-        b: (ket_noi_graph.ten_list(b) if ket_noi_graph else storage.LIST_MAC_DINH[b]) for b in ds_bang
+        b: (ket_noi_list.ten_list(b) if ket_noi_list else storage.LIST_MAC_DINH[b]) for b in ds_bang
     }
 
     st.markdown('<div class="section-card">', unsafe_allow_html=True)
@@ -2193,10 +2193,11 @@ elif module == "☁️ Lưu trữ SharePoint":
         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
-    if ket_noi_graph is None:
+    if ket_noi_list is None:
         st.info(
-            "Đồng bộ trực tiếp với List cần kết nối **Microsoft Graph** (mục [sharepoint] trong "
-            "Secrets, xem HUONG_DAN_SHAREPOINT.md). Cách Power Automate hiện chỉ hỗ trợ lưu file ở mục 2."
+            "Để đồng bộ với List, cấu hình 1 trong 2: **sp_url** trong mục [power_automate] (1 flow "
+            "Power Automate chạy bằng tài khoản của bạn — dùng được với *Danh sách của tôi*, không "
+            "cần admin), hoặc mục [sharepoint] (Microsoft Graph). Xem HUONG_DAN_SHAREPOINT.md."
         )
     else:
         bang_chon = st.multiselect(
@@ -2217,7 +2218,7 @@ elif module == "☁️ Lưu trữ SharePoint":
         try:
             if kiem_tra_btn:
                 with st.spinner("Đang kiểm tra các List..."):
-                    kq_kt = ket_noi_graph.kiem_tra_list({b: cot_cua_bang[b] for b in bang_chon})
+                    kq_kt = ket_noi_list.kiem_tra_list({b: cot_cua_bang[b] for b in bang_chon})
                 st.dataframe(pd.DataFrame([
                     {"Bảng": TEN_BANG_VN.get(x["bang"], x["bang"]), "List": x["list"],
                      "Trạng thái": ("✅ Đủ cột" if not x["thieu"] else "⚠️ Thiếu cột") if x["co_list"]
@@ -2232,7 +2233,7 @@ elif module == "☁️ Lưu trữ SharePoint":
                 else:
                     tien_do = st.progress(0.0, text="Đang ghi lên SharePoint Lists...")
                     for n, b in enumerate(bang_chon, start=1):
-                        so_dong, cb = ket_noi_graph.ghi_list(b, st.session_state[b])
+                        so_dong, cb = ket_noi_list.ghi_list(b, st.session_state[b])
                         st.success(f"✅ {TEN_BANG_VN.get(b, b)} → List '{ten_list_cua[b]}': {so_dong} dòng.")
                         for c in cb:
                             st.warning(c)
@@ -2241,7 +2242,7 @@ elif module == "☁️ Lưu trữ SharePoint":
                 ghi_chu = []
                 with st.spinner("Đang đọc các List..."):
                     for b in bang_chon:
-                        df_moi, cb = ket_noi_graph.doc_list(b, cot_cua_bang[b])
+                        df_moi, cb = ket_noi_list.doc_list(b, cot_cua_bang[b])
                         if b == "grade_times":
                             df_moi = chuan_hoa_bang_gio(df_moi)
                         st.session_state[b] = df_moi
