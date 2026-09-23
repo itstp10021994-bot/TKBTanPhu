@@ -684,7 +684,9 @@ if "substitutions" not in st.session_state:
 # Tài khoản khai báo trong Secrets ([auth.users.<tên>]) — xem auth.py.
 # =======================================================================
 TAI_KHOAN = auth.doc_tai_khoan(st.secrets)
-BAT_DANG_NHAP = bool(TAI_KHOAN)
+PHAN_QUYEN = auth.doc_phan_quyen(st.secrets)
+DANG_NHAP_MS = auth.dang_nhap_microsoft_bat(st.secrets)
+BAT_DANG_NHAP = bool(TAI_KHOAN) or DANG_NHAP_MS
 TEN_VAI_TRO = {"admin": "Quản trị (admin)", "user": "Người dùng (user)"}
 
 
@@ -694,30 +696,73 @@ def _dem_dang_nhap_sai() -> dict:
     return {}
 
 
+def _email_microsoft() -> str:
+    """Email của người đã đăng nhập Microsoft (st.user), '' nếu chưa."""
+    try:
+        if not st.user.is_logged_in:
+            return ""
+        return str(st.user.get("email") or st.user.get("preferred_username")
+                   or st.user.get("upn") or "").strip().lower()
+    except Exception:
+        return ""
+
+
+def _form_tai_khoan_noi_bo():
+    with st.form("form_dang_nhap"):
+        ten_dn = st.text_input("Tên đăng nhập")
+        mat_khau = st.text_input("Mật khẩu", type="password")
+        dang_nhap = st.form_submit_button("Đăng nhập", use_container_width=True,
+                                          type="secondary" if DANG_NHAP_MS else "primary")
+    if dang_nhap:
+        dem = _dem_dang_nhap_sai()
+        khoa = (ten_dn or "").strip().lower()
+        so_lan, khoa_den = dem.get(khoa, (0, 0.0))
+        if time_mod.time() < khoa_den:
+            st.error(f"Sai mật khẩu quá nhiều lần — thử lại sau {int(khoa_den - time_mod.time()) + 1} giây.")
+            return
+        nguoi_dung = auth.xac_thuc(TAI_KHOAN, ten_dn, mat_khau)
+        if nguoi_dung:
+            dem.pop(khoa, None)
+            st.session_state.nguoi_dung = {**nguoi_dung, "nguon": "noi_bo"}
+            st.rerun()
+        so_lan += 1
+        dem[khoa] = (0, time_mod.time() + 60) if so_lan >= 5 else (so_lan, 0.0)
+        st.error("Sai tên đăng nhập hoặc mật khẩu.")
+
+
 def man_hinh_dang_nhap():
     _, giua, _ = st.columns([1, 1.3, 1])
     with giua:
-        with st.form("form_dang_nhap"):
-            st.markdown("### 🔐 Đăng nhập")
-            ten_dn = st.text_input("Tên đăng nhập")
-            mat_khau = st.text_input("Mật khẩu", type="password")
-            dang_nhap = st.form_submit_button("Đăng nhập", type="primary", use_container_width=True)
-        if dang_nhap:
-            dem = _dem_dang_nhap_sai()
-            khoa = (ten_dn or "").strip().lower()
-            so_lan, khoa_den = dem.get(khoa, (0, 0.0))
-            if time_mod.time() < khoa_den:
-                st.error(f"Sai mật khẩu quá nhiều lần — thử lại sau {int(khoa_den - time_mod.time()) + 1} giây.")
-                return
-            nguoi_dung = auth.xac_thuc(TAI_KHOAN, ten_dn, mat_khau)
-            if nguoi_dung:
-                dem.pop(khoa, None)
-                st.session_state.nguoi_dung = nguoi_dung
-                st.rerun()
-            so_lan += 1
-            dem[khoa] = (0, time_mod.time() + 60) if so_lan >= 5 else (so_lan, 0.0)
-            st.error("Sai tên đăng nhập hoặc mật khẩu.")
+        st.markdown("### 🔐 Đăng nhập")
+        if DANG_NHAP_MS:
+            st.caption("Giáo viên đăng nhập bằng tài khoản email Outlook (Microsoft 365) của trường.")
+            if st.button("🟦 Đăng nhập bằng tài khoản Microsoft của trường", type="primary",
+                         use_container_width=True):
+                st.login()
+            if TAI_KHOAN:
+                with st.expander("Đăng nhập bằng tài khoản nội bộ"):
+                    _form_tai_khoan_noi_bo()
+        else:
+            _form_tai_khoan_noi_bo()
 
+
+if BAT_DANG_NHAP and not st.session_state.get("nguoi_dung") and DANG_NHAP_MS:
+    _email = _email_microsoft()
+    if _email:
+        _vai_tro = auth.vai_tro_theo_email(_email, PHAN_QUYEN)
+        if _vai_tro:
+            st.session_state.nguoi_dung = {
+                "ten_dn": _email, "ten": str(st.user.get("name") or _email),
+                "vai_tro": _vai_tro, "nguon": "microsoft",
+            }
+        else:
+            _, giua, _ = st.columns([1, 1.3, 1])
+            with giua:
+                st.error(f"Tài khoản **{_email}** chưa được cấp quyền sử dụng ứng dụng. "
+                         "Liên hệ quản trị viên, hoặc đăng nhập bằng email của trường.")
+                if st.button("🔄 Đăng nhập bằng tài khoản khác", use_container_width=True):
+                    st.logout()
+            st.stop()
 
 if BAT_DANG_NHAP and not st.session_state.get("nguoi_dung"):
     man_hinh_dang_nhap()
@@ -897,9 +942,14 @@ with st.sidebar:
     st.divider()
     if BAT_DANG_NHAP:
         st.markdown(f"👤 **{NGUOI_DUNG['ten']}**  \n{TEN_VAI_TRO[NGUOI_DUNG['vai_tro']]}")
+        if NGUOI_DUNG.get("nguon") == "microsoft":
+            st.caption(f"✉️ {NGUOI_DUNG['ten_dn']}")
         if st.button("🚪 Đăng xuất", use_container_width=True):
+            dang_xuat_ms = NGUOI_DUNG.get("nguon") == "microsoft"
             for k in list(st.session_state.keys()):
                 del st.session_state[k]
+            if dang_xuat_ms:
+                st.logout()  # xoá cookie đăng nhập Microsoft
             st.rerun()
     else:
         st.caption("⚠️ Chưa bật đăng nhập — ai mở app cũng có quyền admin. Xem module 👥.")
@@ -2605,20 +2655,37 @@ elif module == "👥 Tài khoản & Công bố":
         {"Quyền": "👥 Tài khoản & Công bố", "admin": "Công bố, xem tài khoản", "user": "—"},
     ]), use_container_width=True, hide_index=True)
 
+    st.markdown("**🟦 Đăng nhập bằng tài khoản Microsoft (email Outlook của trường)**")
+    if DANG_NHAP_MS:
+        st.success("Đã bật — giáo viên bấm 'Đăng nhập bằng tài khoản Microsoft của trường'.")
+        st.dataframe(pd.DataFrame([
+            {"Quy tắc": "Email là admin", "Giá trị": ", ".join(sorted(PHAN_QUYEN["admin_emails"])) or "— (chưa có!)"},
+            {"Quy tắc": "Tên miền là user", "Giá trị": ", ".join(sorted(PHAN_QUYEN["domains"])) or "—"},
+            {"Quy tắc": "Email user thêm", "Giá trị": ", ".join(sorted(PHAN_QUYEN["user_emails"])) or "—"},
+        ]), use_container_width=True, hide_index=True)
+        if not PHAN_QUYEN["domains"] and not PHAN_QUYEN["user_emails"]:
+            st.warning("Chưa giới hạn tên miền: MỌI tài khoản Microsoft đăng nhập được đều thành user. "
+                       "Nên khai báo domains = [\"tenmien-truong.edu.vn\"] trong mục [phan_quyen].")
+        if not PHAN_QUYEN["admin_emails"] and not any(t["vai_tro"] == "admin" for t in TAI_KHOAN.values()):
+            st.error("Chưa có admin nào: khai báo admin_emails trong mục [phan_quyen].")
+    else:
+        st.info("Chưa bật. Cách bật: xem file PHAN_QUYEN.md (tạo App Registration trên Microsoft Entra, "
+                "rồi dán mục [auth] và [phan_quyen] vào Secrets).")
+        if st.button("🎲 Tạo cookie_secret ngẫu nhiên"):
+            import secrets as _sec
+            st.code(f'cookie_secret = "{_sec.token_urlsafe(32)}"', language="toml")
+
+    st.markdown("**🔐 Tài khoản nội bộ (tên đăng nhập + mật khẩu)** — không bắt buộc khi đã dùng Microsoft")
     if TAI_KHOAN:
-        st.markdown("**Tài khoản đang khai báo:**")
         st.dataframe(pd.DataFrame([
             {"Tên đăng nhập": tk["ten_dn"], "Tên hiển thị": tk["ten"], "Vai trò": TEN_VAI_TRO[tk["vai_tro"]],
              "Mật khẩu": "mã băm ✅" if tk.get("password_hash") else "chữ thường ⚠️"}
             for tk in TAI_KHOAN.values()
         ]), use_container_width=True, hide_index=True)
-        if not any(tk["vai_tro"] == "admin" for tk in TAI_KHOAN.values()):
-            st.error("Không có tài khoản admin nào!")
     else:
-        st.warning("Chưa bật đăng nhập. Dán đoạn sau vào Secrets (đổi mật khẩu bằng mã băm tạo bên dưới):")
+        st.caption("Chưa có. Mẫu khai báo trong Secrets:")
         st.code(
-            '[auth.users.admin]\nname = "Quản trị viên"\nrole = "admin"\npassword_hash = "..."\n\n'
-            '[auth.users.giaovien]\nname = "Giáo viên"\nrole = "user"\npassword_hash = "..."',
+            '[phan_quyen.users.admin]\nname = "Quản trị viên"\nrole = "admin"\npassword_hash = "..."',
             language="toml",
         )
 
