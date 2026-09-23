@@ -274,6 +274,12 @@ class DongBoList:
             else:
                 thieu.append(c)
         title = next((x for x in cot_list if x["name"] == "Title"), None)
+        # Cột đầu tiên của bảng (Tên tổ / Tên giáo viên / Tên phòng...) không có trong
+        # List -> dùng cột Tiêu đề (Title) mặc định, vì người dùng thường nhập tên ở đó.
+        if (title is not None and cot_app and cot_app[0] in thieu
+                and all(x["name"] != "Title" for x in ghep.values())):
+            ghep = {cot_app[0]: title, **ghep}
+            thieu.remove(cot_app[0])
         return ghep, thieu, title
 
     def _can_list(self, bang: str):
