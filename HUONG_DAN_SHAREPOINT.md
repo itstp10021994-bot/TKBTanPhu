@@ -255,6 +255,14 @@ Mỗi lần ghi, ứng dụng gửi tối đa 40 dòng/lần gọi flow (xoá t�
 nên danh sách vài trăm học sinh mất khoảng 1–3 phút. Mỗi List đọc được tối đa
 5.000 mục.
 
+### Lỗi thường gặp
+| Ứng dụng báo | Nguyên nhân & cách sửa |
+|---|---|
+| **401** + `DirectApiAuthorizationRequired` / "OAuth" | Trigger đang để *Who can trigger the flow* = *Any user in my tenant* hoặc *Specific users*. Đổi thành **Anyone** → **Save** → **copy lại HTTP URL** (URL có thể đổi sau khi lưu) → cập nhật Secrets. Nếu không có lựa chọn *Anyone* (tổ chức khoá tính năng này), cần nhờ IT mở hoặc dùng Cách 1. |
+| **401** + URL thiếu `sig=` | Copy URL chưa hết — dùng nút copy cạnh ô *HTTP URL*, URL phải kết thúc bằng `...&sig=xxxxx`. |
+| **404** / "Không tìm thấy List" | Sai địa chỉ site ở *Site Address* hoặc sai tên List. |
+| **502 / 504** | Flow chạy nhưng lỗi ở 1 bước — mở **Run history** xem bước đỏ. |
+
 ---
 
 ## Đồng bộ trực tiếp với SharePoint Lists (mục 2b trong module ☁️)
