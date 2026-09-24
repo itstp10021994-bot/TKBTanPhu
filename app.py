@@ -264,7 +264,7 @@ def excel_io_row(state_key: str, label: str, transform=None):
             data=df_to_excel_bytes(df_now, label),
             file_name=f"{state_key}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True,
+            width="stretch",
             key=f"dl_{state_key}",
         )
     with c2:
@@ -1162,7 +1162,7 @@ def _form_tai_khoan_noi_bo():
         ten_dn = st.text_input("Tên đăng nhập")
         mat_khau = st.text_input("Mật khẩu", type="password")
         _o_ghi_nho("ghi_nho_noi_bo")
-        dang_nhap = st.form_submit_button("Đăng nhập", use_container_width=True,
+        dang_nhap = st.form_submit_button("Đăng nhập", width="stretch",
                                           type="secondary" if DANG_NHAP_MS else "primary")
     if dang_nhap:
         dem = _dem_dang_nhap_sai()
@@ -1193,7 +1193,7 @@ def _form_ma_email():
     if not email_cho:
         with st.form("form_otp_email"):
             email = st.text_input("Email của trường", placeholder="ten.giaovien@truong.edu.vn")
-            gui = st.form_submit_button("📨 Gửi mã đăng nhập", type="primary", use_container_width=True)
+            gui = st.form_submit_button("📨 Gửi mã đăng nhập", type="primary", width="stretch")
         if gui:
             email = (email or "").strip().lower()
             if not xac_dinh_vai_tro(email):
@@ -1223,7 +1223,7 @@ def _form_ma_email():
     with st.form("form_otp_ma"):
         ma = st.text_input("Mã đăng nhập", max_chars=6)
         _o_ghi_nho("ghi_nho_otp")
-        xac_nhan = st.form_submit_button("Đăng nhập", type="primary", use_container_width=True)
+        xac_nhan = st.form_submit_button("Đăng nhập", type="primary", width="stretch")
     if xac_nhan:
         dung, ly_do = _kho_otp().kiem_tra(email_cho, ma, time_mod.time())
         if dung:
@@ -1235,7 +1235,7 @@ def _form_ma_email():
             _ghi_nho("email", email_cho)
             st.rerun()
         st.error(ly_do)
-    if st.button("↩ Đổi email / gửi lại mã", use_container_width=True):
+    if st.button("↩ Đổi email / gửi lại mã", width="stretch"):
         st.session_state.pop("_otp_email", None)
         st.rerun()
 
@@ -1265,7 +1265,7 @@ def man_hinh_dang_nhap():
         elif DANG_NHAP_MS:
             st.caption("Giáo viên đăng nhập bằng tài khoản email Outlook (Microsoft 365) của trường.")
             if st.button("🟦 Đăng nhập bằng tài khoản Microsoft của trường", type="primary",
-                         use_container_width=True):
+                         width="stretch"):
                 st.login()
             if TAI_KHOAN:
                 with st.expander("Đăng nhập bằng tài khoản nội bộ"):
@@ -1292,7 +1292,7 @@ if BAT_DANG_NHAP and not st.session_state.get("nguoi_dung") and DANG_NHAP_MS:
             with giua:
                 st.error(f"Tài khoản **{_email}** chưa được cấp quyền sử dụng ứng dụng. "
                          "Liên hệ quản trị viên, hoặc đăng nhập bằng email của trường.")
-                if st.button("🔄 Đăng nhập bằng tài khoản khác", use_container_width=True):
+                if st.button("🔄 Đăng nhập bằng tài khoản khác", width="stretch"):
                     st.logout()
             hien_chan_trang()
             st.stop()
@@ -1409,7 +1409,7 @@ with st.sidebar:
         st.markdown(f"👤 **{NGUOI_DUNG['ten']}**  \n{TEN_VAI_TRO[NGUOI_DUNG['vai_tro']]}")
         if NGUOI_DUNG.get("nguon") in ("microsoft", "email"):
             st.caption(f"✉️ {NGUOI_DUNG['ten_dn']}")
-        if st.button("🚪 Đăng xuất", use_container_width=True):
+        if st.button("🚪 Đăng xuất", width="stretch"):
             dang_xuat_ms = NGUOI_DUNG.get("nguon") == "microsoft"
             for k in list(st.session_state.keys()):
                 del st.session_state[k]
@@ -1429,7 +1429,7 @@ with st.sidebar:
             + str(_goi_hien_tai.get("thoi_gian_luu", "")).replace("T", " ")[:16]
         )
     if LA_ADMIN:
-        if st.button("💾 Lưu cấu hình & dữ liệu", type="primary", use_container_width=True,
+        if st.button("💾 Lưu cấu hình & dữ liệu", type="primary", width="stretch",
                      help="Lưu toàn bộ cấu hình, bảng dữ liệu, ràng buộc và kết quả đang làm. Tải lại "
                           "trang / mở lại app sẽ tự nạp bản đã lưu. Giáo viên KHÔNG thấy bản này "
                           "(muốn giáo viên thấy: 📢 Công bố)."):
@@ -1447,7 +1447,7 @@ with st.sidebar:
         if _goi_nhap_hien:
             st.caption("💾 Đã lưu lúc " + str(_goi_nhap_hien.get("thoi_gian_luu", "")).replace("T", " ")[:16]
                        + (f" — {_goi_nhap_hien['nguoi_luu']}" if _goi_nhap_hien.get("nguoi_luu") else ""))
-        if st.button("↺ Khôi phục dữ liệu mẫu (toàn bộ)", use_container_width=True):
+        if st.button("↺ Khôi phục dữ liệu mẫu (toàn bộ)", width="stretch"):
             for key, default in DEFAULTS.items():
                 st.session_state[key] = default.copy() if hasattr(default, "copy") else default
             for key, default in DEFAULT_CONSTRAINT_TOGGLES.items():
@@ -1606,7 +1606,7 @@ if module == "📅 Xếp Thời Khoá Biểu":
                             tg_ra_choi = st.number_input("Thời gian ra chơi (phút)", 0, 60, 20, step=5)
                         tao_btn = st.form_submit_button(
                             "⚡ Tạo / ghi đè thời gian biểu cho các khối & ngày đã chọn",
-                            type="primary", use_container_width=True,
+                            type="primary", width="stretch",
                         )
                     if tao_btn:
                         if not tg_khoi or not tg_thu:
@@ -1635,7 +1635,7 @@ if module == "📅 Xếp Thời Khoá Biểu":
 
                 excel_io_row("grade_times", "Thoi_gian_bieu", transform=chuan_hoa_bang_gio)
                 st.session_state.grade_times = st.data_editor(
-                    st.session_state.grade_times, num_rows="dynamic", use_container_width=True,
+                    st.session_state.grade_times, num_rows="dynamic", width="stretch",
                     key="editor_grade_times",
                     column_config={
                         "Khối": st.column_config.NumberColumn(min_value=1, max_value=12, step=1, required=True),
@@ -1677,7 +1677,7 @@ if module == "📅 Xếp Thời Khoá Biểu":
                                         luoi.iloc[p - 1, d - 1] = tiet_dict[p] or "✔"
                                     else:
                                         luoi.iloc[p - 1, d - 1] = "—"
-                            st.dataframe(luoi, use_container_width=True)
+                            st.dataframe(luoi, width="stretch")
                     st.caption("— = khối không học tiết đó; (mặc định) = ngày đó chưa khai báo, học đủ các tiết.")
 
         # ---------------------------------------------------------------------
@@ -1688,7 +1688,7 @@ if module == "📅 Xếp Thời Khoá Biểu":
                 section_header("1", "Tổ chuyên môn")
                 excel_io_row("departments", "To_chuyen_mon")
                 st.session_state.departments = st.data_editor(
-                    st.session_state.departments, num_rows="dynamic", use_container_width=True,
+                    st.session_state.departments, num_rows="dynamic", width="stretch",
                     key="editor_departments",
                     column_config={"Tên tổ": st.column_config.TextColumn(required=True)},
                 )
@@ -1702,7 +1702,7 @@ if module == "📅 Xếp Thời Khoá Biểu":
                 )
                 excel_io_row("teachers", "Giao_vien", transform=chuan_hoa_bang_gv)
                 st.session_state.teachers = st.data_editor(
-                    st.session_state.teachers, num_rows="dynamic", use_container_width=True,
+                    st.session_state.teachers, num_rows="dynamic", width="stretch",
                     key="editor_teachers",
                     column_config={
                         "Tên giáo viên": st.column_config.TextColumn(required=True),
@@ -1726,7 +1726,7 @@ if module == "📅 Xếp Thời Khoá Biểu":
                 )
                 excel_io_row("classes", "Lop_hoc")
                 st.session_state.classes = st.data_editor(
-                    st.session_state.classes, num_rows="dynamic", use_container_width=True,
+                    st.session_state.classes, num_rows="dynamic", width="stretch",
                     key="editor_classes",
                     column_config={
                         "Tên lớp": st.column_config.TextColumn(required=True),
@@ -1744,7 +1744,7 @@ if module == "📅 Xếp Thời Khoá Biểu":
                 )
                 excel_io_row("rooms", "Phong_dac_biet")
                 st.session_state.rooms = st.data_editor(
-                    st.session_state.rooms, num_rows="dynamic", use_container_width=True,
+                    st.session_state.rooms, num_rows="dynamic", width="stretch",
                     key="editor_rooms",
                     column_config={
                         "Tên phòng": st.column_config.TextColumn(),
@@ -1767,7 +1767,7 @@ if module == "📅 Xếp Thời Khoá Biểu":
                 )
                 excel_io_row("activities", "Mon_hoc_phan_cong")
                 st.session_state.activities = st.data_editor(
-                    st.session_state.activities, num_rows="dynamic", use_container_width=True,
+                    st.session_state.activities, num_rows="dynamic", width="stretch",
                     key="editor_activities",
                     column_config={
                         "Tên hoạt động": st.column_config.TextColumn(required=True),
@@ -1846,11 +1846,11 @@ if module == "📅 Xếp Thời Khoá Biểu":
             st.divider()
             gen_c1, gen_c2 = st.columns([2, 1])
             with gen_c1:
-                generate = st.button("🗓️  Xếp thời khoá biểu", type="primary", use_container_width=True)
+                generate = st.button("🗓️  Xếp thời khoá biểu", type="primary", width="stretch")
             with gen_c2:
                 regenerate = st.button(
                     "🔀 Xếp phương án khác",
-                    use_container_width=True,
+                    width="stretch",
                     disabled=not st.session_state.solutions_history,
                     help="Chỉ dùng được sau khi đã xếp thành công ít nhất 1 lần. Giữ nguyên toàn bộ dữ "
                          "liệu/ràng buộc, chỉ tìm 1 cách sắp xếp KHÁC với các phương án trước đó.",
@@ -2202,7 +2202,7 @@ if module == "📅 Xếp Thời Khoá Biểu":
                 st.download_button(
                     "📄 Xuất PDF thời khoá biểu", data=pdf_bytes,
                     file_name="thoi_khoa_bieu.pdf", mime="application/pdf",
-                    type="primary", use_container_width=True,
+                    type="primary", width="stretch",
                 )
             with exp_c2:
                 xls_buf = io.BytesIO()
@@ -2213,7 +2213,7 @@ if module == "📅 Xếp Thời Khoá Biểu":
                     "📊 Xuất Excel thời khoá biểu", data=xls_buf.getvalue(),
                     file_name="thoi_khoa_bieu.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
+                    width="stretch",
                 )
 
             st.write("")
@@ -2296,14 +2296,14 @@ elif module == "🪑 Xếp Phòng Thi":
             up_c1, up_c2, up_c3 = st.columns(3)
             with up_c1:
                 st.download_button(
-                    "📄 Tải file mẫu", use_container_width=True, key="dl_mau_hs_thi",
+                    "📄 Tải file mẫu", width="stretch", key="dl_mau_hs_thi",
                     data=df_to_excel_bytes(SAMPLE_EXAM_STUDENTS.drop(columns=[er.COT_HO_TEN]), "Danh_sach_HS_thi"),
                     file_name="mau_danh_sach_hoc_sinh_thi.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
             with up_c2:
                 st.download_button(
-                    "📥 Xuất Excel danh sách hiện tại", use_container_width=True, key="dl_exam_students",
+                    "📥 Xuất Excel danh sách hiện tại", width="stretch", key="dl_exam_students",
                     data=df_to_excel_bytes(st.session_state.exam_students, "Danh_sach_HS_thi"),
                     file_name="danh_sach_hoc_sinh_thi.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -2336,7 +2336,7 @@ elif module == "🪑 Xếp Phòng Thi":
                 (st.success if gc.startswith("✅") else st.info)(gc)
 
             st.session_state.exam_students = st.data_editor(
-                st.session_state.exam_students, num_rows="dynamic", use_container_width=True,
+                st.session_state.exam_students, num_rows="dynamic", width="stretch",
                 key="editor_exam_students",
                 column_config={
                     er.COT_SBD: st.column_config.TextColumn(help="Để trống thì hệ thống tự sinh SBD theo khối."),
@@ -2384,7 +2384,7 @@ elif module == "🪑 Xếp Phòng Thi":
                             margins=True, margins_name="Tổng",
                         )
                         st.caption("Số học sinh đăng ký thi theo từng lớp × môn:")
-                        st.dataframe(bang_tk, use_container_width=True)
+                        st.dataframe(bang_tk, width="stretch")
                     else:
                         st.caption("Chưa học sinh nào có cột Môn thi.")
 
@@ -2399,7 +2399,7 @@ elif module == "🪑 Xếp Phòng Thi":
             )
             excel_io_row("exam_rooms", "Danh_sach_phong_thi")
             st.session_state.exam_rooms = st.data_editor(
-                st.session_state.exam_rooms, num_rows="dynamic", use_container_width=True,
+                st.session_state.exam_rooms, num_rows="dynamic", width="stretch",
                 key="editor_exam_rooms",
                 column_config={
                     "Tên phòng": st.column_config.TextColumn(required=True),
@@ -2435,7 +2435,7 @@ elif module == "🪑 Xếp Phòng Thi":
                         + ", ".join(mon_chua_co)
                     )
                 with mc2:
-                    if st.button("➕ Thêm các môn này", use_container_width=True, key="them_mon_tu_ds"):
+                    if st.button("➕ Thêm các môn này", width="stretch", key="them_mon_tu_ds"):
                         them = pd.DataFrame([
                             {"Môn thi": m, "Lớp áp dụng (không bắt buộc)": "", "Ngày thi": "", "Ca thi": "Sáng",
                              "Chế độ xếp": "Trộn theo khối (xáo giữa các lớp)"}
@@ -2449,7 +2449,7 @@ elif module == "🪑 Xếp Phòng Thi":
 
             excel_io_row("exam_subjects", "Mon_thi", transform=chuan_hoa_bang_mon_thi)
             st.session_state.exam_subjects = st.data_editor(
-                st.session_state.exam_subjects, num_rows="dynamic", use_container_width=True,
+                st.session_state.exam_subjects, num_rows="dynamic", width="stretch",
                 key="editor_exam_subjects",
                 column_config={
                     "Môn thi": st.column_config.TextColumn(required=True),
@@ -2471,7 +2471,7 @@ elif module == "🪑 Xếp Phòng Thi":
             "Sơ đồ chỗ ngồi luôn CHỈ hiện số báo danh.",
             value=False, key="exam_show_names",
         )
-        xep_phong_btn = st.button("🪑 Xếp phòng thi cho tất cả môn", type="primary", use_container_width=True)
+        xep_phong_btn = st.button("🪑 Xếp phòng thi cho tất cả môn", type="primary", width="stretch")
 
         if xep_phong_btn:
             loi_xep_phong, canh_bao = [], []
@@ -2596,7 +2596,7 @@ elif module == "🪑 Xếp Phòng Thi":
                 data=df_to_excel_bytes(pd.DataFrame(tong_hop), "Tong_hop_SBD"),
                 file_name="tong_hop_sbd_phong_thi.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True, key="xls_tong_hop_sbd",
+                width="stretch", key="xls_tong_hop_sbd",
             )
 
         mon_chon = st.selectbox("Chọn môn thi để xem", options=list(st.session_state.exam_results.keys()))
@@ -2624,7 +2624,7 @@ elif module == "🪑 Xếp Phòng Thi":
             st.download_button(
                 "📄 Xuất PDF (danh sách + sơ đồ)", data=pdf_bytes_exam,
                 file_name=f"phong_thi_{slugify(mon_chon)}.pdf", mime="application/pdf",
-                type="primary", use_container_width=True, key=f"pdf_exam_{mon_chon}",
+                type="primary", width="stretch", key=f"pdf_exam_{mon_chon}",
             )
         with exp2:
             xls_bytes_exam = exam_rooms_to_excel_bytes(
@@ -2634,11 +2634,11 @@ elif module == "🪑 Xếp Phòng Thi":
                 "📊 Xuất Excel (theo phòng)", data=xls_bytes_exam,
                 file_name=f"phong_thi_{slugify(mon_chon)}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True, key=f"xls_exam_{mon_chon}",
+                width="stretch", key=f"xls_exam_{mon_chon}",
             )
         with exp3:
             if LA_ADMIN and st.button(
-                "🔀 Xáo lại chỗ ngồi", use_container_width=True, key=f"xao_lai_{mon_chon}",
+                "🔀 Xáo lại chỗ ngồi", width="stretch", key=f"xao_lai_{mon_chon}",
                 help="Chỉ xáo lại VỊ TRÍ NGỒI ngẫu nhiên trong từng phòng — không đổi danh sách "
                      "phòng/SBD đã xếp.",
             ):
@@ -2659,7 +2659,7 @@ elif module == "🪑 Xếp Phòng Thi":
                          "Lớp": hs["lop"]}
                         for i, hs in enumerate(r["hoc_sinh"])
                     ])
-                    st.dataframe(df_show, use_container_width=True, hide_index=True)
+                    st.dataframe(df_show, width="stretch", hide_index=True)
 
                     st.markdown(
                         '<div class="section-title" style="margin-top:18px;">'
@@ -2724,7 +2724,7 @@ elif module == "🪑 Xếp Phòng Thi":
             if ct_df is not None and not ct_df.empty:
                 cot_gt = [c for c in ct_df.columns if str(c).startswith("Giám thị")]
                 st.session_state.exam_proctors = st.data_editor(
-                    ct_df, use_container_width=True, hide_index=True, key="editor_exam_proctors",
+                    ct_df, width="stretch", hide_index=True, key="editor_exam_proctors",
                     disabled=["Môn thi", "Ngày thi", "Ca thi", "Phòng"],
                     column_config={c: st.column_config.SelectboxColumn(options=[""] + ds_gv_coi) for c in cot_gt},
                 )
@@ -2744,7 +2744,7 @@ elif module == "🪑 Xếp Phòng Thi":
                 with st.expander(f"📊 Số buổi coi thi của từng giáo viên ({len(dem)} GV)"):
                     st.dataframe(pd.DataFrame(
                         sorted(({"Giáo viên": k, "Số buổi": v} for k, v in dem.items()), key=lambda x: -x["Số buổi"])
-                    ), use_container_width=True, hide_index=True)
+                    ), width="stretch", hide_index=True)
                 st.download_button(
                     "📊 Xuất Excel phân công coi thi", data=df_to_excel_bytes(ct_df, "Phan_cong_coi_thi"),
                     file_name="phan_cong_coi_thi.xlsx", key="xls_phan_cong_coi_thi",
@@ -2865,7 +2865,7 @@ elif module == "🔄 Phân Công Dạy Thay":
                         })
 
                     luu_btn = st.form_submit_button(
-                        "💾 Lưu phân công dạy thay cho ngày này", type="primary", use_container_width=True,
+                        "💾 Lưu phân công dạy thay cho ngày này", type="primary", width="stretch",
                     )
 
                     if luu_btn:
@@ -2891,7 +2891,7 @@ elif module == "🔄 Phân Công Dạy Thay":
                             df_xem = pd.DataFrame(ban_ghi["phan_cong"])[["tiet", "lop", "mon", "gv_thay"]]
                             df_xem.columns = ["Tiết", "Lớp", "Môn", "GV dạy thay"]
                             df_xem["GV dạy thay"] = df_xem["GV dạy thay"].fillna("— chưa phân công —")
-                            st.dataframe(df_xem, use_container_width=True, hide_index=True)
+                            st.dataframe(df_xem, width="stretch", hide_index=True)
 
                             bc1, bc2, bc3 = st.columns([1, 1, 2])
                             with bc1:
@@ -2901,10 +2901,10 @@ elif module == "🔄 Phân Công Dạy Thay":
                                 st.download_button(
                                     "📄 Xuất PDF", data=pdf_sub,
                                     file_name=f"day_thay_{slugify(ban_ghi['gv_nghi'])}.pdf",
-                                    mime="application/pdf", use_container_width=True, key=f"pdf_sub_{key_luu}",
+                                    mime="application/pdf", width="stretch", key=f"pdf_sub_{key_luu}",
                                 )
                             with bc2:
-                                if st.button("🗑️ Xoá", use_container_width=True, key=f"del_sub_{key_luu}"):
+                                if st.button("🗑️ Xoá", width="stretch", key=f"del_sub_{key_luu}"):
                                     del st.session_state.substitutions[key_luu]
                                     st.rerun()
 
@@ -2922,7 +2922,7 @@ elif module == "🔄 Phân Công Dạy Thay":
                     df_xem = pd.DataFrame(ban_ghi["phan_cong"])[["tiet", "lop", "mon", "gv_thay"]]
                     df_xem.columns = ["Tiết", "Lớp", "Môn", "GV dạy thay"]
                     df_xem["GV dạy thay"] = df_xem["GV dạy thay"].fillna("— chưa phân công —")
-                    st.dataframe(df_xem, use_container_width=True, hide_index=True)
+                    st.dataframe(df_xem, width="stretch", hide_index=True)
                     st.download_button(
                         "📄 Xuất PDF",
                         data=substitution_to_pdf_bytes(
@@ -2987,7 +2987,7 @@ elif module == "☁️ Lưu trữ SharePoint":
             with l2:
                 st.write("")
                 st.write("")
-                luu_btn = st.button("💾 Lưu lên SharePoint", type="primary", use_container_width=True)
+                luu_btn = st.button("💾 Lưu lên SharePoint", type="primary", width="stretch")
             if luu_btn:
                 try:
                     with st.spinner("Đang lưu lên SharePoint..."):
@@ -3022,7 +3022,7 @@ elif module == "☁️ Lưu trữ SharePoint":
                             with t2:
                                 st.write("")
                                 st.write("")
-                                tai_btn = st.button("📂 Tải vào ứng dụng", use_container_width=True)
+                                tai_btn = st.button("📂 Tải vào ứng dụng", width="stretch")
                             st.caption("⚠️ Tải bản lưu sẽ THAY THẾ toàn bộ dữ liệu đang có trong ứng dụng.")
                             if tai_btn:
                                 with st.spinner("Đang tải..."):
@@ -3064,11 +3064,11 @@ elif module == "☁️ Lưu trữ SharePoint":
             {"Bảng trong ứng dụng": TEN_BANG_VN.get(b, b), "Tên List": ten_list_cua[b],
              "Các cột cần có": " | ".join(cot_cua_bang[b])}
             for b in ds_bang
-        ]), use_container_width=True, hide_index=True)
+        ]), width="stretch", hide_index=True)
         st.download_button(
             "📄 Tải file Excel mẫu để tạo List (mỗi List 1 sheet, kèm dữ liệu hiện tại)",
             data=storage.mau_excel_tao_list({b: st.session_state[b] for b in ds_bang}, ten_list_cua),
-            file_name="mau_tao_sharepoint_lists.xlsx", use_container_width=True,
+            file_name="mau_tao_sharepoint_lists.xlsx", width="stretch",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
@@ -3085,11 +3085,11 @@ elif module == "☁️ Lưu trữ SharePoint":
             )
             k1, k2, k3 = st.columns(3)
             with k1:
-                kiem_tra_btn = st.button("🔍 Kiểm tra List & cột", use_container_width=True)
+                kiem_tra_btn = st.button("🔍 Kiểm tra List & cột", width="stretch")
             with k2:
-                ghi_list_btn = st.button("⬆️ Ghi các bảng lên List", type="primary", use_container_width=True)
+                ghi_list_btn = st.button("⬆️ Ghi các bảng lên List", type="primary", width="stretch")
             with k3:
-                doc_list_btn = st.button("⬇️ Đọc từ List vào ứng dụng", use_container_width=True)
+                doc_list_btn = st.button("⬇️ Đọc từ List vào ứng dụng", width="stretch")
             dong_y_ghi = st.checkbox(
                 "Tôi hiểu: khi ghi, TOÀN BỘ mục cũ trong các List đã chọn sẽ bị thay bằng dữ liệu hiện tại "
                 "của ứng dụng.", key="list_dong_y_ghi",
@@ -3105,7 +3105,7 @@ elif module == "☁️ Lưu trữ SharePoint":
                          "Cột thiếu": ", ".join(x["thieu"]) if x["co_list"] else "",
                          "Cột đã khớp": "; ".join(x["khop"])}
                         for x in kq_kt
-                    ]), use_container_width=True, hide_index=True)
+                    ]), width="stretch", hide_index=True)
                 if ghi_list_btn:
                     if not dong_y_ghi:
                         st.warning("Tick ô xác nhận bên dưới các nút trước khi ghi lên List.")
@@ -3149,11 +3149,11 @@ elif module == "☁️ Lưu trữ SharePoint":
                 "📥 Tải file sao lưu (.json)",
                 data=json.dumps(goi_may, ensure_ascii=False, indent=1).encode("utf-8"),
                 file_name=f"{storage.ten_file_an_toan(st.session_state.get('storage_ten', 'TKB'))}.json",
-                mime="application/json", use_container_width=True,
+                mime="application/json", width="stretch",
             )
             st.download_button(
                 "📊 Tải bản Excel (mỗi bảng 1 sheet)", data=storage.sang_excel(goi_may),
-                file_name="du_lieu_tkb.xlsx", use_container_width=True,
+                file_name="du_lieu_tkb.xlsx", width="stretch",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
         with b2:
@@ -3271,7 +3271,7 @@ elif module == "👥 Tài khoản & Công bố":
 
         cb1, cb2, cb3 = st.columns(3)
         with cb1:
-            if st.button("📢 Công bố dữ liệu hiện tại", type="primary", use_container_width=True):
+            if st.button("📢 Công bố dữ liệu hiện tại", type="primary", width="stretch"):
                 goi_moi = storage.dong_goi(st.session_state)
                 goi_moi["nguoi_cong_bo"] = NGUOI_DUNG["ten"]
                 with st.spinner("Đang công bố..."):
@@ -3283,14 +3283,14 @@ elif module == "👥 Tài khoản & Công bố":
                 if dang_teams:
                     _dang_len_teams()
         with cb2:
-            if st.button("📥 Nạp bản công bố vào phiên của tôi", use_container_width=True,
+            if st.button("📥 Nạp bản công bố vào phiên của tôi", width="stretch",
                          disabled=not goi_cb,
                          help="Thay dữ liệu đang sửa trong phiên của bạn bằng bản đang công bố."):
                 storage.giai_nen(goi_cb, st.session_state, TimetableResult, SchoolClass, ScheduleConfig)
                 st.session_state["_ban_cong_bo_da_nap"] = goi_cb.get("thoi_gian_luu")
                 st.rerun()
         with cb3:
-            if st.button("🔄 Nạp lại từ SharePoint", use_container_width=True,
+            if st.button("🔄 Nạp lại từ SharePoint", width="stretch",
                          help="Đọc lại bản công bố đang lưu trên SharePoint (VD sau khi app khởi động lại)."):
                 with st.spinner("Đang đọc SharePoint..."):
                     goi_sp = nap_ban_cong_bo(bat_buoc=True)
@@ -3314,7 +3314,7 @@ elif module == "👥 Tài khoản & Công bố":
             {"Quyền": "🔄 Dạy thay", "admin": "Phân công, lưu, xoá", "user": "Xem & xuất PDF"},
             {"Quyền": "☁️ SharePoint", "admin": "Lưu / tải / đồng bộ List", "user": "—"},
             {"Quyền": "👥 Tài khoản & Công bố", "admin": "Công bố, xem tài khoản", "user": "—"},
-        ]), use_container_width=True, hide_index=True)
+        ]), width="stretch", hide_index=True)
 
         st.markdown("**🟦 Đăng nhập bằng tài khoản Microsoft (email Outlook của trường)**")
         if DANG_NHAP_MS:
@@ -3323,7 +3323,7 @@ elif module == "👥 Tài khoản & Công bố":
                 {"Quy tắc": "Email là admin", "Giá trị": ", ".join(sorted(PHAN_QUYEN["admin_emails"])) or "— (chưa có!)"},
                 {"Quy tắc": "Tên miền là user", "Giá trị": ", ".join(sorted(PHAN_QUYEN["domains"])) or "—"},
                 {"Quy tắc": "Email user thêm", "Giá trị": ", ".join(sorted(PHAN_QUYEN["user_emails"])) or "—"},
-            ]), use_container_width=True, hide_index=True)
+            ]), width="stretch", hide_index=True)
             if not PHAN_QUYEN["domains"] and not PHAN_QUYEN["user_emails"]:
                 st.warning("Chưa giới hạn tên miền: MỌI tài khoản Microsoft đăng nhập được đều thành user. "
                            "Nên khai báo domains = [\"tenmien-truong.edu.vn\"] trong mục [phan_quyen].")
@@ -3344,7 +3344,7 @@ elif module == "👥 Tài khoản & Công bố":
                 {"Quy tắc": "Email là admin", "Giá trị": ", ".join(sorted(PHAN_QUYEN["admin_emails"])) or "— (chưa có!)"},
                 {"Quy tắc": "Tên miền là user", "Giá trị": ", ".join(sorted(PHAN_QUYEN["domains"])) or "—"},
                 {"Quy tắc": "Email user thêm", "Giá trị": ", ".join(sorted(PHAN_QUYEN["user_emails"])) or "—"},
-            ]), use_container_width=True, hide_index=True)
+            ]), width="stretch", hide_index=True)
             if not PHAN_QUYEN["admin_emails"] and not any(t["vai_tro"] == "admin" for t in TAI_KHOAN.values()):
                 st.error("Chưa có admin nào: khai báo admin_emails trong mục [phan_quyen].")
             if not PHAN_QUYEN["domains"] and not PHAN_QUYEN["user_emails"]:
@@ -3359,7 +3359,7 @@ elif module == "👥 Tài khoản & Công bố":
                 {"Tên đăng nhập": tk["ten_dn"], "Tên hiển thị": tk["ten"], "Vai trò": TEN_VAI_TRO[tk["vai_tro"]],
                  "Mật khẩu": "mã băm ✅" if tk.get("password_hash") else "chữ thường ⚠️"}
                 for tk in TAI_KHOAN.values()
-            ]), use_container_width=True, hide_index=True)
+            ]), width="stretch", hide_index=True)
         else:
             st.caption("Chưa có. Mẫu khai báo trong Secrets:")
             st.code(
@@ -3448,7 +3448,7 @@ elif module == "👤 Lịch của tôi":
                 d1, d2, _ = st.columns([1, 1, 2])
                 with d1:
                     st.download_button(
-                        "📄 PDF", use_container_width=True, mime="application/pdf",
+                        "📄 PDF", width="stretch", mime="application/pdf",
                         file_name=f"tkb_{slugify(ten_gv)}.pdf", key="pdf_tkb_toi",
                         data=timetable_to_pdf_bytes(
                             [SchoolClass(id="__gv__", name=ten_gv, grade=0)], cfg_kq, bai_gv,
@@ -3459,7 +3459,7 @@ elif module == "👤 Lịch của tôi":
                     )
                 with d2:
                     st.download_button(
-                        "📊 Excel", use_container_width=True, key="xls_tkb_toi",
+                        "📊 Excel", width="stretch", key="xls_tkb_toi",
                         data=df_to_excel_bytes(luoi.reset_index().rename(columns={"index": "Tiết"}), "TKB"),
                         file_name=f"tkb_{slugify(ten_gv)}.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -3511,7 +3511,7 @@ elif module == "👤 Lịch của tôi":
                     dong.sort(key=lambda x: er._khoa_ngay_ca(x["Ngày thi"], x["Ca thi"]))
                     df_thi = pd.DataFrame(dong)
                     st.caption(f"Số buổi coi thi: **{len(dong)}**")
-                    st.dataframe(df_thi, use_container_width=True, hide_index=True)
+                    st.dataframe(df_thi, width="stretch", hide_index=True)
                     st.download_button(
                         "📊 Excel lịch coi thi", key="xls_coi_thi_toi",
                         data=df_to_excel_bytes(df_thi, "Lich_coi_thi"),
@@ -3532,7 +3532,7 @@ elif module == "👤 Lịch của tôi":
                             else (pc.get("gv_thay") or "— chưa phân công —"),
                         })
             if dong:
-                st.dataframe(pd.DataFrame(dong), use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(dong), width="stretch", hide_index=True)
             else:
                 st.success("Không có lịch dạy thay liên quan đến bạn.")
 
