@@ -334,7 +334,9 @@ Kết quả xếp thời khoá biểu / phòng thi không nằm trong List — d
 Khi admin bấm **📢 Công bố** (module 👥), bản công bố cũng được lưu lên SharePoint
 để không mất khi app khởi động lại: file `CongBo_TKB.json` (Cách 1, 2) hoặc List
 **`TKB_CongBo`** (Cách 3 — tạo List với 1 cột **`NoiDung`** kiểu Nhiều dòng văn
-bản, tắt rich text). Chi tiết trong `PHAN_QUYEN.md`.
+bản, tắt rich text). Nút **💾 Lưu cấu hình & dữ liệu** (bản nháp của admin) cũng lưu
+vào đó: file `BanNhap_TKB.json` hoặc các dòng `ban_nhap|...` trong List `TKB_CongBo`.
+Chi tiết trong `PHAN_QUYEN.md`.
 
 ## Không có SharePoint?
 

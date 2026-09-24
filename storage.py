@@ -360,17 +360,29 @@ class DongBoList:
             raise LoiLuuTru(f"List '{ten}' chưa có cột 'NoiDung' (Nhiều dòng văn bản).")
         return ten, ref, cot["name"]
 
-    def luu_goi_list(self, goi: dict) -> str:
+    # Cùng 1 List chứa 2 loại bản: "cong_bo" (bản công bố cho giáo viên) và
+    # "ban_nhap" (bản nháp admin đang làm) — phân biệt bằng tiền tố Tiêu đề.
+    # Mục cũ không có tiền tố được coi là bản công bố.
+    @staticmethod
+    def _cua_loai(title, loai: str) -> bool:
+        title = str(title or "")
+        if "|" in title:
+            return title.split("|", 1)[0] == loai
+        return loai == "cong_bo"
+
+    def luu_goi_list(self, goi: dict, loai: str = "cong_bo") -> str:
         ten, ref, cot = self._list_cong_bo()
         van_ban = json.dumps(goi, ensure_ascii=False, separators=(",", ":"))
         phan = [van_ban[i:i + KICH_THUOC_PHAN] for i in range(0, len(van_ban), KICH_THUOC_PHAN)] or [""]
-        items = [{"Title": f"Phần {i + 1}/{len(phan)}", cot: p} for i, p in enumerate(phan)]
-        self._thay_items(ref, [i for i, _ in self._doc_items(ref)], items)
+        items = [{"Title": f"{loai}|Phần {i + 1}/{len(phan)}", cot: p} for i, p in enumerate(phan)]
+        ids_cu = [i for i, f in self._doc_items(ref) if self._cua_loai(f.get("Title"), loai)]
+        self._thay_items(ref, ids_cu, items)
         return f"List '{ten}' ({len(phan)} mục)"
 
-    def tai_goi_list(self) -> dict | None:
+    def tai_goi_list(self, loai: str = "cong_bo") -> dict | None:
         _, ref, cot = self._list_cong_bo()
-        van_ban = "".join(str(f.get(cot) or "") for _, f in self._doc_items(ref))
+        van_ban = "".join(str(f.get(cot) or "") for _, f in self._doc_items(ref)
+                          if self._cua_loai(f.get("Title"), loai))
         if not van_ban.strip():
             return None
         try:
