@@ -845,13 +845,25 @@ if "substitutions" not in st.session_state:
 # (còn đến khi app khởi động lại), và SharePoint (file hoặc List TKB_CongBo)
 # để không mất khi Streamlit Cloud khởi động lại app.
 # =======================================================================
-FILE_CONG_BO = Path(__file__).parent / "du_lieu" / "cong_bo.json"
-TEN_FILE_CONG_BO = "CongBo_TKB"
+# 2 loại bản lưu dùng chung cơ chế:
+#   - "cong_bo" : bản CÔNG BỐ cho giáo viên (user xem);
+#   - "ban_nhap": bản NHÁP của admin (cấu hình + dữ liệu đang làm) — nút 💾 Lưu.
+LOAI_BAN = {
+    "cong_bo": {"file": Path(__file__).parent / "du_lieu" / "cong_bo.json", "ten_sp": "CongBo_TKB"},
+    "ban_nhap": {"file": Path(__file__).parent / "du_lieu" / "ban_nhap.json", "ten_sp": "BanNhap_TKB"},
+}
+FILE_CONG_BO = LOAI_BAN["cong_bo"]["file"]
+TEN_FILE_CONG_BO = LOAI_BAN["cong_bo"]["ten_sp"]
 
 
 @st.cache_resource
+def _kho_ban() -> dict:
+    """Bộ nhớ chung mọi phiên cho từng loại bản."""
+    return {loai: {"goi": None, "da_thu_nap": False, "loi_nap": ""} for loai in LOAI_BAN}
+
+
 def _kho_cong_bo() -> dict:
-    return {"goi": None, "da_thu_nap": False, "loi_nap": ""}
+    return _kho_ban()["cong_bo"]
 
 
 def _ds_ket_noi_luu_tru() -> list:
@@ -868,25 +880,25 @@ def _ds_ket_noi_luu_tru() -> list:
     return ket_noi
 
 
-def _tai_cong_bo_tu(kn) -> dict | None:
+def _tai_ban_tu(kn, loai: str) -> dict | None:
     if kn.co_luu_file and (not isinstance(kn, storage.PowerAutomate) or kn.co_the_tai()):
-        return kn.tai(TEN_FILE_CONG_BO)
+        return kn.tai(LOAI_BAN[loai]["ten_sp"])
     if kn.co_dong_bo_list:
-        return kn.tai_goi_list()
+        return kn.tai_goi_list(loai)
     return None
 
 
-def _luu_cong_bo_len(kn, goi: dict) -> str | None:
+def _luu_ban_len(kn, loai: str, goi: dict) -> str | None:
     if kn.co_luu_file:
-        return "SharePoint: " + kn.luu(TEN_FILE_CONG_BO, goi)
+        return "SharePoint: " + kn.luu(LOAI_BAN[loai]["ten_sp"], goi)
     if kn.co_dong_bo_list:
-        return "SharePoint: " + kn.luu_goi_list(goi)
+        return "SharePoint: " + kn.luu_goi_list(goi, loai)
     return None
 
 
-def nap_ban_cong_bo(bat_buoc: bool = False) -> dict | None:
-    """Bản công bố hiện tại (bộ nhớ -> file cục bộ -> SharePoint)."""
-    kho = _kho_cong_bo()
+def nap_ban(loai: str, bat_buoc: bool = False) -> dict | None:
+    """Bản lưu mới nhất của 1 loại (bộ nhớ -> file cục bộ -> SharePoint)."""
+    kho = _kho_ban()[loai]
     if kho["goi"] is not None and not bat_buoc:
         return kho["goi"]
     if kho["da_thu_nap"] and not bat_buoc:
@@ -895,14 +907,14 @@ def nap_ban_cong_bo(bat_buoc: bool = False) -> dict | None:
     goi = None
     if not bat_buoc:
         try:
-            if FILE_CONG_BO.exists():
-                goi = json.loads(FILE_CONG_BO.read_text(encoding="utf-8"))
+            if LOAI_BAN[loai]["file"].exists():
+                goi = json.loads(LOAI_BAN[loai]["file"].read_text(encoding="utf-8"))
         except (OSError, ValueError):
             goi = None
     if goi is None:
         for kn in _ds_ket_noi_luu_tru():
             try:
-                goi = _tai_cong_bo_tu(kn)
+                goi = _tai_ban_tu(kn, loai)
             except Exception as e:  # lúc mở app tuyệt đối không được sập vì SharePoint
                 kho["loi_nap"] = str(e)
                 goi = None
@@ -913,24 +925,40 @@ def nap_ban_cong_bo(bat_buoc: bool = False) -> dict | None:
     return kho["goi"]
 
 
-def cong_bo(goi: dict) -> tuple[list[str], list[str]]:
-    """Công bố: cập nhật bộ nhớ chung + file cục bộ + SharePoint. -> (đã lưu, lỗi)."""
-    da_luu, loi = ["Máy chủ ứng dụng (mọi người dùng thấy ngay)"], []
-    kho = _kho_cong_bo()
+def luu_ban(loai: str, goi: dict, noi_may_chu: str) -> tuple[list[str], list[str]]:
+    """Lưu 1 bản: bộ nhớ chung + file cục bộ + SharePoint. -> (đã lưu, lỗi)."""
+    da_luu, loi = [noi_may_chu], []
+    kho = _kho_ban()[loai]
     kho["goi"], kho["da_thu_nap"] = goi, True
     try:
-        FILE_CONG_BO.parent.mkdir(parents=True, exist_ok=True)
-        FILE_CONG_BO.write_text(json.dumps(goi, ensure_ascii=False), encoding="utf-8")
+        LOAI_BAN[loai]["file"].parent.mkdir(parents=True, exist_ok=True)
+        LOAI_BAN[loai]["file"].write_text(json.dumps(goi, ensure_ascii=False), encoding="utf-8")
     except OSError as e:
         loi.append(f"Không ghi được file cục bộ: {e}")
     for kn in _ds_ket_noi_luu_tru():
         try:
-            noi = _luu_cong_bo_len(kn, goi)
+            noi = _luu_ban_len(kn, loai, goi)
             if noi:
                 da_luu.append(noi)
         except (storage.LoiLuuTru, requests.RequestException) as e:
             loi.append(f"{kn.ten_hien_thi}: {e}")
     return da_luu, loi
+
+
+def nap_ban_cong_bo(bat_buoc: bool = False) -> dict | None:
+    return nap_ban("cong_bo", bat_buoc)
+
+
+def cong_bo(goi: dict) -> tuple[list[str], list[str]]:
+    """Công bố cho giáo viên (đồng thời lưu làm bản nháp mới nhất của admin)."""
+    ket_qua = luu_ban("cong_bo", goi, "Máy chủ ứng dụng (mọi người dùng thấy ngay)")
+    luu_ban("ban_nhap", goi, "")
+    return ket_qua
+
+
+def luu_ban_nhap(goi: dict) -> tuple[list[str], list[str]]:
+    """Nút 💾: lưu cấu hình + dữ liệu admin đang làm (giáo viên không thấy)."""
+    return luu_ban("ban_nhap", goi, "Máy chủ ứng dụng")
 
 
 # =======================================================================
@@ -1293,9 +1321,15 @@ NGUOI_DUNG = st.session_state.get("nguoi_dung") or {
 }
 LA_ADMIN = NGUOI_DUNG["vai_tro"] == "admin"
 
-# Nạp bản công bố vào phiên: user luôn theo bản mới nhất; admin chỉ nạp 1 lần
-# lúc mở app (không đè dữ liệu admin đang chỉnh sửa).
+# Nạp dữ liệu vào phiên: user luôn theo bản CÔNG BỐ mới nhất; admin nạp 1 lần
+# lúc mở app bản mới hơn giữa BẢN NHÁP (nút 💾 Lưu) và bản công bố — không đè
+# dữ liệu admin đang chỉnh sửa trong phiên.
 _goi_cong_bo = nap_ban_cong_bo()
+if LA_ADMIN and st.session_state.get("_ban_cong_bo_da_nap") is None:
+    _goi_nhap = nap_ban("ban_nhap")
+    if _goi_nhap and (not _goi_cong_bo
+                      or str(_goi_nhap.get("thoi_gian_luu", "")) >= str(_goi_cong_bo.get("thoi_gian_luu", ""))):
+        _goi_cong_bo = _goi_nhap
 if _goi_cong_bo:
     _phien_cb = _goi_cong_bo.get("thoi_gian_luu")
     _da_nap = st.session_state.get("_ban_cong_bo_da_nap")
@@ -1395,6 +1429,24 @@ with st.sidebar:
             + str(_goi_hien_tai.get("thoi_gian_luu", "")).replace("T", " ")[:16]
         )
     if LA_ADMIN:
+        if st.button("💾 Lưu cấu hình & dữ liệu", type="primary", use_container_width=True,
+                     help="Lưu toàn bộ cấu hình, bảng dữ liệu, ràng buộc và kết quả đang làm. Tải lại "
+                          "trang / mở lại app sẽ tự nạp bản đã lưu. Giáo viên KHÔNG thấy bản này "
+                          "(muốn giáo viên thấy: 📢 Công bố)."):
+            _goi_luu = storage.dong_goi(st.session_state)
+            _goi_luu["nguoi_luu"] = NGUOI_DUNG["ten"]
+            _da_luu, _loi_luu = luu_ban_nhap(_goi_luu)
+            st.session_state["_ban_cong_bo_da_nap"] = _goi_luu["thoi_gian_luu"]
+            st.toast("Đã lưu cấu hình & dữ liệu", icon="💾")
+            for _e in _loi_luu:
+                st.warning(_e)
+            if not _ds_ket_noi_luu_tru():
+                st.caption("⚠️ Chưa cấu hình SharePoint: bản lưu nằm trên máy chủ, sẽ mất khi app khởi "
+                           "động lại (VD lâu không dùng). Xem module ☁️.")
+        _goi_nhap_hien = _kho_ban()["ban_nhap"]["goi"]
+        if _goi_nhap_hien:
+            st.caption("💾 Đã lưu lúc " + str(_goi_nhap_hien.get("thoi_gian_luu", "")).replace("T", " ")[:16]
+                       + (f" — {_goi_nhap_hien['nguoi_luu']}" if _goi_nhap_hien.get("nguoi_luu") else ""))
         if st.button("↺ Khôi phục dữ liệu mẫu (toàn bộ)", use_container_width=True):
             for key, default in DEFAULTS.items():
                 st.session_state[key] = default.copy() if hasattr(default, "copy") else default

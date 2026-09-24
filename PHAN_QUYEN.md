@@ -191,3 +191,15 @@ Bản công bố được lưu:
 
 Admin khi mở app sẽ tự nạp bản công bố làm điểm bắt đầu; nút **📥 Nạp bản công bố
 vào phiên của tôi** để quay lại bản đó sau khi đã sửa.
+
+## Lưu cấu hình (bản nháp của admin)
+Mỗi lần tải lại trang (F5) là một phiên mới, nên cấu hình/dữ liệu admin đang sửa
+sẽ mất nếu chưa lưu. Bấm **💾 Lưu cấu hình & dữ liệu** ở thanh bên để lưu **bản nháp**
+(cấu hình thời gian biểu, các bảng dữ liệu, kết quả...). Lần sau admin mở app sẽ tự
+nạp bản mới hơn giữa bản nháp và bản công bố. Giáo viên **không** thấy bản nháp —
+muốn giáo viên thấy thì vẫn phải **📢 Công bố**.
+
+Bản nháp được lưu cùng chỗ với bản công bố: `du_lieu/ban_nhap.json`, file
+`BanNhap_TKB.json` (Cách 1, 2) hoặc chung List **`TKB_CongBo`** (Cách 3 — các dòng
+có tiêu đề bắt đầu bằng `ban_nhap|`). Chưa cấu hình SharePoint thì bản nháp mất khi
+Streamlit khởi động lại app.
