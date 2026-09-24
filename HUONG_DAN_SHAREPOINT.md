@@ -273,6 +273,7 @@ nên danh sách vài trăm học sinh mất khoảng 1–3 phút. Mỗi List đ�
 | **401** + URL thiếu `sig=` | Copy URL chưa hết — dùng nút copy cạnh ô *HTTP URL*, URL phải kết thúc bằng `...&sig=xxxxx`. |
 | **404** / "Không tìm thấy List" | Sai địa chỉ site ở *Site Address* hoặc sai tên List. |
 | **502 / 504** | Flow chạy nhưng lỗi ở 1 bước — mở **Run history** xem bước đỏ. |
+| "Flow sp_url trả về thành công nhưng đọc lại List ... thấy N mục" | Sau khi ghi, ứng dụng đọc lại List để đối chiếu số dòng. Không khớp nghĩa là flow báo xong nhưng không ghi được: kiểm tra nhánh **False** có đủ 2 vòng `Xoa_tung_muc` → `Tao_tung_muc`; bước POST có *Body* = `item()` và header `Content-Type`; bước **Response** cuối nằm **sau** 2 vòng lặp và **không** tick *has failed*; *Site Address* của bước ghi giống bước đọc. |
 
 ---
 

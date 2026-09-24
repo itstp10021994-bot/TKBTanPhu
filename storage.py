@@ -343,7 +343,15 @@ class DongBoList:
 
         ids_cu = [i for i, _ in self._doc_items(ref)]
         self._thay_items(ref, ids_cu, items)
+        # đọc lại để chắc chắn SharePoint đã nhận (flow có thể trả "ok" dù bước ghi bị lỗi)
+        so_that = len(self._doc_items(ref))
+        if so_that != len(items):
+            raise LoiLuuTru(self._loi_ghi_khong_khop(ten, len(items), so_that, len(ids_cu)))
         return len(items), canh_bao
+
+    def _loi_ghi_khong_khop(self, ten: str, can: int, co: int, cu: int) -> str:
+        return (f"Đã gửi {can} dòng nhưng đọc lại List '{ten}' thấy {co} mục (trước khi ghi có {cu} mục) "
+                "— SharePoint chưa nhận đủ dữ liệu.")
 
     # ---- Bản công bố lưu trong 1 List: cột Tiêu đề + cột "NoiDung" (Nhiều dòng văn bản) ----
     def _list_cong_bo(self):
@@ -774,6 +782,23 @@ class PowerAutomate(DongBoList):
         items = self._gia_tri(self._doc(ten, "items?$top=5000"))
         items.sort(key=lambda it: int(it.get("Id") or it.get("ID") or 0))
         return [(str(it.get("Id") or it.get("ID")), it) for it in items]
+
+    def _loi_ghi_khong_khop(self, ten: str, can: int, co: int, cu: int) -> str:
+        if co == cu and cu != can:
+            buoc = "flow không xoá/tạo mục nào"
+        elif co == 0 and can:
+            buoc = "flow đã xoá mục cũ nhưng không tạo được mục mới (vòng Tao_tung_muc lỗi)"
+        else:
+            buoc = "flow chỉ ghi được một phần"
+        return (
+            f"Flow sp_url trả về thành công nhưng đọc lại List '{ten}' thấy {co} mục, cần {can} "
+            f"(trước khi ghi có {cu}) — {buoc}. Mở flow → Run history → lần chạy mới nhất có "
+            "thao_tac = \"ghi\" để xem bước đỏ. Hay gặp: (1) nhánh False thiếu vòng Tao_tung_muc, "
+            "hoặc *Select an output* không phải triggerBody()?['items']; (2) Body của bước POST "
+            "không phải item() hoặc thiếu header Content-Type = application/json;odata=nometadata; "
+            "(3) bước Response cuối được đặt 'Configure run after → has failed' hoặc nằm ngoài/trước "
+            "các vòng lặp nên vẫn trả 200 khi lỗi; (4) Site Address của bước ghi khác bước đọc."
+        )
 
     def _thay_items(self, ten: str, ids_cu: list[str], items_moi: list[dict]):
         ten_sp = ten.replace("'", "''")
