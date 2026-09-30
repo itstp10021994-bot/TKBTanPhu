@@ -19,6 +19,8 @@ yêu cầu ban đầu được encode ở đây:
      không trùng phòng theo room_type có capacity giới hạn (vd phòng máy).
   10. Nếu 1 ngày có từ 2 tiết trở lên của CÙNG 1 activity, các tiết đó phải
       LIỀN KỀ nhau (không xếp kiểu tiết A - tiết khác - tiết A lại).
+  11. Dồn tiết của lớp: trong mỗi buổi, lớp học liền từ tiết đầu buổi, không
+      có tiết trống xen giữa; mục tiêu ưu tiên buổi sáng, ít tiết cuối chiều.
 """
 
 from __future__ import annotations
@@ -47,6 +49,7 @@ DEFAULT_CONSTRAINT_FLAGS = {
     "order_group": True,         # (1) lệch giờ giữa các khối
     "dept_free_session": True,   # (5) buổi trống chung theo tổ
     "no_gap": True,              # (10) 2 tiết cùng môn trong ngày phải liền kề
+    "class_compact": True,       # (11) lớp không có tiết trống giữa buổi, ưu tiên buổi sáng
 }
 
 
@@ -214,6 +217,7 @@ def solve_timetable(
         for c in classes_in_group:
             class_to_units[c].append((key, acts))
 
+    class_slot: dict[tuple[str, int, int], list] = {}
     for c, units in class_to_units.items():
         for d in days:
             for p in periods:
@@ -225,6 +229,7 @@ def solve_timetable(
                     terms.append(occ(acts[0].id, d, p))
                 if terms:
                     model.Add(sum(terms) <= 1)
+                class_slot[(c, d, p)] = terms
 
     # ---------------------------------------------------------------
     # 5) Không trùng giờ của GIÁO VIÊN (tính gộp mọi activity/phân môn).
@@ -417,6 +422,39 @@ def solve_timetable(
                             else:
                                 # v1 + v2 - vm <= 1  <=>  không thể v1=v2=1 mà vm=0
                                 model.Add(v1 + v2 - vm <= 1)
+
+    # ---------------------------------------------------------------
+    # 11) Dồn tiết của lớp: trong mỗi buổi, các tiết lớp học phải là một đoạn
+    #     liền tính từ tiết ĐẦU buổi (theo thời gian biểu của khối/nhóm giờ
+    #     học) -> không có tiết trống xen giữa, không bắt đầu muộn. Kèm mục
+    #     tiêu: càng ít tiết buổi chiều càng tốt, tiết chiều càng muộn phạt
+    #     càng nặng -> lịch dồn về buổi sáng.
+    # ---------------------------------------------------------------
+    phat = []
+    if flags["class_compact"]:
+        for c in class_to_units:
+            khoa = grade_of_class.get(c)
+            for d in days:
+                cho_phep = grade_day_allowed.get((khoa, d), set(periods))
+                for s in sessions:
+                    tiet_buoi = [p for p in periods if _session_of(p, cfg) == s and p in cho_phep]
+                    y = [sum(class_slot.get((c, d, p), [])) for p in tiet_buoi]
+                    for truoc, sau in zip(y, y[1:]):
+                        if isinstance(truoc, int) and isinstance(sau, int):
+                            continue  # toàn giờ cố định trước — giữ nguyên
+                        model.Add(sau <= truoc)
+                    if s == "afternoon":
+                        phat += [(k + 1) * yy for k, yy in enumerate(y) if not isinstance(yy, int)]
+            # chia đều các ngày: ngày nào ít hơn (tổng tiết / số ngày) thì bị phạt theo số tiết thiếu
+            tong = sum(acts[0].periods_per_week for _, acts in class_to_units[c])
+            muc = tong // len(days)
+            if muc > 0:
+                for d in days:
+                    thieu = model.NewIntVar(0, muc, f"thieu_{c}_{d}")
+                    model.Add(thieu >= muc - sum(sum(class_slot.get((c, d, p), [])) for p in periods))
+                    phat.append(3 * thieu)
+        if phat:
+            model.Minimize(sum(phat))
 
     # ---------------------------------------------------------------
     # "Xếp phương án khác": ép lời giải mới khác MỖI lời giải trước đó

@@ -52,6 +52,7 @@ GIA_TRI_CAU_HINH = [
     "cfg_num_days", "cfg_periods_per_day", "cfg_morning_count", "cfg_max_seconds",
     "cfg_school_name", "free_depts", "exam_show_names",
     "ct_period_spread", "ct_room_capacity", "ct_order_group", "ct_dept_free_session", "ct_no_gap",
+    "ct_class_compact",
 ]
 
 

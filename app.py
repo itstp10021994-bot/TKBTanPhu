@@ -860,6 +860,7 @@ DEFAULT_CONSTRAINT_TOGGLES = dict(
     ct_order_group=True,
     ct_dept_free_session=True,
     ct_no_gap=True,
+    ct_class_compact=True,
 )
 
 for key, default in DEFAULTS.items():
@@ -1895,6 +1896,13 @@ if module == "📅 Xếp Thời Khoá Biểu":
                         "(không xếp kiểu Tiết A → môn khác → lại Tiết A)",
                         value=st.session_state.ct_no_gap,
                     )
+                    st.session_state.ct_class_compact = st.checkbox(
+                        "Dồn tiết của lớp: không để tiết trống giữa buổi, học liền từ tiết đầu buổi, "
+                        "ưu tiên buổi sáng",
+                        value=st.session_state.ct_class_compact,
+                        help="Tắt nếu không xếp được lịch (VD GV quá nhiều tiết) — khi đó lịch có thể có "
+                             "tiết trống xen giữa.",
+                    )
                 with opt_c2:
                     st.session_state.ct_room_capacity = st.checkbox(
                         "Giới hạn phòng đặc biệt (VD chỉ 1 phòng máy → không xếp 2 lớp Tin cùng lúc)",
@@ -2079,6 +2087,7 @@ if module == "📅 Xếp Thời Khoá Biểu":
         "order_group": st.session_state.ct_order_group,
         "dept_free_session": st.session_state.ct_dept_free_session,
         "no_gap": st.session_state.ct_no_gap,
+        "class_compact": st.session_state.ct_class_compact,
     }
 
     with (tab_constraints if LA_ADMIN else st.container()):
