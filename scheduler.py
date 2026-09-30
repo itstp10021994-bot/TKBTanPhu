@@ -436,6 +436,7 @@ def solve_timetable(
             khoa = grade_of_class.get(c)
             for d in days:
                 cho_phep = grade_day_allowed.get((khoa, d), set(periods))
+                dau_buoi = {}
                 for s in sessions:
                     tiet_buoi = [p for p in periods if _session_of(p, cfg) == s and p in cho_phep]
                     y = [sum(class_slot.get((c, d, p), [])) for p in tiet_buoi]
@@ -443,8 +444,15 @@ def solve_timetable(
                         if isinstance(truoc, int) and isinstance(sau, int):
                             continue  # toàn giờ cố định trước — giữ nguyên
                         model.Add(sau <= truoc)
+                    if y:
+                        dau_buoi[s] = (y[0], y[-1])
                     if s == "afternoon":
                         phat += [(k + 1) * yy for k, yy in enumerate(y) if not isinstance(yy, int)]
+                # đã học buổi chiều thì buổi sáng phải kín tiết (không bỏ trống cuối buổi sáng)
+                if "morning" in dau_buoi and "afternoon" in dau_buoi:
+                    chieu_dau, sang_cuoi = dau_buoi["afternoon"][0], dau_buoi["morning"][1]
+                    if not (isinstance(chieu_dau, int) and isinstance(sang_cuoi, int)):
+                        model.Add(chieu_dau <= sang_cuoi)
             # chia đều các ngày: ngày nào ít hơn (tổng tiết / số ngày) thì bị phạt theo số tiết thiếu
             tong = sum(acts[0].periods_per_week for _, acts in class_to_units[c])
             muc = tong // len(days)
