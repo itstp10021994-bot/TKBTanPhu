@@ -262,7 +262,7 @@ def lam_sach_bang_nhap(df: pd.DataFrame) -> pd.DataFrame:
     thành số NaN) đổi ô trống thành "" để bảng sửa được và không lỗi khi xếp lịch."""
     df = df.dropna(how="all").reset_index(drop=True)
     for c in df.columns:
-        if df[c].dtype == object or df[c].isna().all():
+        if not pd.api.types.is_numeric_dtype(df[c]) or df[c].isna().all():  # object / str (pandas mới)
             df[c] = df[c].apply(lambda v: "" if _o_trong(v) else str(v).strip())
     return df
 
@@ -321,6 +321,11 @@ GRADE_TIME_COLUMNS = ["Khối", "Thứ", "Tiết", "Giờ bắt đầu", "Giờ 
 
 def _o_trong(v) -> bool:
     return v is None or (isinstance(v, float) and pd.isna(v)) or str(v).strip().lower() in ("", "nan", "none", "nat")
+
+
+def _chuoi_o(v) -> str:
+    """Giá trị 1 ô bảng -> chuỗi đã bỏ khoảng trắng; ô trống / NaN -> ""."""
+    return "" if _o_trong(v) else str(v).strip()
 
 
 def khoa_khoi(v):
@@ -1992,7 +1997,7 @@ if module == "📅 Xếp Thời Khoá Biểu":
                 continue
             blocked_class_ids = [class_name_to_id[c] for c in class_names_raw]
             teacher_ids_for_act = [teacher_name_to_id[teacher_main]]
-            teacher_2 = row.get("GV phụ (đồng giảng)") or ""
+            teacher_2 = _chuoi_o(row.get("GV phụ (đồng giảng)"))
             if isinstance(teacher_2, str) and teacher_2.strip():
                 if teacher_2 not in teacher_name_to_id:
                     errors.append(f"Hoạt động '{row['Tên hoạt động']}': GV phụ '{teacher_2}' chưa khai báo.")
@@ -2000,10 +2005,10 @@ if module == "📅 Xếp Thời Khoá Biểu":
                 teacher_ids_for_act.append(teacher_name_to_id[teacher_2])
 
             room_type = None if pd.isna(row.get("Loại phòng cần")) else str(row.get("Loại phòng cần")).strip() or None
-            sync_key = (row.get("Mã đồng bộ (CLB/tự chọn)") or "").strip() or None
+            sync_key = _chuoi_o(row.get("Mã đồng bộ (CLB/tự chọn)")) or None
 
             fixed_slots = []
-            raw_fixed = (row.get("Cố định trước (Thứ:Tiết,...)") or "").strip()
+            raw_fixed = _chuoi_o(row.get("Cố định trước (Thứ:Tiết,...)"))
             if raw_fixed:
                 try:
                     for pair in raw_fixed.split(","):
