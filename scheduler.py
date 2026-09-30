@@ -127,7 +127,7 @@ def solve_timetable(
     #     thuộc nhiều khối khác nhau, chỉ dùng các tiết mà MỌI khối đó
     #     cùng học trong ngày tương ứng (giao các tập tiết).
     # ---------------------------------------------------------------
-    grade_of_class = {c.id: c.grade for c in data.classes}
+    grade_of_class = {c.id: (c.time_group or c.grade) for c in data.classes}
     grade_day_allowed: dict[tuple[int, int], set[int]] = {
         (g.grade, g.day): (
             set(g.allowed_periods) if g.allowed_periods is not None
