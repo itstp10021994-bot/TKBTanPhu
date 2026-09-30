@@ -323,6 +323,41 @@ def _o_trong(v) -> bool:
     return v is None or (isinstance(v, float) and pd.isna(v)) or str(v).strip().lower() in ("", "nan", "none", "nat")
 
 
+def khoa_khoi(v):
+    """Giá trị cột 'Khối' của thời gian biểu -> số khối (int) hoặc tên nhóm giờ học (str), None nếu trống."""
+    if _o_trong(v):
+        return None
+    so = pd.to_numeric(v, errors="coerce")
+    if pd.notna(so) and float(so).is_integer():
+        return int(so)
+    return " ".join(str(v).split())
+
+
+def khoa_gio_lop(c):
+    """Khoá tra thời gian biểu của 1 lớp: nhóm giờ học (nếu có) hoặc số khối."""
+    return getattr(c, "time_group", None) or c.grade
+
+
+def ten_khoa_khoi(k) -> str:
+    return f"Khối {k}" if isinstance(k, int) else f"Nhóm {k}"
+
+
+def _thu_tu_khoa(k):
+    return (0, k, "") if isinstance(k, int) else (1, 0, str(k))
+
+
+COT_LOP = ["Tên lớp", "Khối", "Nhóm thứ tự", "Nhóm giờ học"]
+
+
+def chuan_hoa_bang_lop(df: pd.DataFrame) -> pd.DataFrame:
+    """Thêm cột 'Nhóm giờ học' (không bắt buộc) nếu bảng cũ chưa có."""
+    df = df.copy()
+    if "Nhóm giờ học" not in df.columns:
+        df["Nhóm giờ học"] = ""
+    df["Nhóm giờ học"] = df["Nhóm giờ học"].apply(lambda v: "" if _o_trong(v) else " ".join(str(v).split()))
+    return df[[c for c in COT_LOP if c in df.columns] + [c for c in df.columns if c not in COT_LOP]]
+
+
 def chuan_hoa_bang_gio(df: pd.DataFrame) -> pd.DataFrame:
     """Đảm bảo bảng giờ học có đủ cột (tương thích file Excel cũ chưa có cột
     'Thứ' — khi đó coi như áp dụng cho tất cả các ngày)."""
@@ -333,6 +368,7 @@ def chuan_hoa_bang_gio(df: pd.DataFrame) -> pd.DataFrame:
         if col not in df.columns:
             df[col] = ""
     df["Thứ"] = df["Thứ"].apply(lambda v: THU_TAT_CA if _o_trong(v) else str(v).strip())
+    df["Khối"] = df["Khối"].apply(lambda v: "" if khoa_khoi(v) is None else str(khoa_khoi(v)))
     for col in ("Giờ bắt đầu", "Giờ kết thúc"):
         df[col] = df[col].apply(lambda v: "" if _o_trong(v) else str(v).strip()[:5])
     return df[GRADE_TIME_COLUMNS + [c for c in df.columns if c not in GRADE_TIME_COLUMNS]]
@@ -340,6 +376,7 @@ def chuan_hoa_bang_gio(df: pd.DataFrame) -> pd.DataFrame:
 
 def lich_hoc_theo_khoi_ngay(df: pd.DataFrame, days: list[int]):
     """Đọc bảng giờ học -> ({(khoi, day): {tiet: "07:15–08:00" | ""}}, errors).
+    khoi = số khối (int) hoặc tên nhóm giờ học (str, VD "6 ESL").
     Có key (khoi, day) nghĩa là khối đó ngày đó CHỈ học các tiết trong dict
     (dict rỗng = nghỉ cả ngày)."""
     errors: list[str] = []
@@ -349,14 +386,14 @@ def lich_hoc_theo_khoi_ngay(df: pd.DataFrame, days: list[int]):
         return {}, errors
     df = chuan_hoa_bang_gio(df)
     for i, row in df.iterrows():
-        khoi = pd.to_numeric(row["Khối"], errors="coerce")
+        khoi = khoa_khoi(row["Khối"])
         tiet = pd.to_numeric(row["Tiết"], errors="coerce")
-        if pd.isna(khoi) and pd.isna(tiet):
+        if khoi is None and pd.isna(tiet):
             continue  # dòng trống
-        if pd.isna(khoi) or pd.isna(tiet):
+        if khoi is None or pd.isna(tiet):
             errors.append(f"Thời gian biểu dòng {i + 1}: thiếu Khối hoặc Tiết.")
             continue
-        khoi, tiet = int(khoi), int(tiet)
+        tiet = int(tiet)
         bd, kt = row["Giờ bắt đầu"], row["Giờ kết thúc"]
         gio = f"{bd}–{kt}" if bd and kt else bd
         thu = row["Thứ"]
@@ -401,10 +438,10 @@ def tao_bang_gio_tu_dong(
     for khoi in khoi_list:
         for thu in thu_list:
             if not tiet_trong_ngay:
-                out.append({"Khối": int(khoi), "Thứ": thu, "Tiết": 0,
+                out.append({"Khối": str(khoa_khoi(khoi)), "Thứ": thu, "Tiết": 0,
                             "Giờ bắt đầu": "Nghỉ", "Giờ kết thúc": ""})
             for tiet, bd, kt in tiet_trong_ngay:
-                out.append({"Khối": int(khoi), "Thứ": thu, "Tiết": tiet,
+                out.append({"Khối": str(khoa_khoi(khoi)), "Thứ": thu, "Tiết": tiet,
                             "Giờ bắt đầu": bd, "Giờ kết thúc": kt})
     return out
 
@@ -513,7 +550,7 @@ def luoi_tkb(result, classes, config, loc, noi_dung, grade_times_df, tuan_bat_da
     """Lưới thời khoá biểu (dòng = tiết, cột = ngày thực tế) cho các tiết thoả
     `loc(lesson)`; ô ghi `noi_dung(lesson)` kèm giờ học của khối lớp đó.
     -> (DataFrame, {(ngày, tiết): giờ})."""
-    khoi_cua = {c.id: c.grade for c in classes}
+    khoi_cua = {c.id: khoa_gio_lop(c) for c in classes}
     lich, _ = lich_hoc_theo_khoi_ngay(grade_times_df, config.days)
     cot = {d: nhan_ngay_thuc_te(d, tuan_bat_dau) for d in config.days}
     dong = [x if isinstance(x, str) else f"Tiết {x}" for x in thu_tu_tiet_co_ngan_buoi(config)]
@@ -698,7 +735,7 @@ SAMPLE_CLASSES = pd.DataFrame([
     {"Tên lớp": "12A1", "Khối": 12, "Nhóm thứ tự": 2},
     {"Tên lớp": "6A1", "Khối": 6, "Nhóm thứ tự": 3},
     {"Tên lớp": "7A1", "Khối": 7, "Nhóm thứ tự": 3},
-])
+], columns=COT_LOP).fillna("")
 
 SAMPLE_ROOMS = pd.DataFrame([
     {"Tên phòng": "Phòng máy 1", "Loại phòng": "computer_lab", "Số phòng cùng loại": 1},
@@ -1575,13 +1612,18 @@ if module == "📅 Xếp Thời Khoá Biểu":
                     "báo thì ngày đó CHỈ được xếp vào đúng các tiết có trong bảng. Khối nào không có dòng "
                     "nào sẽ học đủ 'Số tiết/ngày tối đa' với nhãn mặc định 'Tiết N'. Tiết buổi chiều được "
                     f"đánh số tiếp theo buổi sáng (buổi sáng hiện có {int(morning_count)} tiết → buổi "
-                    f"chiều bắt đầu từ Tiết {int(morning_count) + 1}).",
+                    f"chiều bắt đầu từ Tiết {int(morning_count) + 1}). Lớp có giờ học khác các lớp cùng "
+                    "khối (VD lớp ESL): ghi <b>Nhóm giờ học</b> cho lớp đó ở bảng Lớp học (VD <i>6 ESL</i>), "
+                    "rồi ở đây ghi đúng tên nhóm vào cột <b>Khối</b>.",
                 )
                 st.session_state.grade_times = chuan_hoa_bang_gio(st.session_state.grade_times)
 
                 grades_known = sorted({
                     int(g) for g in pd.to_numeric(st.session_state.classes["Khối"], errors="coerce").dropna()
                 }) or list(range(1, 13))
+                grades_known += sorted({
+                    str(v) for v in chuan_hoa_bang_lop(st.session_state.classes)["Nhóm giờ học"] if str(v).strip()
+                })
                 thu_hien_co = DAY_OPTIONS[:int(num_days)]
                 so_tiet_chieu_toi_da = max(int(periods_per_day) - int(morning_count), 0)
 
@@ -1589,7 +1631,8 @@ if module == "📅 Xếp Thời Khoá Biểu":
                     with st.form("form_tao_gio_hoc"):
                         g1, g2 = st.columns(2)
                         with g1:
-                            tg_khoi = st.multiselect("Khối áp dụng", grades_known, default=grades_known[:1])
+                            tg_khoi = st.multiselect("Khối / nhóm giờ học áp dụng", grades_known,
+                                                     default=grades_known[:1], format_func=ten_khoa_khoi)
                         with g2:
                             tg_thu = st.multiselect(
                                 "Ngày áp dụng", [THU_TAT_CA] + thu_hien_co, default=[THU_TAT_CA],
@@ -1633,7 +1676,7 @@ if module == "📅 Xếp Thời Khoá Biểu":
                                 ra_choi_phut=int(tg_ra_choi),
                             )
                             cu = st.session_state.grade_times
-                            khoi_cu = pd.to_numeric(cu["Khối"], errors="coerce")
+                            khoi_cu = cu["Khối"].map(khoa_khoi)
                             giu_lai = cu[~(khoi_cu.isin(tg_khoi) & cu["Thứ"].isin(tg_thu))]
                             st.session_state.grade_times = pd.concat(
                                 [giu_lai, pd.DataFrame(moi, columns=GRADE_TIME_COLUMNS)], ignore_index=True,
@@ -1642,7 +1685,10 @@ if module == "📅 Xếp Thời Khoá Biểu":
                                 key=lambda col: col.map(
                                     lambda v: ([THU_TAT_CA] + DAY_OPTIONS).index(v)
                                     if v in ([THU_TAT_CA] + DAY_OPTIONS) else 99
-                                ) if col.name == "Thứ" else pd.to_numeric(col, errors="coerce"),
+                                ) if col.name == "Thứ" else (
+                                    col.map(lambda v: _thu_tu_khoa(khoa_khoi(v)) if khoa_khoi(v) is not None
+                                            else (2, 0, "")) if col.name == "Khối"
+                                    else pd.to_numeric(col, errors="coerce")),
                             ).reset_index(drop=True)
                             st.session_state.pop("editor_grade_times", None)
                             st.rerun()
@@ -1652,7 +1698,10 @@ if module == "📅 Xếp Thời Khoá Biểu":
                     st.session_state.grade_times, num_rows="dynamic", width="stretch",
                     key="editor_grade_times",
                     column_config={
-                        "Khối": st.column_config.NumberColumn(min_value=1, max_value=12, step=1, required=True),
+                        "Khối": st.column_config.TextColumn(
+                            required=True,
+                            help="Số khối (VD 10) — áp dụng cho mọi lớp của khối; hoặc tên NHÓM GIỜ HỌC "
+                                 "(VD 6 ESL) — áp dụng cho các lớp khai báo nhóm đó ở bảng Lớp học."),
                         "Thứ": st.column_config.SelectboxColumn(
                             options=[THU_TAT_CA] + DAY_OPTIONS, required=True,
                             help="'Tất cả các ngày' = dùng chung cả tuần; dòng của ngày cụ thể được ưu tiên.",
@@ -1672,10 +1721,10 @@ if module == "📅 Xếp Thời Khoá Biểu":
                 )
                 for e in loi_xem:
                     st.warning(e)
-                khoi_da_cau_hinh = sorted({k for k, _ in lich_xem})
+                khoi_da_cau_hinh = sorted({k for k, _ in lich_xem}, key=_thu_tu_khoa)
                 if khoi_da_cau_hinh:
-                    st.markdown("**👀 Xem lại thời gian biểu theo khối**")
-                    khoi_tabs = st.tabs([f"Khối {k}" for k in khoi_da_cau_hinh])
+                    st.markdown("**👀 Xem lại thời gian biểu theo khối / nhóm giờ học**")
+                    khoi_tabs = st.tabs([ten_khoa_khoi(k) for k in khoi_da_cau_hinh])
                     for tab, k in zip(khoi_tabs, khoi_da_cau_hinh):
                         with tab:
                             luoi = pd.DataFrame(
@@ -1738,7 +1787,8 @@ if module == "📅 Xếp Thời Khoá Biểu":
                     "nhóm sẽ được GV đó dạy liền nhau, nhóm số nhỏ dạy trước. VD: Nhóm 1 = K10/K11/6-ESL, "
                     "Nhóm 2 = K12, Nhóm 3 = K6-9. Nếu trường không có ràng buộc này, để tất cả cùng 1 nhóm.",
                 )
-                excel_io_row("classes", "Lop_hoc")
+                excel_io_row("classes", "Lop_hoc", transform=chuan_hoa_bang_lop)
+                st.session_state.classes = chuan_hoa_bang_lop(st.session_state.classes)
                 st.session_state.classes = st.data_editor(
                     st.session_state.classes, num_rows="dynamic", width="stretch",
                     key="editor_classes",
@@ -1746,6 +1796,10 @@ if module == "📅 Xếp Thời Khoá Biểu":
                         "Tên lớp": st.column_config.TextColumn(required=True),
                         "Khối": st.column_config.NumberColumn(min_value=1, max_value=12, step=1, required=True),
                         "Nhóm thứ tự": st.column_config.NumberColumn(min_value=0, max_value=9, step=1, required=True),
+                        "Nhóm giờ học": st.column_config.TextColumn(
+                            help="Không bắt buộc. Lớp có giờ học KHÁC các lớp cùng khối (VD lớp ESL) thì ghi "
+                                 "tên nhóm, VD '6 ESL', rồi khai báo giờ của nhóm đó ở Thời gian biểu (cột "
+                                 "Khối ghi đúng tên nhóm). Để trống = theo giờ của khối."),
                     },
                 )
             class_names = [c for c in st.session_state.classes["Tên lớp"].dropna().tolist() if c.strip()]
@@ -1889,14 +1943,15 @@ if module == "📅 Xếp Thời Khoá Biểu":
             for tid, name, dept in zip(teacher_ids, teacher_df["Tên giáo viên"], teacher_df["Tổ chuyên môn"])
         ]
 
-        class_df = st.session_state.classes.dropna(subset=["Tên lớp"])
-        class_df = class_df[class_df["Tên lớp"].str.strip() != ""]
+        class_df = chuan_hoa_bang_lop(st.session_state.classes).dropna(subset=["Tên lớp"])
+        class_df = class_df[class_df["Tên lớp"].astype(str).str.strip() != ""]
         class_ids = dedupe_ids([slugify(n, "lop_") for n in class_df["Tên lớp"]])
         class_name_to_id = dict(zip(class_df["Tên lớp"], class_ids))
         classes = [
-            SchoolClass(id=cid, name=name, grade=int(grade), order_group=int(og))
-            for cid, name, grade, og in zip(
-                class_ids, class_df["Tên lớp"], class_df["Khối"], class_df["Nhóm thứ tự"]
+            SchoolClass(id=cid, name=name, grade=int(grade), order_group=int(og), time_group=(tg or None))
+            for cid, name, grade, og, tg in zip(
+                class_ids, class_df["Tên lớp"], class_df["Khối"], class_df["Nhóm thứ tự"],
+                class_df["Nhóm giờ học"]
             )
         ]
 
@@ -1971,12 +2026,19 @@ if module == "📅 Xếp Thời Khoá Biểu":
             st.session_state.grade_times, list(range(1, num_days + 1))
         )
         errors.extend(loi_lich)
+        nhom_co_gio = {k for k, _ in lich_hoc}
+        for c in classes:
+            if c.time_group and c.time_group not in nhom_co_gio:
+                errors.append(
+                    f"Lớp {c.name}: Nhóm giờ học '{c.time_group}' chưa có dòng nào ở Thời gian biểu "
+                    f"(cột Khối ghi '{c.time_group}') — khai báo giờ cho nhóm này hoặc để trống ô Nhóm giờ học."
+                )
         grade_day_periods = []
-        for (khoi, d), tiet_dict in sorted(lich_hoc.items()):
+        for (khoi, d), tiet_dict in sorted(lich_hoc.items(), key=lambda x: (_thu_tu_khoa(x[0][0]), x[0][1])):
             vuot = [t for t in tiet_dict if t > int(periods_per_day)]
             if vuot:
                 errors.append(
-                    f"Thời gian biểu: Khối {khoi} - {DAY_NAMES[d]} có Tiết {vuot}, vượt quá "
+                    f"Thời gian biểu: {ten_khoa_khoi(khoi)} - {DAY_NAMES[d]} có Tiết {vuot}, vượt quá "
                     f"'Số tiết/ngày tối đa' ({int(periods_per_day)}) ở mục 1 — tăng số đó lên trước."
                 )
                 continue
@@ -2150,7 +2212,7 @@ if module == "📅 Xếp Thời Khoá Biểu":
                 for p in periods:
                     gio_cac_ngay = {}
                     for d in days:
-                        tiet_dict = lich_hoc.get((c.grade, d))
+                        tiet_dict = lich_hoc.get((khoa_gio_lop(c), d))
                         if tiet_dict is None:
                             continue
                         if p in tiet_dict:

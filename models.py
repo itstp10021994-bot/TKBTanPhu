@@ -39,6 +39,8 @@ class SchoolClass(BaseModel):
     # tăng dần của order_group trong cùng 1 ngày.
     # Ví dụ: K10/K11/6-ESL = 1 ; K12 = 2 ; K6,7,8,9 (thường) = 3
     order_group: int = 0
+    # Nhóm giờ học riêng (VD '6 ESL'): lớp theo thời gian biểu của nhóm này thay vì của khối.
+    time_group: Optional[str] = None
 
 
 class Room(BaseModel):
@@ -59,7 +61,7 @@ class GradeDayCapacity(BaseModel):
     khối đó dùng đủ toàn bộ periods_per_day của config. Các activity liên
     quan lớp thuộc khối này sẽ KHÔNG được xếp vào tiết > periods_count của
     đúng ngày đó (tiết 1..periods_count vẫn dùng bình thường)."""
-    grade: int
+    grade: int | str   # số khối, hoặc tên nhóm giờ học (SchoolClass.time_group)
     day: int
     periods_count: int = 0
     # Nếu điền: khối đó ngày đó CHỈ học đúng các tiết trong danh sách này

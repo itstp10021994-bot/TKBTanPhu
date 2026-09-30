@@ -412,7 +412,8 @@ class DongBoList:
         for c in cot_app:
             if c in COT_SO:
                 so = pd.to_numeric(df[c], errors="coerce")
-                df[c] = so.astype(int) if len(so) and so.notna().all() and (so % 1 == 0).all() else so
+                if len(so) and so.notna().all():  # cột toàn số (cột Khối có thể chứa tên nhóm, VD "6 ESL")
+                    df[c] = so.astype(int) if (so % 1 == 0).all() else so
         canh_bao = [f"List '{ten}' thiếu cột {thieu} — để trống khi tải về."] if thieu else []
         return df, canh_bao
 
