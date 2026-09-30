@@ -257,6 +257,16 @@ def section_header(number: str, title: str, subtitle: str = ""):
     """, unsafe_allow_html=True)
 
 
+def lam_sach_bang_nhap(df: pd.DataFrame) -> pd.DataFrame:
+    """Bảng đọc từ Excel: bỏ dòng trống hẳn; cột chữ (hoặc cột bỏ trống toàn bộ — pandas đọc
+    thành số NaN) đổi ô trống thành "" để bảng sửa được và không lỗi khi xếp lịch."""
+    df = df.dropna(how="all").reset_index(drop=True)
+    for c in df.columns:
+        if df[c].dtype == object or df[c].isna().all():
+            df[c] = df[c].apply(lambda v: "" if _o_trong(v) else str(v).strip())
+    return df
+
+
 def excel_io_row(state_key: str, label: str, transform=None):
     """Thanh công cụ Xuất/Nhập Excel cho 1 bảng dữ liệu (session_state[state_key]).
     transform: hàm chuẩn hoá DataFrame vừa đọc từ file (tuỳ chọn)."""
@@ -280,7 +290,7 @@ def excel_io_row(state_key: str, label: str, transform=None):
             marker = f"{uploaded.name}:{uploaded.size}"
             if st.session_state.get(f"_imported_{state_key}") != marker:
                 try:
-                    new_df = pd.read_excel(uploaded)
+                    new_df = lam_sach_bang_nhap(pd.read_excel(uploaded))
                     if transform is not None:
                         new_df = transform(new_df)
                     st.session_state[state_key] = new_df
