@@ -6,11 +6,13 @@ Chạy local:  streamlit run app.py
 Deploy:      đẩy lên GitHub rồi deploy trên https://share.streamlit.io
 """
 
+import hashlib
 import html
 import io
 import json
 import random
 import re
+import threading
 import time as time_mod
 import unicodedata
 from datetime import date, datetime, time, timedelta
@@ -1097,7 +1099,7 @@ TEN_FILE_CONG_BO = LOAI_BAN["cong_bo"]["ten_sp"]
 @st.cache_resource
 def _kho_ban() -> dict:
     """Bộ nhớ chung mọi phiên cho từng loại bản."""
-    return {loai: {"goi": None, "da_thu_nap": False, "loi_nap": ""} for loai in LOAI_BAN}
+    return {loai: {"goi": None, "da_thu_nap": False, "loi_nap": "", "lan_thu": 0.0} for loai in LOAI_BAN}
 
 
 def _kho_cong_bo() -> dict:
@@ -1118,18 +1120,30 @@ def _ds_ket_noi_luu_tru() -> list:
     return ket_noi
 
 
-def _tai_ban_tu(kn, loai: str) -> dict | None:
+def _cach_luu(kn) -> str | None:
+    """Lưu & đọc lại ở CÙNG 1 chỗ: file (khi đọc lại được file) hoặc List TKB_CongBo.
+    Flow chỉ có save_url mà thiếu list_url/load_url thì KHÔNG lưu file (vì không đọc lại được)."""
     if kn.co_luu_file and (not isinstance(kn, storage.PowerAutomate) or kn.co_the_tai()):
-        return kn.tai(LOAI_BAN[loai]["ten_sp"])
+        return "file"
     if kn.co_dong_bo_list:
+        return "list"
+    return None
+
+
+def _tai_ban_tu(kn, loai: str) -> dict | None:
+    cach = _cach_luu(kn)
+    if cach == "file":
+        return kn.tai(LOAI_BAN[loai]["ten_sp"])
+    if cach == "list":
         return kn.tai_goi_list(loai)
     return None
 
 
 def _luu_ban_len(kn, loai: str, goi: dict) -> str | None:
-    if kn.co_luu_file:
+    cach = _cach_luu(kn)
+    if cach == "file":
         return "SharePoint: " + kn.luu(LOAI_BAN[loai]["ten_sp"], goi)
-    if kn.co_dong_bo_list:
+    if cach == "list":
         return "SharePoint: " + kn.luu_goi_list(goi, loai)
     return None
 
@@ -1140,8 +1154,10 @@ def nap_ban(loai: str, bat_buoc: bool = False) -> dict | None:
     if kho["goi"] is not None and not bat_buoc:
         return kho["goi"]
     if kho["da_thu_nap"] and not bat_buoc:
-        return None
-    kho["da_thu_nap"], kho["loi_nap"] = True, ""
+        # lần trước đọc SharePoint lỗi -> 60 giây sau thử lại (không chờ tới khi app khởi động lại)
+        if not (kho["loi_nap"] and time_mod.time() - kho.get("lan_thu", 0) > 60):
+            return None
+    kho["da_thu_nap"], kho["loi_nap"], kho["lan_thu"] = True, "", time_mod.time()
     goi = None
     if not bat_buoc:
         try:
@@ -1154,12 +1170,12 @@ def nap_ban(loai: str, bat_buoc: bool = False) -> dict | None:
             try:
                 goi = _tai_ban_tu(kn, loai)
             except Exception as e:  # lúc mở app tuyệt đối không được sập vì SharePoint
-                kho["loi_nap"] = str(e)
+                kho["loi_nap"] = f"{kn.ten_hien_thi}: {e}"
                 goi = None
             if goi:
                 break
     if goi:
-        kho["goi"] = goi
+        kho["goi"], kho["loi_nap"] = goi, ""
     return kho["goi"]
 
 
@@ -1197,6 +1213,70 @@ def cong_bo(goi: dict) -> tuple[list[str], list[str]]:
 def luu_ban_nhap(goi: dict) -> tuple[list[str], list[str]]:
     """Nút 💾: lưu cấu hình + dữ liệu admin đang làm (giáo viên không thấy)."""
     return luu_ban("ban_nhap", goi, "Máy chủ ứng dụng")
+
+
+# ---------------------------------------------------------------------
+# TỰ ĐỘNG LƯU: mỗi khi admin thay đổi dữ liệu / cấu hình, bản nháp được lưu
+# ngay vào bộ nhớ + file cục bộ, và lên SharePoint ở LUỒNG NỀN (không làm chậm
+# giao diện; nhiều lần sửa liên tiếp được gộp, chỉ gửi bản mới nhất).
+# ---------------------------------------------------------------------
+@st.cache_resource
+def _bo_tu_luu() -> dict:
+    return {"khoa": threading.Lock(), "cho": None, "dang_chay": False,
+            "trang_thai": {"luc": "", "phien": "", "ok": [], "loi": []}}
+
+
+def van_tay_goi(goi: dict) -> str:
+    """Dấu vân tay nội dung (bỏ thời gian lưu / người lưu) để biết dữ liệu có đổi không."""
+    g = {k: v for k, v in goi.items() if k not in ("thoi_gian_luu", "nguoi_luu")}
+    return hashlib.sha1(json.dumps(g, sort_keys=True, ensure_ascii=False).encode("utf-8")).hexdigest()
+
+
+def _chay_tu_luu(bo: dict):
+    while True:
+        with bo["khoa"]:
+            viec, bo["cho"] = bo["cho"], None
+            if viec is None:
+                bo["dang_chay"] = False
+                return
+        goi, ket_noi = viec
+        ok, loi = [], []
+        for kn in ket_noi:
+            try:
+                noi = _luu_ban_len(kn, "ban_nhap", goi)
+                if noi:
+                    ok.append(noi)
+            except Exception as e:  # luồng nền: ghi lỗi lại để thanh bên hiển thị
+                loi.append(f"{kn.ten_hien_thi}: {e}")
+        bo["trang_thai"] = {"luc": datetime.now(storage.GIO_VN).strftime("%H:%M:%S %d/%m/%Y"),
+                            "phien": goi.get("thoi_gian_luu", ""), "ok": ok, "loi": loi}
+
+
+def tu_dong_luu(goi: dict):
+    kho = _kho_ban()["ban_nhap"]
+    kho["goi"], kho["da_thu_nap"] = goi, True
+    try:
+        LOAI_BAN["ban_nhap"]["file"].parent.mkdir(parents=True, exist_ok=True)
+        LOAI_BAN["ban_nhap"]["file"].write_text(json.dumps(goi, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
+    ket_noi = _ds_ket_noi_luu_tru()
+    if not ket_noi:
+        return
+    bo = _bo_tu_luu()
+    with bo["khoa"]:
+        bo["cho"] = (goi, ket_noi)
+        if bo["dang_chay"]:
+            return
+        bo["dang_chay"] = True
+    threading.Thread(target=_chay_tu_luu, args=(bo,), daemon=True).start()
+
+
+def nap_sharepoint_loi() -> str:
+    """Lỗi đọc bản nháp từ SharePoint (và chưa có bản nào trong bộ nhớ) -> tạm dừng tự động lưu
+    để không ghi đè dữ liệu tốt trên SharePoint bằng dữ liệu mẫu."""
+    kho = _kho_ban()["ban_nhap"]
+    return kho["loi_nap"] if (kho["loi_nap"] and kho["goi"] is None) else ""
 
 
 # =======================================================================
@@ -1667,6 +1747,29 @@ with st.sidebar:
             + str(_goi_hien_tai.get("thoi_gian_luu", "")).replace("T", " ")[:16]
         )
     if LA_ADMIN:
+        _loi_nap_sp = nap_sharepoint_loi()
+        if _loi_nap_sp:
+            st.error(f"⚠️ Chưa đọc được dữ liệu đã lưu trên SharePoint ({_loi_nap_sp}). Tự động lưu đang "
+                     "TẠM DỪNG để không ghi đè dữ liệu cũ.")
+            if st.button("🔄 Đọc lại từ SharePoint", width="stretch"):
+                nap_ban("ban_nhap", bat_buoc=True)
+                st.session_state["_ban_cong_bo_da_nap"] = None
+                st.session_state.pop("_van_tay_da_luu", None)
+                st.rerun()
+        elif not _ds_ket_noi_luu_tru():
+            st.caption("⚠️ Chưa cấu hình SharePoint: dữ liệu tự lưu trên máy chủ ứng dụng nhưng sẽ MẤT khi "
+                       "app khởi động lại. Xem module ☁️.")
+        else:
+            _bo = _bo_tu_luu()
+            _tt = _bo["trang_thai"]
+            if _bo["dang_chay"] or _bo["cho"]:
+                st.caption("☁️ Đang tự động lưu lên SharePoint…")
+            elif _tt["loi"]:
+                st.error("⚠️ Tự động lưu lên SharePoint lỗi: " + " | ".join(_tt["loi"])[:400])
+            elif _tt["luc"]:
+                st.caption(f"☁️ Đã tự động lưu lên SharePoint lúc {_tt['luc']}")
+            else:
+                st.caption("☁️ Tự động lưu lên SharePoint khi có thay đổi.")
         if st.button("💾 Lưu cấu hình & dữ liệu", type="primary", width="stretch",
                      help="Lưu toàn bộ cấu hình, bảng dữ liệu, ràng buộc và kết quả đang làm. Tải lại "
                           "trang / mở lại app sẽ tự nạp bản đã lưu. Giáo viên KHÔNG thấy bản này "
@@ -1675,6 +1778,10 @@ with st.sidebar:
             _goi_luu["nguoi_luu"] = NGUOI_DUNG["ten"]
             _da_luu, _loi_luu = luu_ban_nhap(_goi_luu)
             st.session_state["_ban_cong_bo_da_nap"] = _goi_luu["thoi_gian_luu"]
+            st.session_state["_van_tay_da_luu"] = van_tay_goi(_goi_luu)
+            if not _loi_luu:
+                _bo_tu_luu()["trang_thai"] = {"luc": datetime.now(storage.GIO_VN).strftime("%H:%M:%S %d/%m/%Y"),
+                                              "phien": _goi_luu["thoi_gian_luu"], "ok": _da_luu, "loi": []}
             st.toast("Đã lưu cấu hình & dữ liệu", icon="💾")
             for _e in _loi_luu:
                 st.warning(_e)
@@ -1686,6 +1793,19 @@ with st.sidebar:
             st.caption("💾 Đã lưu lúc " + str(_goi_nhap_hien.get("thoi_gian_luu", "")).replace("T", " ")[:16]
                        + (f" — {_goi_nhap_hien['nguoi_luu']}" if _goi_nhap_hien.get("nguoi_luu") else ""))
         if st.button("↺ Khôi phục dữ liệu mẫu (toàn bộ)", width="stretch"):
+            st.session_state["_xac_nhan_mau"] = True
+        _xac_nhan_mau = False
+        if st.session_state.get("_xac_nhan_mau"):
+            st.warning("Thay TOÀN BỘ dữ liệu & cấu hình hiện tại bằng dữ liệu mẫu? Bản đã lưu trên SharePoint "
+                       "cũng sẽ bị ghi đè.")
+            _x1, _x2 = st.columns(2)
+            if _x1.button("Xoá & dùng mẫu", type="primary", width="stretch"):
+                st.session_state.pop("_xac_nhan_mau", None)
+                _xac_nhan_mau = True
+            if _x2.button("Huỷ", width="stretch"):
+                st.session_state.pop("_xac_nhan_mau", None)
+                st.rerun()
+        if _xac_nhan_mau:
             for key, default in DEFAULTS.items():
                 st.session_state[key] = default.copy() if hasattr(default, "copy") else default
             for key, default in DEFAULT_CONSTRAINT_TOGGLES.items():
@@ -3810,3 +3930,22 @@ elif module == "👤 Lịch của tôi":
                 st.success("Không có lịch dạy thay liên quan đến bạn.")
 
 hien_chan_trang()
+
+# ---------------------------------------------------------------------
+# TỰ ĐỘNG LƯU (cuối mỗi lần chạy): dữ liệu/cấu hình của admin đổi so với lần
+# lưu trước -> lưu bản nháp (bộ nhớ + file ngay, SharePoint ở luồng nền).
+# Lần chạy đầu của phiên chỉ ghi nhận mốc, không lưu.
+# ---------------------------------------------------------------------
+if LA_ADMIN:
+    try:
+        _goi_tl = storage.dong_goi(st.session_state)
+        _vt_tl = van_tay_goi(_goi_tl)
+        if "_van_tay_da_luu" not in st.session_state:
+            st.session_state["_van_tay_da_luu"] = _vt_tl
+        elif _vt_tl != st.session_state["_van_tay_da_luu"] and not nap_sharepoint_loi():
+            _goi_tl["nguoi_luu"] = NGUOI_DUNG["ten"]
+            tu_dong_luu(_goi_tl)
+            st.session_state["_van_tay_da_luu"] = _vt_tl
+            st.session_state["_ban_cong_bo_da_nap"] = _goi_tl["thoi_gian_luu"]
+    except Exception as _e_tl:  # tự động lưu lỗi không được làm sập trang
+        st.caption(f"⚠️ Tự động lưu lỗi: {_e_tl}")
