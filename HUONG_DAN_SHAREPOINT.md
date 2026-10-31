@@ -339,6 +339,40 @@ bản, tắt rich text). Nút **💾 Lưu cấu hình & dữ liệu** (bản nh�
 vào đó: file `BanNhap_TKB.json` hoặc các dòng `ban_nhap|...` trong List `TKB_CongBo`.
 Chi tiết trong `PHAN_QUYEN.md`.
 
+## Lấy danh sách học sinh từ app tuyển sinh (List `data_nhaphoc`)
+
+Nếu danh sách học sinh đã có sẵn trong 1 List trên **site khác** (VD site của app tuyển sinh,
+List `data_nhaphoc`), ứng dụng đọc thẳng List đó — không cần xuất/nhập Excel.
+
+**Cách nhanh nhất (không cần admin) — sao chép flow của Cách 3:**
+1. Mở flow `sp_url` đã tạo ở Cách 3 → **⋯ → Save As** (lưu bản sao), đặt tên VD `TKB_DocTuyenSinh`.
+2. Trong bản sao, mở bước **Doc_SharePoint** (nhánh True) → *Site Address* → **Enter custom value**
+   → dán địa chỉ **site tuyển sinh** (dạng `https://truong.sharepoint.com/sites/TuyenSinh`, KHÔNG
+   dán đường dẫn của List). Tài khoản tạo flow phải có quyền xem List `data_nhaphoc`.
+3. (Nên làm) Xoá các bước trong nhánh **False** (ghi dữ liệu) của bản sao, chỉ giữ bước
+   **Response** — flow này chỉ cần ĐỌC, xoá đi để không ai ghi nhầm vào dữ liệu tuyển sinh.
+4. Bật flow bản sao (**Turn on**), mở trigger copy **HTTP URL**, thêm vào Secrets:
+   ```toml
+   [nguon_hoc_sinh]
+   sp_url = "<HTTP URL của flow TKB_DocTuyenSinh>"
+   list = "data_nhaphoc"
+   ```
+   (Nếu dùng Microsoft Graph — Cách 1 — thì thay `sp_url` bằng
+   `site_url = "https://truong.sharepoint.com/sites/TuyenSinh"`; app dùng chung tenant_id /
+   client_id / client_secret của mục `[sharepoint]`.)
+
+**Sử dụng:** module 🪑 **Xếp Phòng Thi** → mục 1 (hoặc tab 🏢 → bảng **Lớp học**) → mở
+**☁️ Lấy danh sách học sinh & lớp từ SharePoint tuyển sinh** → **⬇️ Đọc List** → chọn cột
+**Lớp**, **Họ tên**, **Mã HS** (app tự đoán theo tên cột), lọc nếu cần (VD cột *Trạng thái* =
+*Đã nhập học*, hoặc đúng *Năm học*) → bấm:
+- **📋 Đưa vào danh sách học sinh dự thi** — thay bảng học sinh dự thi (Mã HS làm SBD; cột Môn thi
+  để trống = thi theo *Lớp áp dụng* của bảng Môn thi);
+- **🏫 Bổ sung lớp mới vào bảng Lớp học** — chỉ THÊM lớp chưa có (khối lấy từ số đầu tên lớp,
+  VD 10A1 → 10, 6.1 → 6), không xoá lớp cũ.
+
+Cột *tra cứu* (Lookup), *người dùng* và *lựa chọn* (Choice) được đọc thành chữ. App chỉ ĐỌC List
+`data_nhaphoc`, không ghi gì vào đó.
+
 ## Không có SharePoint?
 
 Mục **3. Sao lưu trên máy** trong cùng module luôn dùng được: tải file `.json`

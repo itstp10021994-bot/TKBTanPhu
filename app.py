@@ -304,6 +304,137 @@ def excel_io_row(state_key: str, label: str, transform=None):
 
 
 # ---------------------------------------------------------------------
+# LẤY DANH SÁCH HỌC SINH & LỚP TỪ SHAREPOINT KHÁC (VD List data_nhaphoc của
+# app tuyển sinh) — cấu hình mục [nguon_hoc_sinh] trong Secrets.
+# ---------------------------------------------------------------------
+KHONG_DUNG = "(không dùng)"
+KHONG_LOC = "(không lọc)"
+
+
+def _doan_cot(cot_list: list[str], mau: list[str]) -> str | None:
+    """Đoán cột theo tên (bỏ dấu, chữ thường), VD mau ['lop'] khớp 'Lớp', 'Lớp học'."""
+    for m in mau:
+        for c in cot_list:
+            if storage.khoa_cot(c).startswith(m):
+                return c
+    return None
+
+
+def khoi_tu_ten_lop(ten: str) -> int | None:
+    """'10A1' -> 10, '6.1' -> 6, '6 ESL' -> 6; không có số đầu -> None."""
+    m = re.match(r"\s*(\d{1,2})", str(ten))
+    return int(m.group(1)) if m and 1 <= int(m.group(1)) <= 12 else None
+
+
+def khung_nguon_hoc_sinh(khoa: str):
+    """Khung (thu gọn) đọc List học sinh từ SharePoint tuyển sinh, chọn cột Lớp / Họ tên / Mã HS,
+    lọc tuỳ chọn, rồi đưa vào bảng học sinh dự thi và/hoặc bổ sung bảng Lớp học."""
+    with st.expander("☁️ Lấy danh sách học sinh & lớp từ SharePoint tuyển sinh", expanded=False):
+        for tb in st.session_state.pop(f"_{khoa}_tb", []):
+            (st.warning if tb.startswith("⚠️") else st.success)(tb)
+        try:
+            nguon = storage.ket_noi_nguon_hoc_sinh(st.secrets)
+        except storage.LoiLuuTru as e:
+            st.error(str(e))
+            return
+        if nguon is None:
+            st.info(
+                "Chưa cấu hình nguồn học sinh. Thêm mục **[nguon_hoc_sinh]** vào Secrets (sp_url của 1 flow "
+                "Power Automate trỏ tới site tuyển sinh, list = \"data_nhaphoc\") — xem "
+                "HUONG_DAN_SHAREPOINT.md, mục *Lấy danh sách học sinh từ app tuyển sinh*."
+            )
+            return
+        kn, ten_list = nguon
+        if st.button(f"⬇️ Đọc List '{ten_list}'", key=f"{khoa}_doc"):
+            try:
+                with st.spinner(f"Đang đọc List '{ten_list}'..."):
+                    st.session_state["_nguon_hs_df"] = kn.doc_bang_tho(ten_list)
+            except (storage.LoiLuuTru, requests.RequestException) as e:
+                st.error(f"Không đọc được List '{ten_list}': {e}")
+        df = st.session_state.get("_nguon_hs_df")
+        if df is None:
+            return
+        if df.empty:
+            st.warning(f"List '{ten_list}' không có dòng nào.")
+            return
+        cot = list(df.columns)
+        st.caption(f"Đã đọc {len(df)} dòng · {len(cot)} cột: {', '.join(cot)}")
+        c1, c2, c3 = st.columns(3)
+        mac_dinh_lop = _doan_cot(cot, ["lop", "class"]) or cot[0]
+        with c1:
+            cot_lop = st.selectbox("Cột LỚP", cot, index=cot.index(mac_dinh_lop), key=f"{khoa}_cot_lop")
+        tuy_chon = [KHONG_DUNG] + cot
+        g_ten = _doan_cot(cot, ["hovaten", "hoten", "tenhocsinh", "tenhs"])
+        g_ma = _doan_cot(cot, ["mahocsinh", "mahs", "mshs", "madinhdanh", "sbd", "mssv"])
+        with c2:
+            cot_ten = st.selectbox("Cột HỌ TÊN", tuy_chon, index=tuy_chon.index(g_ten) if g_ten else 0,
+                                   key=f"{khoa}_cot_ten")
+        with c3:
+            cot_ma = st.selectbox("Cột MÃ HS → SBD", tuy_chon, index=tuy_chon.index(g_ma) if g_ma else 0,
+                                  key=f"{khoa}_cot_ma", help="Để (không dùng) thì SBD tự sinh khi xếp phòng thi.")
+        l1, l2 = st.columns([1, 2])
+        with l1:
+            cot_loc = st.selectbox("Lọc theo cột", [KHONG_LOC] + cot, key=f"{khoa}_cot_loc",
+                                   help="VD chỉ lấy học sinh đã nhập học / đúng năm học.")
+        gia_tri_loc = []
+        if cot_loc != KHONG_LOC:
+            with l2:
+                gia_tri_loc = st.multiselect("Giữ các dòng có giá trị", sorted(df[cot_loc].astype(str).unique()),
+                                             key=f"{khoa}_gt_loc")
+        chon = df[df[cot_lop].astype(str).str.strip() != ""]
+        if cot_loc != KHONG_LOC and gia_tri_loc:
+            chon = chon[chon[cot_loc].astype(str).isin(gia_tri_loc)]
+        so_lop = chon[cot_lop].astype(str).str.strip().value_counts()
+        st.markdown(f"**{len(chon)} học sinh · {len(so_lop)} lớp** sau khi lọc (bỏ dòng không có lớp).")
+        if len(so_lop):
+            st.dataframe(
+                pd.DataFrame({"Lớp": so_lop.index, "Số học sinh": so_lop.values}).sort_values(
+                    "Lớp", key=lambda s: s.map(lambda v: (khoi_tu_ten_lop(v) or 99, v))),
+                hide_index=True, width="stretch", height=min(35 * len(so_lop) + 40, 300),
+            )
+        b1, b2 = st.columns(2)
+        with b1:
+            dua_hs = st.button("📋 Đưa vào danh sách học sinh dự thi (thay bảng)", key=f"{khoa}_dua_hs",
+                               width="stretch", disabled=chon.empty)
+        with b2:
+            dua_lop = st.button("🏫 Bổ sung lớp mới vào bảng Lớp học", key=f"{khoa}_dua_lop",
+                                width="stretch", disabled=chon.empty)
+        if dua_hs:
+            st.session_state.exam_students = pd.DataFrame({
+                er.COT_SBD: chon[cot_ma].map(_chuoi_o) if cot_ma != KHONG_DUNG else "",
+                er.COT_HO_TEN: chon[cot_ten].map(_chuoi_o) if cot_ten != KHONG_DUNG else "",
+                er.COT_LOP: chon[cot_lop].map(_chuoi_o),
+                er.COT_MON: "",
+            }, columns=er.COT_CHUAN).reset_index(drop=True)
+            st.session_state.pop("editor_exam_students", None)
+            st.session_state.exam_results = {}
+            st.session_state[f"_{khoa}_tb"] = [
+                f"✅ Đã đưa {len(chon)} học sinh từ List '{ten_list}' vào danh sách học sinh dự thi. Cột Môn "
+                "thi để trống = thi theo 'Lớp áp dụng' ở bảng Môn thi (hoặc điền môn cho từng học sinh)."]
+            st.rerun()
+        if dua_lop:
+            bang = chuan_hoa_bang_lop(st.session_state.classes)
+            da_co = {str(t).strip() for t in bang["Tên lớp"].dropna()}
+            moi, loi = [], []
+            for ten in sorted(set(chon[cot_lop].map(_chuoi_o)) - da_co - {""},
+                              key=lambda v: (khoi_tu_ten_lop(v) or 99, v)):
+                k = khoi_tu_ten_lop(ten)
+                if k is None:
+                    loi.append(ten)
+                    continue
+                moi.append({"Tên lớp": ten, "Khối": k, "Nhóm thứ tự": 1, "Nhóm giờ học": ""})
+            if moi:
+                st.session_state.classes = pd.concat([bang, pd.DataFrame(moi)], ignore_index=True)
+                st.session_state.pop("editor_classes", None)
+            tb = [f"✅ Đã thêm {len(moi)} lớp mới: {', '.join(m['Tên lớp'] for m in moi)}." if moi
+                  else "✅ Bảng Lớp học đã có đủ các lớp — không thêm lớp nào."]
+            if loi:
+                tb.append(f"⚠️ Không đoán được khối của: {', '.join(loi)} — thêm tay vào bảng Lớp học.")
+            st.session_state[f"_{khoa}_tb"] = tb
+            st.rerun()
+
+
+# ---------------------------------------------------------------------
 # THỜI GIAN BIỂU THEO TỪNG KHỐI, TỪNG NGÀY
 # Bảng st.session_state.grade_times: Khối | Thứ | Tiết | Giờ bắt đầu | Giờ kết thúc
 #   - Thứ = "Tất cả các ngày": áp dụng cho mọi ngày của khối đó, TRỪ những
@@ -740,7 +871,7 @@ SAMPLE_CLASSES = pd.DataFrame([
     {"Tên lớp": "12A1", "Khối": 12, "Nhóm thứ tự": 2},
     {"Tên lớp": "6A1", "Khối": 6, "Nhóm thứ tự": 3},
     {"Tên lớp": "7A1", "Khối": 7, "Nhóm thứ tự": 3},
-], columns=COT_LOP).fillna("")
+], columns=COT_LOP).assign(**{"Nhóm giờ học": ""})
 
 SAMPLE_ROOMS = pd.DataFrame([
     {"Tên phòng": "Phòng máy 1", "Loại phòng": "computer_lab", "Số phòng cùng loại": 1},
@@ -1794,6 +1925,7 @@ if module == "📅 Xếp Thời Khoá Biểu":
                     "Nhóm 2 = K12, Nhóm 3 = K6-9. Nếu trường không có ràng buộc này, để tất cả cùng 1 nhóm.",
                 )
                 excel_io_row("classes", "Lop_hoc", transform=chuan_hoa_bang_lop)
+                khung_nguon_hoc_sinh("nguon_hs_lop")
                 st.session_state.classes = chuan_hoa_bang_lop(st.session_state.classes)
                 st.session_state.classes = st.data_editor(
                     st.session_state.classes, num_rows="dynamic", width="stretch",
@@ -2424,6 +2556,7 @@ elif module == "🪑 Xếp Phòng Thi":
                         st.error(f"Không đọc được file: {e}")
             for gc in st.session_state.pop("_ghi_chu_upload_hs", []):
                 (st.success if gc.startswith("✅") else st.info)(gc)
+            khung_nguon_hoc_sinh("nguon_hs_thi")
 
             st.session_state.exam_students = st.data_editor(
                 st.session_state.exam_students, num_rows="dynamic", width="stretch",

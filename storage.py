@@ -259,6 +259,28 @@ def ten_file_an_toan(ten: str) -> str:
 # cột "Số tiết/tuần" của ứng dụng. Lớp con (Graph / Power Automate) chỉ cần
 # cài 4 hàm: _tim_list, _cot_list, _doc_items, _thay_items.
 # ---------------------------------------------------------------------
+# Cột hệ thống của List — không đưa vào bảng đọc thô
+COT_HE_THONG = {"ContentType", "Attachments", "Edit", "LinkTitle", "LinkTitleNoMenu", "DocIcon",
+                "ItemChildCount", "FolderChildCount", "AppAuthor", "AppEditor", "ComplianceAssetId",
+                "SelectTitle", "ID", "Author", "Editor", "Created", "Modified", "LinkTitle2"}
+
+
+def _gia_tri_o(v) -> str:
+    """Giá trị 1 ô List (chữ / số / lựa chọn / tra cứu / người) -> chuỗi."""
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return ""
+    if isinstance(v, dict):
+        for k in ("Title", "LookupValue", "Value", "DisplayName", "Email"):
+            if v.get(k) not in (None, ""):
+                return str(v[k]).strip()
+        return ""
+    if isinstance(v, list):
+        return ", ".join(x for x in (_gia_tri_o(i) for i in v) if x)
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    return str(v).strip()
+
+
 class DongBoList:
     cfg: dict
     co_dong_bo_list = False
@@ -400,6 +422,30 @@ class DongBoList:
             # cột bị để kiểu văn bản đa dạng thức -> SharePoint bọc HTML, bóc ra
             import html as _html
             return json.loads(_html.unescape(re.sub(r"<[^>]+>", "", van_ban)))
+
+    # ---- Đọc NGUYÊN 1 List bất kỳ (VD data_nhaphoc của app tuyển sinh) ----
+    def _cot_tho(self, ref) -> list[dict]:
+        return self._cot_list(ref)
+
+    def _items_tho(self, ref) -> list[tuple[str, dict]]:
+        return self._doc_items(ref)
+
+    def doc_bang_tho(self, ten_list: str) -> pd.DataFrame:
+        """Mọi cột hiển thị của List -> DataFrame (tiêu đề = tên hiển thị của cột)."""
+        ref = self._tim_list(ten_list)
+        if ref is None:
+            raise LoiLuuTru(f"Không tìm thấy List '{ten_list}' trên site đã cấu hình.")
+        cot = self._cot_tho(ref)
+        ten_hien, da_co = {}, set()
+        for c in cot:  # tên hiển thị trùng nhau -> thêm tên nội bộ cho khỏi lẫn
+            t = c["displayName"] if c["displayName"] not in da_co else f"{c['displayName']} ({c['name']})"
+            ten_hien[c["name"]] = t
+            da_co.add(t)
+        dong = []
+        for _, f in self._items_tho(ref):
+            dong.append({ten_hien[c["name"]]: _gia_tri_o(f.get(c["name"], f.get(c["name"] + "LookupId")))
+                         for c in cot})
+        return pd.DataFrame(dong, columns=list(ten_hien.values()))
 
     def doc_list(self, bang: str, cot_app: list[str]) -> tuple[pd.DataFrame, list[str]]:
         """Đọc List -> DataFrame đúng các cột của ứng dụng. -> (df, cảnh báo)."""
@@ -569,6 +615,14 @@ class GraphSharePoint(DongBoList):
                 if c.get("name") == "Title" or not (c.get("readOnly") or c.get("hidden"))
             ]
         return self._cot_cache[list_id]
+
+    def _cot_tho(self, list_id: str) -> list[dict]:
+        r = self._goi("GET", f"/sites/{self._site()}/lists/{list_id}/columns")
+        if r.status_code != 200:
+            raise LoiLuuTru(f"Không đọc được cột của List ({r.status_code}).")
+        return [{"name": c["name"], "displayName": c.get("displayName", c["name"])}
+                for c in r.json().get("value", [])
+                if not c.get("hidden") and c["name"] not in COT_HE_THONG and not c["name"].startswith("_")]
 
     def _doc_items(self, list_id: str) -> list[tuple[str, dict]]:
         items, url = [], f"/sites/{self._site()}/lists/{list_id}/items?$expand=fields&$top=500"
@@ -802,6 +856,28 @@ class PowerAutomate(DongBoList):
             "các vòng lặp nên vẫn trả 200 khi lỗi; (4) Site Address của bước ghi khác bước đọc."
         )
 
+    def _cot_tho(self, ten: str) -> list[dict]:
+        """Mọi cột hiển thị (kể cả cột chỉ đọc như cột tính toán), kèm kiểu để mở rộng cột tra cứu."""
+        r = self._doc(ten, "fields?$filter=Hidden%20eq%20false&$select=Title,InternalName,TypeAsString")
+        return [
+            {"name": f["InternalName"], "displayName": f.get("Title") or f["InternalName"],
+             "loai": f.get("TypeAsString") or ""}
+            for f in self._gia_tri(r)
+            if f.get("InternalName") and f["InternalName"] not in COT_HE_THONG
+            and not str(f["InternalName"]).startswith("_")
+        ]
+
+    def _items_tho(self, ten: str) -> list[tuple[str, dict]]:
+        mo_rong = [c["name"] for c in self._cot_tho(ten)
+                   if c["loai"] in ("Lookup", "LookupMulti", "User", "UserMulti")]
+        duong_dan = "items?$top=5000"
+        if mo_rong:
+            duong_dan += ("&$select=*," + ",".join(f"{n}/Title" for n in mo_rong)
+                          + "&$expand=" + ",".join(mo_rong))
+        items = self._gia_tri(self._doc(ten, duong_dan))
+        items.sort(key=lambda it: int(it.get("Id") or it.get("ID") or 0))
+        return [(str(it.get("Id") or it.get("ID")), it) for it in items]
+
     def _thay_items(self, ten: str, ids_cu: list[str], items_moi: list[dict]):
         ten_sp = ten.replace("'", "''")
         for dau in range(0, len(ids_cu), self.SO_XOA_MOI_LAN):
@@ -811,6 +887,37 @@ class PowerAutomate(DongBoList):
         for dau in range(0, len(items_moi), self.SO_TAO_MOI_LAN):
             self._post("sp_url", {"thao_tac": "ghi", "list": ten_sp, "duong_dan": "", "xoa_ids": [],
                                   "items": items_moi[dau:dau + self.SO_TAO_MOI_LAN]})
+
+
+TEN_LIST_HS_MAC_DINH = "data_nhaphoc"
+
+
+def ket_noi_nguon_hoc_sinh(secrets):
+    """Mục [nguon_hoc_sinh] trong Secrets -> (kết nối, tên List) để đọc danh sách học sinh từ
+    SharePoint KHÁC (VD site của app tuyển sinh). None nếu chưa cấu hình.
+
+        [nguon_hoc_sinh]
+        sp_url = "<HTTP URL của bản sao flow sp_url, Site Address = site tuyển sinh>"
+        # hoặc dùng Graph (chung tenant_id/client_id/client_secret của mục [sharepoint]):
+        # site_url = "https://truong.sharepoint.com/sites/TuyenSinh"
+        list = "data_nhaphoc"
+    """
+    try:
+        cfg = dict(secrets["nguon_hoc_sinh"]) if "nguon_hoc_sinh" in secrets else {}
+    except Exception:
+        cfg = {}
+    if not cfg:
+        return None
+    ten_list = str(cfg.get("list") or TEN_LIST_HS_MAC_DINH).strip()
+    if cfg.get("sp_url"):
+        return PowerAutomate({"sp_url": str(cfg["sp_url"]).strip()}), ten_list
+    if cfg.get("site_url"):
+        try:
+            chung = dict(secrets["sharepoint"]) if "sharepoint" in secrets else {}
+        except Exception:
+            chung = {}
+        return GraphSharePoint({**chung, "site_url": str(cfg["site_url"]).strip()}), ten_list
+    raise LoiLuuTru("Mục [nguon_hoc_sinh] cần có sp_url (flow Power Automate) hoặc site_url (Graph).")
 
 
 def tao_ket_noi(secrets) -> list:
