@@ -339,7 +339,9 @@ class DongBoList:
         ghep, thieu, title = self._ghep_cot(ref, [str(c) for c in df.columns])
         if not ghep:
             raise LoiLuuTru(f"List '{ten}' không có cột nào trùng tên với bảng — kiểm tra lại tên cột.")
-        canh_bao = [f"List '{ten}' thiếu cột {thieu} — dữ liệu các cột này KHÔNG được lưu."] if thieu else []
+        canh_bao = [f"List '{ten}' thiếu cột {thieu} — dữ liệu các cột này KHÔNG được lưu. Thêm cột: mở List "
+                    f"'{ten}' trên SharePoint → + Thêm cột → Một dòng văn bản → đặt đúng tên trên → Lưu, "
+                    "rồi ghi lại."] if thieu else []
 
         items = []
         for _, row in df.iterrows():
