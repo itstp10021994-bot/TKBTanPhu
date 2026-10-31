@@ -44,129 +44,152 @@ st.set_page_config(page_title="Thời khoá biểu — THPT Tân Phú", layout="
 DAY_NAMES = {1: "Thứ 2", 2: "Thứ 3", 3: "Thứ 4", 4: "Thứ 5", 5: "Thứ 6", 6: "Thứ 7", 7: "CN"}
 
 # =======================================================================
-# GIAO DIỆN — nền sáng, thanh bên trắng, điểm nhấn xanh dương (giống hệ thống IGC)
+# GIAO DIỆN — phong cách "Virtual School": navy + bạc hà + cam san hô + vàng, thẻ bo tròn
 # =======================================================================
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
 :root{
-    --blue-700:#0B5ED7; --blue-600:#1570EF; --blue-500:#2E90FA; --blue-200:#B2D2FC;
-    --blue-100:#DCEAFD; --blue-50:#EEF5FF;
-    --page:#EDF2F9; --band:#E6EFFB; --line:#E3E8F0; --line-2:#EEF1F6;
-    --gray-400:#98A2B3; --gray-500:#667085; --text-900:#1D2939; --text-700:#344054;
-    --chip:#EEF2F7; --ok:#12B76A;
-    --shadow-sm:0 1px 2px rgba(16,24,40,.05);
-    --shadow-md:0 4px 12px -2px rgba(16,24,40,.08);
+    --navy:#22385E; --navy-2:#2F4A78; --mint:#3CC7A8; --mint-d:#25A98C; --mint-50:#E6F8F3;
+    --coral:#F4846B; --coral-50:#FDEDE8; --yellow:#FFC94D; --yellow-50:#FFF6DD; --sky:#5AA9F0; --sky-50:#E8F3FD;
+    --pink:#F7A8B8; --peach:#FBD3C0;
+    --page:#F4F6FA; --card:#FFFFFF; --line:#E8ECF3; --line-2:#F1F4F8;
+    --text:#1F2A44; --text-2:#4A5672; --muted:#8A94AB;
+    --shadow:0 6px 20px -8px rgba(34,56,94,.18); --shadow-h:0 12px 28px -10px rgba(34,56,94,.26);
 }
-html, body, .stApp{ font-family:"Inter","Segoe UI","Helvetica Neue",Arial,sans-serif; color:var(--text-900); }
-.stApp{ background:var(--page); }
-[data-testid="stMainBlockContainer"]{ padding-top:2rem; max-width:1360px; }
+html, body, .stApp{ font-family:"Nunito","Segoe UI","Helvetica Neue",Arial,sans-serif; color:var(--text); }
+.stApp{ background:
+    radial-gradient(420px 320px at 100% 0%, rgba(251,211,192,.75), transparent 70%),
+    radial-gradient(380px 300px at 0% 100%, rgba(247,168,184,.45), transparent 70%),
+    radial-gradient(300px 240px at 85% 100%, rgba(60,199,168,.16), transparent 70%),
+    var(--page); background-attachment:fixed; }
+[data-testid="stMainBlockContainer"]{ padding-top:1.6rem; max-width:1360px; }
 [data-testid="stHeader"]{ background:transparent; }
-a{ color:var(--blue-600) !important; }
+a{ color:var(--mint-d) !important; }
 
-/* ---------- Băng tiêu đề (giống dải tiêu đề trang "Khóa học") ---------- */
-.app-hero{
-    background:var(--band); border:1px solid #DCE7F7; padding:18px 24px; border-radius:14px;
-    margin:0 0 16px 0; }
-.app-hero h1{ color:var(--text-900) !important; font-size:1.45rem !important; font-weight:700 !important;
-    margin:0 !important; padding:0 !important; }
-.app-hero p{ color:var(--gray-500); margin:6px 0 0 0; font-size:.9rem; line-height:1.55; max-width:960px; }
-.app-hero b{ color:var(--text-700); }
-.hero-chips{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
-.hero-chip{ background:#fff; border:1px solid var(--blue-200); color:var(--blue-600);
-    font-size:.78rem; font-weight:600; padding:4px 12px; border-radius:999px; }
+/* ---------- Băng tiêu đề navy (như thanh "Virtual School") ---------- */
+.app-hero{ position:relative; overflow:hidden; background:linear-gradient(120deg, var(--navy) 0%, var(--navy-2) 100%);
+    border-radius:22px; padding:22px 28px 20px 28px; margin:0 0 18px 0; box-shadow:0 16px 34px -18px rgba(34,56,94,.65); }
+.app-hero::before{ content:""; position:absolute; right:-40px; top:-60px; width:220px; height:220px; border-radius:50%;
+    background:radial-gradient(circle, rgba(60,199,168,.55), transparent 65%); }
+.app-hero::after{ content:""; position:absolute; right:140px; bottom:-70px; width:160px; height:160px; border-radius:50%;
+    background:radial-gradient(circle, rgba(244,132,107,.45), transparent 65%); }
+.app-hero h1{ color:#fff !important; font-size:1.55rem !important; font-weight:900 !important; margin:0 !important;
+    padding:0 !important; position:relative; z-index:1; letter-spacing:.2px; }
+.app-hero p{ color:#C9D6EE; margin:6px 0 0 0; font-size:.93rem; line-height:1.55; max-width:960px; position:relative; z-index:1; }
+.app-hero b{ color:#fff; }
+.hero-chips{ display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; position:relative; z-index:1; }
+.hero-chip{ background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.22); color:#fff;
+    font-size:.8rem; font-weight:700; padding:4px 12px; border-radius:999px; }
+.hero-chip:nth-child(1){ background:var(--yellow); color:var(--navy); border-color:var(--yellow); }
+
+/* ---------- Ô số liệu (như "Your Classes") ---------- */
+.o-so-lieu{ display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:14px; margin:0 0 18px 0; }
+.o-sl{ border-radius:20px; padding:16px 18px; background:var(--card); box-shadow:var(--shadow); position:relative; overflow:hidden; }
+.o-sl .bieu-tuong{ width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:1.25rem; margin-bottom:10px; background:rgba(255,255,255,.85); }
+.o-sl .so{ font-size:1.9rem; font-weight:900; line-height:1.05; }
+.o-sl .nhan{ font-size:.85rem; font-weight:700; margin-top:2px; opacity:.85; }
+.o-sl .phu{ font-size:.75rem; margin-top:4px; opacity:.75; }
+.o-sl.mint{ background:var(--mint); color:#fff; } .o-sl.coral{ background:var(--coral); color:#fff; }
+.o-sl.navy{ background:var(--navy); color:#fff; } .o-sl.yellow{ background:var(--yellow); color:var(--navy); }
+.o-sl.sky{ background:var(--sky); color:#fff; } .o-sl.trang{ background:#fff; color:var(--text); }
+.o-sl::after{ content:""; position:absolute; right:-24px; bottom:-24px; width:90px; height:90px; border-radius:50%;
+    background:rgba(255,255,255,.16); }
 
 /* ---------- Thẻ nội dung ---------- */
-[class*="st-key-the_"]{
-    background:#fff !important; border:1px solid var(--line) !important; border-radius:14px !important;
-    box-shadow:var(--shadow-sm); padding:18px 20px 12px 20px !important; }
+[class*="st-key-the_"]{ background:var(--card) !important; border:none !important; border-radius:22px !important;
+    box-shadow:var(--shadow); padding:20px 22px 14px 22px !important; transition:box-shadow .15s ease; }
+[class*="st-key-the_"]:hover{ box-shadow:var(--shadow-h); }
 .section-title{ display:flex; align-items:center; gap:10px; margin:2px 0 2px 0; }
-.section-badge{ background:var(--blue-50); color:var(--blue-600); border:1px solid var(--blue-100);
-    font-size:.78rem; font-weight:700; min-width:28px; height:28px; padding:0 6px; border-radius:8px;
-    display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-.section-title h3{ margin:0 !important; padding:0 !important; color:var(--text-900); font-size:1.05rem !important; font-weight:700 !important; }
-.section-sub{ color:var(--gray-500); font-size:.86rem; margin:4px 0 12px 38px; line-height:1.55; }
-.result-title{ font-size:1.2rem; font-weight:700; color:var(--text-900); margin:4px 0 10px 0; }
-.login-title{ font-size:1.2rem; font-weight:700; color:var(--text-900); margin:6px 0 10px 0; text-align:center; }
+.section-badge{ background:var(--mint); color:#fff; font-size:.8rem; font-weight:900; min-width:30px; height:30px;
+    padding:0 6px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    box-shadow:0 4px 10px -3px rgba(60,199,168,.6); }
+.section-title h3{ margin:0 !important; padding:0 !important; color:var(--navy); font-size:1.08rem !important; font-weight:900 !important; }
+.section-sub{ color:var(--muted); font-size:.87rem; margin:4px 0 12px 40px; line-height:1.55; }
+.result-title{ font-size:1.25rem; font-weight:900; color:var(--navy); margin:4px 0 10px 0; }
+.login-title{ font-size:1.25rem; font-weight:900; color:var(--navy); margin:6px 0 10px 0; text-align:center; }
 
-/* ---------- Nút: chính = xanh đặc, phụ = viền xanh ---------- */
+/* ---------- Nút: chính = bạc hà, phụ = trắng viền ---------- */
 .stButton>button, .stDownloadButton>button, .stFormSubmitButton>button{
-    border-radius:8px !important; font-weight:600 !important; border:1px solid var(--blue-600) !important;
-    background:#fff !important; color:var(--blue-600) !important; box-shadow:none !important;
-    transition:background .12s ease, filter .12s ease !important; }
+    border-radius:12px !important; font-weight:800 !important; border:1.5px solid var(--line) !important;
+    background:#fff !important; color:var(--navy) !important; box-shadow:0 2px 6px -3px rgba(34,56,94,.2) !important;
+    transition:transform .12s ease, box-shadow .12s ease, background .12s ease !important; }
 .stButton>button:hover, .stDownloadButton>button:hover, .stFormSubmitButton>button:hover{
-    background:var(--blue-50) !important; }
-.stButton>button p, .stDownloadButton>button p, .stFormSubmitButton>button p{ color:inherit !important; }
+    transform:translateY(-1px); border-color:var(--mint) !important; color:var(--mint-d) !important;
+    box-shadow:0 8px 16px -8px rgba(60,199,168,.55) !important; }
+.stButton>button p, .stDownloadButton>button p, .stFormSubmitButton>button p{ color:inherit !important; font-weight:800 !important; }
 .stButton>button[kind="primary"], .stDownloadButton>button[kind="primary"], .stFormSubmitButton>button[kind="primaryFormSubmit"]{
-    background:var(--blue-600) !important; color:#fff !important; border-color:var(--blue-600) !important; }
+    background:linear-gradient(135deg, var(--mint), var(--mint-d)) !important; color:#fff !important; border:none !important;
+    box-shadow:0 10px 20px -10px rgba(37,169,140,.85) !important; }
 .stButton>button[kind="primary"]:hover, .stDownloadButton>button[kind="primary"]:hover,
-.stFormSubmitButton>button[kind="primaryFormSubmit"]:hover{ background:var(--blue-700) !important; }
+.stFormSubmitButton>button[kind="primaryFormSubmit"]:hover{ color:#fff !important; filter:brightness(1.05); }
 .stButton>button:disabled{ opacity:.5; }
 
 /* ---------- Ô nhập ---------- */
-[data-baseweb="input"], [data-baseweb="select"]>div, [data-baseweb="textarea"]{ border-radius:8px !important; }
+[data-baseweb="input"], [data-baseweb="select"]>div, [data-baseweb="textarea"]{ border-radius:12px !important; }
 
-/* ---------- Tab ---------- */
-.stTabs [data-baseweb="tab-list"], .stTabs [role="tablist"]{ gap:4px; border-bottom:1px solid var(--line); }
-.stTabs [data-testid="stTab"]{ background:transparent; border-radius:8px 8px 0 0; padding:8px 14px !important;
-    font-weight:600; color:var(--gray-500); }
-.stTabs [data-testid="stTab"]:hover{ color:var(--blue-600); background:var(--blue-50); }
-.stTabs [data-testid="stTab"][aria-selected="true"]{ color:var(--blue-600); background:var(--blue-50); }
+/* ---------- Tab dạng viên thuốc ---------- */
+.stTabs [data-baseweb="tab-list"], .stTabs [role="tablist"]{ gap:8px; border-bottom:none; background:#fff; padding:6px;
+    border-radius:16px; box-shadow:var(--shadow); width:fit-content; max-width:100%; flex-wrap:wrap; }
+.stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"]{ display:none; }
+.stTabs [data-testid="stTab"]{ background:transparent; border-radius:12px; padding:8px 16px !important; font-weight:800; color:var(--text-2); }
+.stTabs [data-testid="stTab"]:hover{ background:var(--mint-50); color:var(--mint-d); }
+.stTabs [data-testid="stTab"][aria-selected="true"]{ background:var(--navy); color:#fff; }
+.stTabs [data-testid="stTab"][aria-selected="true"] p{ color:#fff !important; }
 .stTabs [data-testid="stTab"] p{ font-size:.92rem; font-weight:inherit; }
 
-/* ---------- Thẻ số liệu ---------- */
-[data-testid="stMetric"]{ background:#fff; border:1px solid var(--line); border-radius:12px; padding:12px 16px; }
-[data-testid="stMetricLabel"] p{ color:var(--gray-500) !important; font-weight:600; font-size:.82rem; }
-[data-testid="stMetricValue"]{ color:var(--text-900); font-weight:700; }
+/* ---------- Thẻ số liệu Streamlit ---------- */
+[data-testid="stMetric"]{ background:#fff; border:none; border-radius:18px; padding:14px 18px; box-shadow:var(--shadow); }
+[data-testid="stMetricLabel"] p{ color:var(--muted) !important; font-weight:800; font-size:.82rem; }
+[data-testid="stMetricValue"]{ color:var(--navy); font-weight:900; }
 
 /* ---------- Bảng, thông báo ---------- */
-[data-testid="stDataFrame"], [data-testid="stDataEditor"]{ border-radius:10px; overflow:hidden; }
-[data-testid="stExpander"] details{ border-radius:10px !important; border-color:var(--line) !important; background:#fff; }
-[data-testid="stAlert"]{ border-radius:10px; }
-[data-testid="stForm"]{ background:#fff; border-radius:12px !important; border-color:var(--line) !important; }
+[data-testid="stDataFrame"], [data-testid="stDataEditor"]{ border-radius:14px; overflow:hidden; }
+[data-testid="stExpander"] details{ border-radius:16px !important; border-color:var(--line) !important; background:#fff; }
+[data-testid="stExpander"] summary p{ font-weight:800; color:var(--navy); }
+[data-testid="stAlert"]{ border-radius:14px; }
+[data-testid="stForm"]{ background:#fff; border-radius:18px !important; border-color:var(--line) !important; }
 
 /* ---------- Ràng buộc luôn bật ---------- */
-.constraint-row{ background:#fff; border:1px solid var(--line); border-radius:10px; padding:10px 14px; margin-bottom:8px; }
-.constraint-row b{ color:var(--text-900); }
-.constraint-locked{ background:var(--blue-50); border-color:var(--blue-100); color:var(--text-700); }
+.constraint-row{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:10px 14px; margin-bottom:8px; }
+.constraint-row b{ color:var(--navy); }
+.constraint-locked{ background:var(--mint-50); border-color:#C5EEE3; color:var(--text-2); }
 
 /* ---------- Sơ đồ chỗ ngồi ---------- */
 .seating-chart{ margin:10px 0 20px 0; }
-.board-label{ text-align:center; background:var(--blue-600); color:#fff !important;
-    padding:10px; border-radius:8px; margin-bottom:16px; font-weight:700; letter-spacing:1.5px; font-size:.85rem; }
+.board-label{ text-align:center; background:var(--navy); color:#fff !important;
+    padding:10px; border-radius:12px; margin-bottom:16px; font-weight:900; letter-spacing:1.5px; font-size:.85rem; }
 .seat-row{ display:flex; gap:10px; margin-bottom:10px; justify-content:center; flex-wrap:wrap; }
-.seat{ width:104px; min-height:54px; border-radius:8px; display:flex; flex-direction:column; align-items:center;
+.seat{ width:104px; min-height:54px; border-radius:12px; display:flex; flex-direction:column; align-items:center;
     justify-content:center; text-align:center; padding:6px; }
-.seat.filled{ background:#fff; border:1.5px solid var(--blue-200); }
+.seat.filled{ background:var(--mint-50); border:1.5px solid var(--mint); }
 .seat.empty{ background:var(--line-2); border:1.5px dashed var(--line); }
-.seat-sbd{ font-weight:700; color:var(--blue-600) !important; font-size:1.02rem; letter-spacing:.3px; }
+.seat-sbd{ font-weight:900; color:var(--navy) !important; font-size:1.02rem; letter-spacing:.3px; }
 
-/* ---------- Thanh bên: nền trắng, nhóm chữ xám in hoa, mục chọn nền xanh nhạt ---------- */
-section[data-testid="stSidebar"]{ background:#fff; border-right:1px solid var(--line); }
-section[data-testid="stSidebar"] *{ color:var(--text-900); }
-.sidebar-brand{ font-size:1rem; font-weight:700; color:var(--blue-600) !important; line-height:1.35;
-    padding:4px 2px 14px 2px; margin-bottom:8px; border-bottom:1px solid var(--line); }
-section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p{ font-size:.74rem !important; letter-spacing:.6px;
-    text-transform:uppercase; color:var(--gray-400) !important; font-weight:600; }
-section[data-testid="stSidebar"] [role="radiogroup"]{ gap:2px; }
-section[data-testid="stSidebar"] [role="radiogroup"] label{ padding:10px 12px !important; border-radius:10px !important;
+/* ---------- Thanh bên: trắng, mục chọn = viên bạc hà ---------- */
+section[data-testid="stSidebar"]{ background:#fff; border-right:none; box-shadow:4px 0 24px -16px rgba(34,56,94,.35); }
+section[data-testid="stSidebar"] *{ color:var(--text); }
+.sidebar-brand{ font-size:1.05rem; font-weight:900; color:var(--navy) !important; line-height:1.35;
+    padding:12px 14px; margin-bottom:10px; border-radius:16px; background:linear-gradient(135deg, var(--yellow-50), var(--mint-50)); }
+section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p{ font-size:.74rem !important; letter-spacing:.8px;
+    text-transform:uppercase; color:var(--muted) !important; font-weight:800; }
+section[data-testid="stSidebar"] [role="radiogroup"]{ gap:4px; }
+section[data-testid="stSidebar"] [role="radiogroup"] label{ padding:10px 14px !important; border-radius:14px !important;
     margin:0 !important; width:100%; transition:background .15s ease; }
 section[data-testid="stSidebar"] [role="radiogroup"] label > div:first-child{ display:none; }
-section[data-testid="stSidebar"] [role="radiogroup"] label:hover{ background:#F5F8FD !important; }
-section[data-testid="stSidebar"] [role="radiogroup"] label p{ font-weight:500; color:var(--text-900) !important; }
+section[data-testid="stSidebar"] [role="radiogroup"] label:hover{ background:var(--mint-50) !important; }
+section[data-testid="stSidebar"] [role="radiogroup"] label p{ font-weight:700; color:var(--text-2) !important; }
 section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked),
 section[data-testid="stSidebar"] label[data-testid="stRadioOption"][data-selected="true"]{
-    background:var(--blue-50) !important; }
+    background:linear-gradient(135deg, var(--mint), var(--mint-d)) !important; box-shadow:0 8px 16px -10px rgba(37,169,140,.9); }
 section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) p,
-section[data-testid="stSidebar"] label[data-testid="stRadioOption"][data-selected="true"] p{
-    font-weight:600; color:var(--text-900) !important; }
+section[data-testid="stSidebar"] label[data-testid="stRadioOption"][data-selected="true"] p{ font-weight:900; color:#fff !important; }
 section[data-testid="stSidebar"] label[data-testid="stRadioOption"] > div > div:first-child:not([data-testid]){ display:none !important; }
-section[data-testid="stSidebar"] [role="radiogroup"], section[data-testid="stSidebar"] label[data-testid="stRadioOption"]{ width:100%; }
 section[data-testid="stSidebar"] [data-testid="stCaptionContainer"], section[data-testid="stSidebar"] [data-testid="stCaptionContainer"] *{
-    color:var(--gray-500) !important; }
-section[data-testid="stSidebar"] button[kind="primary"],
-section[data-testid="stSidebar"] button[kind="primary"] *{ color:#fff !important; }
-section[data-testid="stSidebar"] button[kind="secondary"] *{ color:var(--blue-600) !important; }
+    color:var(--muted) !important; }
+section[data-testid="stSidebar"] button[kind="primary"], section[data-testid="stSidebar"] button[kind="primary"] *{ color:#fff !important; }
+section[data-testid="stSidebar"] button[kind="secondary"] *{ color:var(--navy) !important; }
 section[data-testid="stSidebar"] .stElementContainer:has(.stRadio), section[data-testid="stSidebar"] .stRadio,
 section[data-testid="stSidebar"] .stRadio [role="radiogroup"]{ width:100% !important; }
 section[data-testid="stSidebar"] .stRadio > div{ align-items:stretch !important; }
@@ -177,24 +200,23 @@ section[data-testid="stSidebar"] [data-testid="stRadio"], section[data-testid="s
 section[data-testid="stSidebar"] hr{ border-color:var(--line) !important; }
 
 /* ---------- Chân trang ---------- */
-.app-footer{ text-align:center; color:var(--gray-500); font-size:.85rem; font-weight:500; margin-top:36px;
-    padding:16px 0 8px 0; border-top:1px solid var(--line); }
+.app-footer{ text-align:center; color:var(--muted); font-size:.85rem; font-weight:700; margin-top:36px;
+    padding:16px 0 8px 0; border-top:1px dashed var(--line); }
 
-/* ---------- Bảng thời khoá biểu (HTML) — đầu bảng xanh nhạt như danh sách khoá học ---------- */
-.tkb-khung{ overflow-x:auto; border:1px solid var(--line); border-radius:12px; background:#fff; margin:6px 0 14px 0; }
-table.tkb{ width:100%; border-collapse:collapse; table-layout:fixed; font-size:.84rem; }
+/* ---------- Bảng thời khoá biểu ---------- */
+.tkb-khung{ overflow-x:auto; border:none; border-radius:18px; background:#fff; box-shadow:var(--shadow); margin:6px 0 14px 0; }
+table.tkb{ width:100%; border-collapse:collapse; table-layout:fixed; font-size:.85rem; }
 table.tkb th, table.tkb td{ border-bottom:1px solid var(--line-2); border-right:1px solid var(--line-2); padding:8px 8px; vertical-align:top; }
-table.tkb thead th{ background:var(--band); color:var(--text-900); font-weight:600; font-size:.82rem; text-align:center;
-    padding:11px 6px; position:sticky; top:0; border-bottom:1px solid #D5E3F7; }
+table.tkb thead th{ background:var(--navy); color:#fff; font-weight:800; font-size:.82rem; text-align:center; padding:12px 6px; position:sticky; top:0; }
 table.tkb thead th.tkb-goc{ width:92px; }
-table.tkb th.tkb-nhan{ background:#FAFBFD; color:var(--text-700); font-weight:600; text-align:left; width:92px; white-space:nowrap; }
-table.tkb tr.tkb-buoi td{ background:var(--chip); color:var(--text-700); font-weight:700; font-size:.76rem; letter-spacing:.6px; padding:6px 10px; }
-td.tkb-tiet{ background:#fff; }
-.tkb-mon{ font-weight:600; color:var(--blue-600); line-height:1.3; }
-.tkb-phu{ color:var(--text-700); font-size:.76rem; line-height:1.3; margin-top:2px; }
-.tkb-gio{ color:var(--gray-500); font-size:.72rem; font-weight:500; margin-top:3px; }
-td.tkb-chi-gio{ color:var(--gray-400); font-size:.74rem; }
-td.tkb-nghi{ background:repeating-linear-gradient(135deg,#F8FAFC,#F8FAFC 6px,#F1F4F8 6px,#F1F4F8 12px); color:var(--gray-400); font-size:.74rem; text-align:center; }
+table.tkb th.tkb-nhan{ background:#FAFBFD; color:var(--navy); font-weight:800; text-align:left; width:92px; white-space:nowrap; }
+table.tkb tr.tkb-buoi td{ background:var(--yellow-50); color:var(--navy); font-weight:900; font-size:.76rem; letter-spacing:.6px; padding:6px 10px; }
+td.tkb-tiet{ background:linear-gradient(180deg, var(--mint-50), #fff); box-shadow:inset 3px 0 0 var(--mint); }
+.tkb-mon{ font-weight:800; color:var(--navy); line-height:1.3; }
+.tkb-phu{ color:var(--text-2); font-size:.76rem; line-height:1.3; margin-top:2px; }
+.tkb-gio{ color:var(--coral); font-size:.72rem; font-weight:700; margin-top:3px; }
+td.tkb-chi-gio{ color:var(--muted); font-size:.74rem; }
+td.tkb-nghi{ background:repeating-linear-gradient(135deg,#FAFBFD,#FAFBFD 6px,#F1F4F8 6px,#F1F4F8 12px); color:var(--muted); font-size:.74rem; text-align:center; }
 hr.tkb-ngan{ border:none; border-top:1px dashed var(--line); margin:6px 0; }
 </style>
 """, unsafe_allow_html=True)
@@ -213,6 +235,25 @@ def hien_hero(tieu_de: str, mo_ta: str = "", nhan: list[str] | None = None):
         + '</div>',
         unsafe_allow_html=True,
     )
+
+
+def hien_o_so_lieu(o_list: list[tuple]):
+    """Hàng ô số liệu nhiều màu (kiểu dashboard). Mỗi ô: (màu, biểu tượng, số, nhãn, dòng phụ);
+    màu: mint | coral | yellow | navy | sky | trang."""
+    o_html = "".join(
+        f'<div class="o-sl {mau}"><div class="bieu-tuong">{bt}</div>'
+        f'<div class="so">{html.escape(str(so))}</div><div class="nhan">{html.escape(nhan)}</div>'
+        + (f'<div class="phu">{html.escape(phu)}</div>' if phu else "") + "</div>"
+        for mau, bt, so, nhan, phu in o_list
+    )
+    st.markdown(f'<div class="o-so-lieu">{o_html}</div>', unsafe_allow_html=True)
+
+
+def _so_dong(df, cot: str) -> int:
+    try:
+        return int(df[cot].map(lambda v: not _o_trong(v)).sum())
+    except Exception:
+        return 0
 
 
 def hien_chan_trang():
@@ -1850,6 +1891,29 @@ hien_hero(
     _tieu_de_mod, _mo_ta_mod,
     [school_name, f"📆 Áp dụng từ {st.session_state.tuan_bat_dau.strftime('%d/%m/%Y')}"],
 )
+
+# Hàng ô số liệu tổng quan (admin) — kiểu dashboard
+if LA_ADMIN and module == "📅 Xếp Thời Khoá Biểu":
+    _ss = st.session_state
+    _tong_tiet = int(pd.to_numeric(_ss.activities.get("Số tiết/tuần"), errors="coerce").fillna(0).sum())
+    _kq = _ss.get("result")
+    _da_xep = _kq is not None and _kq.status not in ("INFEASIBLE", "ERROR")
+    hien_o_so_lieu([
+        ("mint", "🏫", _so_dong(_ss.classes, "Tên lớp"), "Lớp học", ""),
+        ("coral", "👩‍🏫", _so_dong(_ss.teachers, "Tên giáo viên"), "Giáo viên", ""),
+        ("yellow", "📚", _so_dong(_ss.activities, "Tên hoạt động"), "Phân công", f"{_tong_tiet} tiết/tuần"),
+        ("navy", "🗓️", len(_kq.lessons) if _da_xep else "—", "Tiết đã xếp",
+         "Đã có thời khoá biểu" if _da_xep else "Chưa xếp lịch"),
+    ])
+elif LA_ADMIN and module == "🪑 Xếp Phòng Thi":
+    _ss = st.session_state
+    _suc_chua = int(pd.to_numeric(_ss.exam_rooms.get("Sức chứa"), errors="coerce").fillna(0).sum())
+    hien_o_so_lieu([
+        ("mint", "🧑‍🎓", _so_dong(_ss.exam_students, "Lớp"), "Học sinh dự thi", ""),
+        ("sky", "🚪", _so_dong(_ss.exam_rooms, "Tên phòng"), "Phòng thi", f"Sức chứa {_suc_chua} chỗ"),
+        ("coral", "📝", _so_dong(_ss.exam_subjects, "Môn thi"), "Môn thi", ""),
+        ("yellow", "✅", len(_ss.get("exam_results") or {}), "Môn đã xếp phòng", ""),
+    ])
 
 if module == "📅 Xếp Thời Khoá Biểu":
     generate = regenerate = False
