@@ -44,13 +44,13 @@ st.set_page_config(page_title="Thời khoá biểu — THPT Tân Phú", layout="
 DAY_NAMES = {1: "Thứ 2", 2: "Thứ 3", 3: "Thứ 4", 4: "Thứ 5", 5: "Thứ 6", 6: "Thứ 7", 7: "CN"}
 
 # =======================================================================
-# GIAO DIỆN — phong cách "Virtual School": navy + bạc hà + cam san hô + vàng, thẻ bo tròn
+# GIAO DIỆN — phong cách "Virtual School": chủ đạo xanh da trời + navy, phụ san hô / vàng / bạc hà
 # =======================================================================
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
 :root{
-    --navy:#22385E; --navy-2:#2F4A78; --mint:#3CC7A8; --mint-d:#25A98C; --mint-50:#E6F8F3;
+    --navy:#22385E; --navy-2:#2F4A78; --chinh:#2B9BF0; --chinh-d:#1A7FD6; --chinh-50:#E7F3FE; --mint:#3CC7A8;
     --coral:#F4846B; --coral-50:#FDEDE8; --yellow:#FFC94D; --yellow-50:#FFF6DD; --sky:#5AA9F0; --sky-50:#E8F3FD;
     --pink:#F7A8B8; --peach:#FBD3C0;
     --page:#F4F6FA; --card:#FFFFFF; --line:#E8ECF3; --line-2:#F1F4F8;
@@ -61,17 +61,17 @@ html, body, .stApp{ font-family:"Nunito","Segoe UI","Helvetica Neue",Arial,sans-
 .stApp{ background:
     radial-gradient(420px 320px at 100% 0%, rgba(251,211,192,.75), transparent 70%),
     radial-gradient(380px 300px at 0% 100%, rgba(247,168,184,.45), transparent 70%),
-    radial-gradient(300px 240px at 85% 100%, rgba(60,199,168,.16), transparent 70%),
+    radial-gradient(300px 240px at 85% 100%, rgba(43,155,240,.16), transparent 70%),
     var(--page); background-attachment:fixed; }
 [data-testid="stMainBlockContainer"]{ padding-top:1.6rem; max-width:1360px; }
 [data-testid="stHeader"]{ background:transparent; }
-a{ color:var(--mint-d) !important; }
+a{ color:var(--chinh-d) !important; }
 
 /* ---------- Băng tiêu đề navy (như thanh "Virtual School") ---------- */
 .app-hero{ position:relative; overflow:hidden; background:linear-gradient(120deg, var(--navy) 0%, var(--navy-2) 100%);
     border-radius:22px; padding:22px 28px 20px 28px; margin:0 0 18px 0; box-shadow:0 16px 34px -18px rgba(34,56,94,.65); }
 .app-hero::before{ content:""; position:absolute; right:-40px; top:-60px; width:220px; height:220px; border-radius:50%;
-    background:radial-gradient(circle, rgba(60,199,168,.55), transparent 65%); }
+    background:radial-gradient(circle, rgba(43,155,240,.5), transparent 65%); }
 .app-hero::after{ content:""; position:absolute; right:140px; bottom:-70px; width:160px; height:160px; border-radius:50%;
     background:radial-gradient(circle, rgba(244,132,107,.45), transparent 65%); }
 .app-hero h1{ color:#fff !important; font-size:1.55rem !important; font-weight:900 !important; margin:0 !important;
@@ -93,7 +93,7 @@ a{ color:var(--mint-d) !important; }
 .o-sl .phu{ font-size:.75rem; margin-top:4px; opacity:.75; }
 .o-sl.mint{ background:var(--mint); color:#fff; } .o-sl.coral{ background:var(--coral); color:#fff; }
 .o-sl.navy{ background:var(--navy); color:#fff; } .o-sl.yellow{ background:var(--yellow); color:var(--navy); }
-.o-sl.sky{ background:var(--sky); color:#fff; } .o-sl.trang{ background:#fff; color:var(--text); }
+.o-sl.sky{ background:var(--chinh); color:#fff; } .o-sl.trang{ background:#fff; color:var(--text); }
 .o-sl::after{ content:""; position:absolute; right:-24px; bottom:-24px; width:90px; height:90px; border-radius:50%;
     background:rgba(255,255,255,.16); }
 
@@ -102,9 +102,9 @@ a{ color:var(--mint-d) !important; }
     box-shadow:var(--shadow); padding:20px 22px 14px 22px !important; transition:box-shadow .15s ease; }
 [class*="st-key-the_"]:hover{ box-shadow:var(--shadow-h); }
 .section-title{ display:flex; align-items:center; gap:10px; margin:2px 0 2px 0; }
-.section-badge{ background:var(--mint); color:#fff; font-size:.8rem; font-weight:900; min-width:30px; height:30px;
+.section-badge{ background:var(--chinh); color:#fff; font-size:.8rem; font-weight:900; min-width:30px; height:30px;
     padding:0 6px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0;
-    box-shadow:0 4px 10px -3px rgba(60,199,168,.6); }
+    box-shadow:0 4px 10px -3px rgba(43,155,240,.55); }
 .section-title h3{ margin:0 !important; padding:0 !important; color:var(--navy); font-size:1.08rem !important; font-weight:900 !important; }
 .section-sub{ color:var(--muted); font-size:.87rem; margin:4px 0 12px 40px; line-height:1.55; }
 .result-title{ font-size:1.25rem; font-weight:900; color:var(--navy); margin:4px 0 10px 0; }
@@ -116,12 +116,12 @@ a{ color:var(--mint-d) !important; }
     background:#fff !important; color:var(--navy) !important; box-shadow:0 2px 6px -3px rgba(34,56,94,.2) !important;
     transition:transform .12s ease, box-shadow .12s ease, background .12s ease !important; }
 .stButton>button:hover, .stDownloadButton>button:hover, .stFormSubmitButton>button:hover{
-    transform:translateY(-1px); border-color:var(--mint) !important; color:var(--mint-d) !important;
-    box-shadow:0 8px 16px -8px rgba(60,199,168,.55) !important; }
+    transform:translateY(-1px); border-color:var(--chinh) !important; color:var(--chinh-d) !important;
+    box-shadow:0 8px 16px -8px rgba(43,155,240,.5) !important; }
 .stButton>button p, .stDownloadButton>button p, .stFormSubmitButton>button p{ color:inherit !important; font-weight:800 !important; }
 .stButton>button[kind="primary"], .stDownloadButton>button[kind="primary"], .stFormSubmitButton>button[kind="primaryFormSubmit"]{
-    background:linear-gradient(135deg, var(--mint), var(--mint-d)) !important; color:#fff !important; border:none !important;
-    box-shadow:0 10px 20px -10px rgba(37,169,140,.85) !important; }
+    background:linear-gradient(135deg, var(--chinh), var(--chinh-d)) !important; color:#fff !important; border:none !important;
+    box-shadow:0 10px 20px -10px rgba(26,127,214,.8) !important; }
 .stButton>button[kind="primary"]:hover, .stDownloadButton>button[kind="primary"]:hover,
 .stFormSubmitButton>button[kind="primaryFormSubmit"]:hover{ color:#fff !important; filter:brightness(1.05); }
 .stButton>button:disabled{ opacity:.5; }
@@ -134,7 +134,7 @@ a{ color:var(--mint-d) !important; }
     border-radius:16px; box-shadow:var(--shadow); width:fit-content; max-width:100%; flex-wrap:wrap; }
 .stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"]{ display:none; }
 .stTabs [data-testid="stTab"]{ background:transparent; border-radius:12px; padding:8px 16px !important; font-weight:800; color:var(--text-2); }
-.stTabs [data-testid="stTab"]:hover{ background:var(--mint-50); color:var(--mint-d); }
+.stTabs [data-testid="stTab"]:hover{ background:var(--chinh-50); color:var(--chinh-d); }
 .stTabs [data-testid="stTab"][aria-selected="true"]{ background:var(--navy); color:#fff; }
 .stTabs [data-testid="stTab"][aria-selected="true"] p{ color:#fff !important; }
 .stTabs [data-testid="stTab"] p{ font-size:.92rem; font-weight:inherit; }
@@ -154,7 +154,7 @@ a{ color:var(--mint-d) !important; }
 /* ---------- Ràng buộc luôn bật ---------- */
 .constraint-row{ background:#fff; border:1px solid var(--line); border-radius:14px; padding:10px 14px; margin-bottom:8px; }
 .constraint-row b{ color:var(--navy); }
-.constraint-locked{ background:var(--mint-50); border-color:#C5EEE3; color:var(--text-2); }
+.constraint-locked{ background:var(--chinh-50); border-color:#C6E2FB; color:var(--text-2); }
 
 /* ---------- Sơ đồ chỗ ngồi ---------- */
 .seating-chart{ margin:10px 0 20px 0; }
@@ -163,7 +163,7 @@ a{ color:var(--mint-d) !important; }
 .seat-row{ display:flex; gap:10px; margin-bottom:10px; justify-content:center; flex-wrap:wrap; }
 .seat{ width:104px; min-height:54px; border-radius:12px; display:flex; flex-direction:column; align-items:center;
     justify-content:center; text-align:center; padding:6px; }
-.seat.filled{ background:var(--mint-50); border:1.5px solid var(--mint); }
+.seat.filled{ background:var(--chinh-50); border:1.5px solid var(--chinh); }
 .seat.empty{ background:var(--line-2); border:1.5px dashed var(--line); }
 .seat-sbd{ font-weight:900; color:var(--navy) !important; font-size:1.02rem; letter-spacing:.3px; }
 
@@ -171,18 +171,18 @@ a{ color:var(--mint-d) !important; }
 section[data-testid="stSidebar"]{ background:#fff; border-right:none; box-shadow:4px 0 24px -16px rgba(34,56,94,.35); }
 section[data-testid="stSidebar"] *{ color:var(--text); }
 .sidebar-brand{ font-size:1.05rem; font-weight:900; color:var(--navy) !important; line-height:1.35;
-    padding:12px 14px; margin-bottom:10px; border-radius:16px; background:linear-gradient(135deg, var(--yellow-50), var(--mint-50)); }
+    padding:12px 14px; margin-bottom:10px; border-radius:16px; background:linear-gradient(135deg, var(--yellow-50), var(--chinh-50)); }
 section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p{ font-size:.74rem !important; letter-spacing:.8px;
     text-transform:uppercase; color:var(--muted) !important; font-weight:800; }
 section[data-testid="stSidebar"] [role="radiogroup"]{ gap:4px; }
 section[data-testid="stSidebar"] [role="radiogroup"] label{ padding:10px 14px !important; border-radius:14px !important;
     margin:0 !important; width:100%; transition:background .15s ease; }
 section[data-testid="stSidebar"] [role="radiogroup"] label > div:first-child{ display:none; }
-section[data-testid="stSidebar"] [role="radiogroup"] label:hover{ background:var(--mint-50) !important; }
+section[data-testid="stSidebar"] [role="radiogroup"] label:hover{ background:var(--chinh-50) !important; }
 section[data-testid="stSidebar"] [role="radiogroup"] label p{ font-weight:700; color:var(--text-2) !important; }
 section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked),
 section[data-testid="stSidebar"] label[data-testid="stRadioOption"][data-selected="true"]{
-    background:linear-gradient(135deg, var(--mint), var(--mint-d)) !important; box-shadow:0 8px 16px -10px rgba(37,169,140,.9); }
+    background:linear-gradient(135deg, var(--chinh), var(--chinh-d)) !important; box-shadow:0 8px 16px -10px rgba(26,127,214,.85); }
 section[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) p,
 section[data-testid="stSidebar"] label[data-testid="stRadioOption"][data-selected="true"] p{ font-weight:900; color:#fff !important; }
 section[data-testid="stSidebar"] label[data-testid="stRadioOption"] > div > div:first-child:not([data-testid]){ display:none !important; }
@@ -211,7 +211,7 @@ table.tkb thead th{ background:var(--navy); color:#fff; font-weight:800; font-si
 table.tkb thead th.tkb-goc{ width:92px; }
 table.tkb th.tkb-nhan{ background:#FAFBFD; color:var(--navy); font-weight:800; text-align:left; width:92px; white-space:nowrap; }
 table.tkb tr.tkb-buoi td{ background:var(--yellow-50); color:var(--navy); font-weight:900; font-size:.76rem; letter-spacing:.6px; padding:6px 10px; }
-td.tkb-tiet{ background:linear-gradient(180deg, var(--mint-50), #fff); box-shadow:inset 3px 0 0 var(--mint); }
+td.tkb-tiet{ background:linear-gradient(180deg, var(--chinh-50), #fff); box-shadow:inset 3px 0 0 var(--chinh); }
 .tkb-mon{ font-weight:800; color:var(--navy); line-height:1.3; }
 .tkb-phu{ color:var(--text-2); font-size:.76rem; line-height:1.3; margin-top:2px; }
 .tkb-gio{ color:var(--coral); font-size:.72rem; font-weight:700; margin-top:3px; }
@@ -1899,7 +1899,7 @@ if LA_ADMIN and module == "📅 Xếp Thời Khoá Biểu":
     _kq = _ss.get("result")
     _da_xep = _kq is not None and _kq.status not in ("INFEASIBLE", "ERROR")
     hien_o_so_lieu([
-        ("mint", "🏫", _so_dong(_ss.classes, "Tên lớp"), "Lớp học", ""),
+        ("sky", "🏫", _so_dong(_ss.classes, "Tên lớp"), "Lớp học", ""),
         ("coral", "👩‍🏫", _so_dong(_ss.teachers, "Tên giáo viên"), "Giáo viên", ""),
         ("yellow", "📚", _so_dong(_ss.activities, "Tên hoạt động"), "Phân công", f"{_tong_tiet} tiết/tuần"),
         ("navy", "🗓️", len(_kq.lessons) if _da_xep else "—", "Tiết đã xếp",
@@ -1909,8 +1909,8 @@ elif LA_ADMIN and module == "🪑 Xếp Phòng Thi":
     _ss = st.session_state
     _suc_chua = int(pd.to_numeric(_ss.exam_rooms.get("Sức chứa"), errors="coerce").fillna(0).sum())
     hien_o_so_lieu([
-        ("mint", "🧑‍🎓", _so_dong(_ss.exam_students, "Lớp"), "Học sinh dự thi", ""),
-        ("sky", "🚪", _so_dong(_ss.exam_rooms, "Tên phòng"), "Phòng thi", f"Sức chứa {_suc_chua} chỗ"),
+        ("sky", "🧑‍🎓", _so_dong(_ss.exam_students, "Lớp"), "Học sinh dự thi", ""),
+        ("mint", "🚪", _so_dong(_ss.exam_rooms, "Tên phòng"), "Phòng thi", f"Sức chứa {_suc_chua} chỗ"),
         ("coral", "📝", _so_dong(_ss.exam_subjects, "Môn thi"), "Môn thi", ""),
         ("yellow", "✅", len(_ss.get("exam_results") or {}), "Môn đã xếp phòng", ""),
     ])
