@@ -363,8 +363,9 @@ List `data_nhaphoc`), ứng dụng đọc thẳng List đó — không cần xu�
 
 **Sử dụng:** module 🪑 **Xếp Phòng Thi** → mục 1 (hoặc tab 🏢 → bảng **Lớp học**) → mở
 **☁️ Lấy danh sách học sinh & lớp từ SharePoint tuyển sinh** → **⬇️ Đọc List** → chọn cột
-**Lớp**, **Họ tên**, **Mã HS** (app tự đoán theo tên cột), lọc nếu cần (VD cột *Trạng thái* =
-*Đã nhập học*, hoặc đúng *Năm học*) → bấm:
+**Lớp**, **Họ tên**, **Mã HS** (app tự đoán theo tên cột) → chọn **Năm học** (app tự tìm cột
+*Năm học / Niên khóa*, mặc định năm học chứa *Ngày bắt đầu áp dụng TKB*; hiểu được các cách ghi
+2026 - 2027, 2026-2027, 26-27, 2026...) → lọc thêm nếu cần (VD *Trạng thái* = *Đã nhập học*) → bấm:
 - **📋 Đưa vào danh sách học sinh dự thi** — thay bảng học sinh dự thi (Mã HS làm SBD; cột Môn thi
   để trống = thi theo *Lớp áp dụng* của bảng Môn thi);
 - **🏫 Bổ sung lớp mới vào bảng Lớp học** — chỉ THÊM lớp chưa có (khối lấy từ số đầu tên lớp,

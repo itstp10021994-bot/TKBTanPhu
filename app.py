@@ -326,6 +326,28 @@ def khoi_tu_ten_lop(ten: str) -> int | None:
     return int(m.group(1)) if m and 1 <= int(m.group(1)) <= 12 else None
 
 
+def chuan_nam_hoc(v) -> str:
+    """'2026-2027' / '2026 – 2027' / '26-27' / 'NH 2026-2027' / '2026' -> '2026 - 2027'; không có năm -> ''."""
+    so = [int(x) for x in re.findall(r"\d{2,4}", str(v or ""))]
+    bon_so = [x for x in so if 2000 <= x <= 2100]  # ưu tiên năm 4 chữ số (bỏ qua 'K12', 'lớp 10'...)
+    so = bon_so or [x + 2000 for x in so if x < 100]
+    if not so:
+        return ""
+    if len(so) >= 2 and so[1] == so[0] + 1:
+        return f"{so[0]} - {so[1]}"
+    return f"{so[0]} - {so[0] + 1}"
+
+
+def nam_hoc_hien_tai() -> str:
+    """Năm học chứa 'Ngày bắt đầu áp dụng TKB' (năm học bắt đầu từ tháng 8)."""
+    d = st.session_state.get("tuan_bat_dau") or date.today()
+    nam = d.year if d.month >= 8 else d.year - 1
+    return f"{nam} - {nam + 1}"
+
+
+KHOA_NAM_HOC = "nguon_hs_nam_hoc"   # năm học đã chọn — lưu cùng cấu hình
+
+
 def khung_nguon_hoc_sinh(khoa: str):
     """Khung (thu gọn) đọc List học sinh từ SharePoint tuyển sinh, chọn cột Lớp / Họ tên / Mã HS,
     lọc tuỳ chọn, rồi đưa vào bảng học sinh dự thi và/hoặc bổ sung bảng Lớp học."""
@@ -372,20 +394,48 @@ def khung_nguon_hoc_sinh(khoa: str):
         with c3:
             cot_ma = st.selectbox("Cột MÃ HS → SBD", tuy_chon, index=tuy_chon.index(g_ma) if g_ma else 0,
                                   key=f"{khoa}_cot_ma", help="Để (không dùng) thì SBD tự sinh khi xếp phòng thi.")
+        # --- Năm học: tự tìm cột, mặc định năm học hiện tại (theo ngày bắt đầu áp dụng TKB) ---
+        n1, n2 = st.columns([1, 2])
+        g_nam = _doan_cot(cot, ["namhoc", "nienkhoa", "namnhaphoc", "namtuyensinh", "khoatuyensinh", "nam"])
+        with n1:
+            ds_cot_nam = [KHONG_LOC] + cot
+            cot_nam = st.selectbox("Cột NĂM HỌC", ds_cot_nam, index=ds_cot_nam.index(g_nam) if g_nam else 0,
+                                   key=f"{khoa}_cot_nam",
+                                   help="Cột ghi năm học / niên khoá của học sinh trong List tuyển sinh.")
+        nam_chon = ""
+        if cot_nam != KHONG_LOC:
+            nam_list = sorted({chuan_nam_hoc(v) for v in df[cot_nam]} - {""}, reverse=True)
+            if nam_list:
+                hien_tai = nam_hoc_hien_tai()
+                if st.session_state.get(KHOA_NAM_HOC) not in nam_list:
+                    st.session_state[KHOA_NAM_HOC] = hien_tai if hien_tai in nam_list else nam_list[0]
+                with n2:
+                    nam_chon = st.selectbox(
+                        "Năm học", nam_list, key=KHOA_NAM_HOC,
+                        help=f"Mặc định năm học hiện tại ({hien_tai}, theo ngày bắt đầu áp dụng TKB).")
+                if nam_chon != hien_tai:
+                    st.caption(f"⚠️ Đang chọn {nam_chon}, khác năm học hiện tại {hien_tai}.")
+            else:
+                with n2:
+                    st.warning(f"Cột '{cot_nam}' không có giá trị năm học nào (VD 2026 - 2027).")
         l1, l2 = st.columns([1, 2])
         with l1:
-            cot_loc = st.selectbox("Lọc theo cột", [KHONG_LOC] + cot, key=f"{khoa}_cot_loc",
-                                   help="VD chỉ lấy học sinh đã nhập học / đúng năm học.")
+            cot_loc = st.selectbox("Lọc thêm theo cột", [KHONG_LOC] + cot, key=f"{khoa}_cot_loc",
+                                   help="VD chỉ lấy học sinh có Trạng thái = Đã nhập học.")
         gia_tri_loc = []
         if cot_loc != KHONG_LOC:
             with l2:
                 gia_tri_loc = st.multiselect("Giữ các dòng có giá trị", sorted(df[cot_loc].astype(str).unique()),
                                              key=f"{khoa}_gt_loc")
         chon = df[df[cot_lop].astype(str).str.strip() != ""]
+        if nam_chon:
+            chon = chon[chon[cot_nam].map(chuan_nam_hoc) == nam_chon]
         if cot_loc != KHONG_LOC and gia_tri_loc:
             chon = chon[chon[cot_loc].astype(str).isin(gia_tri_loc)]
         so_lop = chon[cot_lop].astype(str).str.strip().value_counts()
-        st.markdown(f"**{len(chon)} học sinh · {len(so_lop)} lớp** sau khi lọc (bỏ dòng không có lớp).")
+        st.markdown(f"**{len(chon)} học sinh · {len(so_lop)} lớp**"
+                    + (f" năm học **{nam_chon}**" if nam_chon else "")
+                    + " sau khi lọc (bỏ dòng không có lớp).")
         if len(so_lop):
             st.dataframe(
                 pd.DataFrame({"Lớp": so_lop.index, "Số học sinh": so_lop.values}).sort_values(
