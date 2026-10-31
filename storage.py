@@ -754,6 +754,11 @@ class PowerAutomate(DongBoList):
             )
         if r.status_code in (401, 403):
             raise LoiLuuTru(_giai_thich_loi_xac_thuc_flow(r, url))
+        if "WorkflowTriggerIsNotEnabled" in r.text or "WorkflowNotEnabled" in r.text:
+            raise LoiLuuTru(
+                "Flow Power Automate đang TẮT (Off) — flow tạo bằng 'Save As' luôn bị tắt sẵn. Vào "
+                "make.powerautomate.com → My flows → bấm ⋯ cạnh flow → Turn on, rồi thử lại."
+            )
         if r.status_code >= 300:
             raise LoiLuuTru(f"Flow Power Automate trả lỗi {r.status_code}: {r.text[:300]}")
         return r
