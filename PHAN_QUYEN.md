@@ -192,14 +192,24 @@ Bản công bố được lưu:
 Admin khi mở app sẽ tự nạp bản công bố làm điểm bắt đầu; nút **📥 Nạp bản công bố
 vào phiên của tôi** để quay lại bản đó sau khi đã sửa.
 
-## Lưu cấu hình (bản nháp của admin)
-Mỗi lần tải lại trang (F5) là một phiên mới, nên cấu hình/dữ liệu admin đang sửa
-sẽ mất nếu chưa lưu. Bấm **💾 Lưu cấu hình & dữ liệu** ở thanh bên để lưu **bản nháp**
-(cấu hình thời gian biểu, các bảng dữ liệu, kết quả...). Lần sau admin mở app sẽ tự
-nạp bản mới hơn giữa bản nháp và bản công bố. Giáo viên **không** thấy bản nháp —
-muốn giáo viên thấy thì vẫn phải **📢 Công bố**.
+## Lưu cấu hình (bản nháp của admin) — TỰ ĐỘNG
+Mỗi khi admin thay đổi dữ liệu / cấu hình / kết quả, ứng dụng **tự động lưu** bản nháp: ngay
+vào máy chủ ứng dụng, và lên **SharePoint** ở chế độ nền (không làm chậm giao diện; nhiều lần sửa
+liên tiếp được gộp lại). Thanh bên hiện trạng thái: *☁️ Đã tự động lưu lên SharePoint lúc …* hoặc
+lỗi nếu có. Nút **💾 Lưu cấu hình & dữ liệu** vẫn dùng được để lưu ngay và xem kết quả.
 
-Bản nháp được lưu cùng chỗ với bản công bố: `du_lieu/ban_nhap.json`, file
-`BanNhap_TKB.json` (Cách 1, 2) hoặc chung List **`TKB_CongBo`** (Cách 3 — các dòng
-có tiêu đề bắt đầu bằng `ban_nhap|`). Chưa cấu hình SharePoint thì bản nháp mất khi
+Tải lại trang / Streamlit khởi động lại app → admin mở app sẽ tự nạp bản mới nhất từ SharePoint.
+Giáo viên **không** thấy bản nháp — muốn giáo viên thấy vẫn phải **📢 Công bố**.
+
+An toàn dữ liệu:
+- Lưu vào List `TKB_CongBo`: ghi đủ bản MỚI rồi mới xoá bản cũ (mỗi bản có mốc thời gian trong
+  Tiêu đề, VD `ban_nhap|2026-10-31T10:00:00.123|Phần 1/3`) — mạng đứt giữa chừng thì bản cũ vẫn còn.
+- Lúc mở app mà KHÔNG đọc được SharePoint: thanh bên báo lỗi đỏ, **tự động lưu tạm dừng** (để không
+  ghi đè dữ liệu tốt bằng dữ liệu mẫu) — bấm **🔄 Đọc lại từ SharePoint**; app cũng tự thử lại sau 60 giây.
+- Nút **↺ Khôi phục dữ liệu mẫu** phải xác nhận thêm 1 lần.
+- Flow chỉ có `save_url` mà thiếu `list_url`/`load_url` thì app KHÔNG lưu file (vì không đọc lại
+  được) mà lưu vào List `TKB_CongBo` qua `sp_url`.
+
+Nơi lưu: file `BanNhap_TKB.json` (Cách 1, 2) hoặc List **`TKB_CongBo`** (Cách 3 — cần cột
+**`NoiDung`** kiểu Nhiều dòng văn bản, TẮT rich text). Chưa cấu hình SharePoint thì dữ liệu mất khi
 Streamlit khởi động lại app.

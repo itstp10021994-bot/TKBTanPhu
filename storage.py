@@ -401,27 +401,57 @@ class DongBoList:
             return title.split("|", 1)[0] == loai
         return loai == "cong_bo"
 
+    @staticmethod
+    def _phan_tieu_de(title) -> tuple[str, int, int]:
+        """'ban_nhap|2026-10-31T10:00:00|Phần 2/5' -> ('2026-10-31T10:00:00', 2, 5).
+        Mục kiểu cũ ('ban_nhap|Phần 2/5' hoặc 'Phần 2/5') -> mốc ''."""
+        cac_phan = str(title or "").split("|")
+        moc = cac_phan[1] if len(cac_phan) >= 3 else ""
+        m = re.search(r"(\d+)\s*/\s*(\d+)", cac_phan[-1])
+        return (moc, int(m.group(1)), int(m.group(2))) if m else (moc, 1, 1)
+
     def luu_goi_list(self, goi: dict, loai: str = "cong_bo") -> str:
+        """Ghi AN TOÀN: tạo đủ các mục của bản mới (gắn mốc thời gian) rồi mới xoá các mục cũ —
+        đứt giữa chừng thì bản cũ vẫn còn nguyên, lần đọc sau vẫn lấy được bản đầy đủ mới nhất."""
         ten, ref, cot = self._list_cong_bo()
         van_ban = json.dumps(goi, ensure_ascii=False, separators=(",", ":"))
         phan = [van_ban[i:i + KICH_THUOC_PHAN] for i in range(0, len(van_ban), KICH_THUOC_PHAN)] or [""]
-        items = [{"Title": f"{loai}|Phần {i + 1}/{len(phan)}", cot: p} for i, p in enumerate(phan)]
+        moc = str(goi.get("thoi_gian_luu") or datetime.now(GIO_VN).replace(tzinfo=None).isoformat(timespec="seconds"))
+        moc = f"{moc}.{int(time.time() * 1000) % 1000:03d}"  # 2 lần lưu cùng 1 giây vẫn khác mốc
+        items = [{"Title": f"{loai}|{moc}|Phần {i + 1}/{len(phan)}", cot: p} for i, p in enumerate(phan)]
         ids_cu = [i for i, f in self._doc_items(ref) if self._cua_loai(f.get("Title"), loai)]
-        self._thay_items(ref, ids_cu, items)
+        self._thay_items(ref, [], items)      # 1) ghi bản mới
+        if ids_cu:
+            self._thay_items(ref, ids_cu, [])  # 2) mới xoá bản cũ
         return f"List '{ten}' ({len(phan)} mục)"
 
     def tai_goi_list(self, loai: str = "cong_bo") -> dict | None:
+        """Lấy bản ĐẦY ĐỦ (đủ n/n phần) có mốc mới nhất của loại này."""
         _, ref, cot = self._list_cong_bo()
-        van_ban = "".join(str(f.get(cot) or "") for _, f in self._doc_items(ref)
-                          if self._cua_loai(f.get("Title"), loai))
-        if not van_ban.strip():
-            return None
-        try:
-            return json.loads(van_ban)
-        except ValueError:
-            # cột bị để kiểu văn bản đa dạng thức -> SharePoint bọc HTML, bóc ra
-            import html as _html
-            return json.loads(_html.unescape(re.sub(r"<[^>]+>", "", van_ban)))
+        theo_moc: dict[str, dict] = {}
+        for _, f in self._doc_items(ref):
+            if not self._cua_loai(f.get("Title"), loai):
+                continue
+            moc, i, n = self._phan_tieu_de(f.get("Title"))
+            b = theo_moc.setdefault(moc, {"n": n, "phan": {}})
+            b["phan"][i] = str(f.get(cot) or "")
+        for moc in sorted(theo_moc, reverse=True):
+            b = theo_moc[moc]
+            if len(b["phan"]) != b["n"]:
+                continue  # bản đang ghi dở / bị đứt -> bỏ qua
+            van_ban = "".join(b["phan"][i] for i in sorted(b["phan"]))
+            if not van_ban.strip():
+                continue
+            try:
+                return json.loads(van_ban)
+            except ValueError:
+                # cột bị để kiểu văn bản đa dạng thức -> SharePoint bọc HTML, bóc ra
+                import html as _html
+                try:
+                    return json.loads(_html.unescape(re.sub(r"<[^>]+>", "", van_ban)))
+                except ValueError:
+                    continue
+        return None
 
     # ---- Đọc NGUYÊN 1 List bất kỳ (VD data_nhaphoc của app tuyển sinh) ----
     def _cot_tho(self, ref) -> list[dict]:
