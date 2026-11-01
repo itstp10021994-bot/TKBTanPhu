@@ -256,6 +256,48 @@ def _so_dong(df, cot: str) -> int:
         return 0
 
 
+def goi_y_khi_khong_xep_duoc(trang_thai: str) -> list[str]:
+    """Chẩn đoán nhanh khi bộ giải không tìm được lịch: GV quá tải, ràng buộc 'lệch giờ' với GV
+    dạy nhiều khối, thời gian giải quá ngắn."""
+    ss = st.session_state
+    goi_y = []
+    so_o = int(ss.get("cfg_num_days", 6)) * int(ss.get("cfg_periods_per_day", 5))
+    act = ss.activities
+    tai, nhom_cua_gv = {}, {}
+    nhom_lop = {str(r["Tên lớp"]).strip(): r.get("Nhóm thứ tự") for _, r in ss.classes.iterrows()}
+    for _, r in act.iterrows():
+        so = pd.to_numeric(r.get("Số tiết/tuần"), errors="coerce")
+        if pd.isna(so):
+            continue
+        for cot in ("GV chính", "GV phụ (đồng giảng)"):
+            t = _chuoi_o(r.get(cot))
+            if t:
+                tai[t] = tai.get(t, 0) + int(so)
+                for l in str(r.get("Lớp", "")).split(","):
+                    if l.strip() in nhom_lop:
+                        nhom_cua_gv.setdefault(t, set()).add(nhom_lop[l.strip()])
+    qua_tai = sorted(((t, n) for t, n in tai.items() if n > so_o), key=lambda x: -x[1])
+    sat = sorted(((t, n) for t, n in tai.items() if 0.85 * so_o < n <= so_o), key=lambda x: -x[1])
+    if qua_tai:
+        goi_y.append("**GV bị giao nhiều tiết hơn số ô trong tuần** (" + str(so_o) + " ô = số ngày × số tiết/ngày): "
+                     + ", ".join(f"{t} ({n} tiết)" for t, n in qua_tai)
+                     + " — tăng số ngày / số tiết mỗi ngày, hoặc chia bớt tiết cho GV khác.")
+    if sat:
+        goi_y.append("GV gần kín lịch (trên 85% số ô): " + ", ".join(f"{t} ({n}/{so_o})" for t, n in sat[:6])
+                     + " — rất khó xếp nếu thêm ràng buộc.")
+    nhieu_khoi = [t for t, g in nhom_cua_gv.items() if len(g) >= 2 and tai.get(t, 0) > 0.6 * so_o]
+    if ss.get("ct_order_group") and nhieu_khoi:
+        goi_y.append("**Tắt ràng buộc “Lệch giờ giữa các khối khi 1 GV dạy toàn trường”** — các GV dạy nhiều nhóm "
+                     "khối với số tiết lớn (" + ", ".join(nhieu_khoi[:5]) + ") khiến ràng buộc này gần như không thể "
+                     "thoả mãn.")
+    if trang_thai == "ERROR":
+        goi_y.append(f"Bộ giải hết thời gian ({ss.get('cfg_max_seconds', 30)} giây) mà chưa tìm ra lịch — tăng "
+                     "“Thời gian tối đa cho solver” (tab ⚙️ Cấu hình chung) lên 120–180 giây.")
+    goi_y.append("Kiểm tra số tiết/tuần so với số ngày, số tiết có sẵn (Thời gian biểu theo khối/nhóm), và các giờ "
+                 "cố định trước có chồng nhau không. Có thể tắt bớt ràng buộc tuỳ chọn ở trên rồi xếp lại.")
+    return goi_y
+
+
 def hien_chan_trang():
     st.markdown(f'<div class="app-footer">🏫 {html.escape(CHAN_TRANG)}</div>', unsafe_allow_html=True)
 
@@ -2529,11 +2571,7 @@ if module == "📅 Xếp Thời Khoá Biểu":
                 st.info("Chưa có thời khoá biểu nào được công bố.")
         elif result.status in ("INFEASIBLE", "ERROR"):
             st.error(result.message)
-            st.info(
-                "Gợi ý: kiểm tra lại xem có GV bị giao quá nhiều tiết cùng lúc, số tiết/tuần quá "
-                "lớn so với số ngày/tiết có sẵn, hoặc các giờ cố định trước bị chồng nhau không. "
-                "Bạn cũng có thể thử tắt bớt ràng buộc tuỳ chọn ở trên rồi xếp lại."
-            )
+            st.info("**Gợi ý khắc phục:**\n\n" + "\n".join(f"- {g}" for g in goi_y_khi_khong_xep_duoc(result.status)))
         else:
             history = st.session_state.solutions_history
             if len(history) > 1:
