@@ -3540,9 +3540,14 @@ elif module == "☁️ Lưu trữ SharePoint":
                 "Chọn bảng cần đồng bộ", ds_bang, default=ds_bang, key="list_bang_chon",
                 format_func=lambda b: f"{TEN_BANG_VN.get(b, b)} ⇄ {ten_list_cua[b]}",
             )
-            k1, k2, k3 = st.columns(3)
+            k1, k4, k2, k3 = st.columns(4)
             with k1:
                 kiem_tra_btn = st.button("🔍 Kiểm tra List & cột", width="stretch")
+            with k4:
+                sua_ct_btn = st.button("🛠️ Tự tạo cột thiếu", width="stretch",
+                                       help="Tạo các cột app cần mà List chưa có; đổi cột kiểu Số sang Một dòng "
+                                            "văn bản nếu dữ liệu có chữ (VD Khối = 6 ESL). Khi ghi lên List app "
+                                            "cũng tự làm việc này.")
             with k2:
                 ghi_list_btn = st.button("⬆️ Ghi các bảng lên List", type="primary", width="stretch")
             with k3:
@@ -3563,6 +3568,20 @@ elif module == "☁️ Lưu trữ SharePoint":
                          "Cột đã khớp": "; ".join(x["khop"])}
                         for x in kq_kt
                     ]), width="stretch", hide_index=True)
+                if sua_ct_btn:
+                    with st.spinner("Đang sửa cấu trúc các List..."):
+                        for b in bang_chon:
+                            try:
+                                lam, loi = ket_noi_list.sua_cau_truc_bang(b, st.session_state[b])
+                            except storage.LoiLuuTru as e:
+                                lam, loi = [], [str(e)]
+                            ten_b = f"{TEN_BANG_VN.get(b, b)} → List '{ten_list_cua[b]}'"
+                            if lam:
+                                st.success(f"✅ {ten_b}: đã {'; '.join(lam)}.")
+                            for e in loi:
+                                st.error(e)
+                            if not lam and not loi:
+                                st.info(f"✔️ {ten_b}: đã đủ cột, đúng kiểu.")
                 if ghi_list_btn:
                     if not dong_y_ghi:
                         st.warning("Tick ô xác nhận bên dưới các nút trước khi ghi lên List.")
@@ -3572,7 +3591,7 @@ elif module == "☁️ Lưu trữ SharePoint":
                             so_dong, cb = ket_noi_list.ghi_list(b, st.session_state[b])
                             st.success(f"✅ {TEN_BANG_VN.get(b, b)} → List '{ten_list_cua[b]}': {so_dong} dòng.")
                             for c in cb:
-                                st.warning(c)
+                                (st.info if c.startswith("🛠️") else st.warning)(c)
                             tien_do.progress(n / max(len(bang_chon), 1))
                 if doc_list_btn:
                     ghi_chu = []

@@ -333,15 +333,60 @@ class DongBoList:
                             "thieu": thieu})
         return ket_qua
 
-    def ghi_list(self, bang: str, df: pd.DataFrame) -> tuple[int, list[str]]:
-        """Thay TOÀN BỘ item của List bằng các dòng của df. -> (số dòng, cảnh báo)."""
+    # ---- Sửa cấu trúc List: tạo cột còn thiếu, đổi cột Số -> Văn bản khi dữ liệu có chữ ----
+    def _tao_cot(self, ref, ten_hien_thi: str, kieu: str):
+        raise LoiLuuTru("kết nối này không tạo được cột")
+
+    def _doi_sang_chu(self, ref, cot: dict):
+        raise LoiLuuTru("kết nối này không đổi được kiểu cột")
+
+    def _xoa_cache_cot(self, ref):
+        self._cot_cache.pop(ref, None)
+
+    def sua_cau_truc(self, ten: str, ref, df: pd.DataFrame) -> tuple[list[str], list[str]]:
+        """Tạo các cột app cần mà List chưa có, đổi cột Số sang Văn bản nếu dữ liệu có chữ
+        (VD cột Khối chứa '6 ESL'). -> (việc đã làm, lỗi)."""
+        ghep, thieu, _ = self._ghep_cot(ref, [str(c) for c in df.columns])
+        lam, loi = [], []
+        for c in thieu:
+            gia_tri = df[c][~df[c].map(_gia_tri_trong)] if c in df.columns else pd.Series(dtype=object)
+            toan_so = c in COT_SO and pd.to_numeric(gia_tri, errors="coerce").notna().all()
+            try:
+                self._tao_cot(ref, c, "so" if toan_so else "text")
+                lam.append(f"tạo cột '{c}' ({'Số' if toan_so else 'Một dòng văn bản'})")
+            except (LoiLuuTru, requests.RequestException) as e:
+                loi.append(f"List '{ten}': không tạo được cột '{c}' — {e}")
+            self._xoa_cache_cot(ref)
+        for c, cot in ghep.items():
+            if cot["kieu"] != "so" or cot["name"] == "Title":
+                continue
+            gia_tri = df[c][~df[c].map(_gia_tri_trong)]
+            if pd.to_numeric(gia_tri, errors="coerce").isna().any():
+                try:
+                    self._doi_sang_chu(ref, cot)
+                    lam.append(f"đổi cột '{cot['displayName']}' sang Một dòng văn bản")
+                except (LoiLuuTru, requests.RequestException) as e:
+                    loi.append(f"List '{ten}': không đổi được cột '{cot['displayName']}' sang văn bản — {e}")
+                self._xoa_cache_cot(ref)
+        return lam, loi
+
+    def sua_cau_truc_bang(self, bang: str, df: pd.DataFrame) -> tuple[list[str], list[str]]:
         ten, ref = self._can_list(bang)
+        return self.sua_cau_truc(ten, ref, df)
+
+    def ghi_list(self, bang: str, df: pd.DataFrame) -> tuple[int, list[str]]:
+        """Thay TOÀN BỘ item của List bằng các dòng của df. -> (số dòng, cảnh báo).
+        Trước khi ghi, tự tạo cột còn thiếu / đổi cột Số sang Văn bản nếu cần."""
+        ten, ref = self._can_list(bang)
+        lam, loi_ct = self.sua_cau_truc(ten, ref, df)
         ghep, thieu, title = self._ghep_cot(ref, [str(c) for c in df.columns])
         if not ghep:
             raise LoiLuuTru(f"List '{ten}' không có cột nào trùng tên với bảng — kiểm tra lại tên cột.")
-        canh_bao = [f"List '{ten}' thiếu cột {thieu} — dữ liệu các cột này KHÔNG được lưu. Thêm cột: mở List "
-                    f"'{ten}' trên SharePoint → + Thêm cột → Một dòng văn bản → đặt đúng tên trên → Lưu, "
-                    "rồi ghi lại."] if thieu else []
+        canh_bao = [f"🛠️ List '{ten}': đã {x}." for x in lam] + loi_ct
+        if thieu:
+            canh_bao.append(f"List '{ten}' thiếu cột {thieu} — dữ liệu các cột này KHÔNG được lưu. Thêm cột: mở List "
+                            f"'{ten}' trên SharePoint → + Thêm cột → Một dòng văn bản → đặt đúng tên trên → Lưu, "
+                            "rồi ghi lại (hoặc cập nhật flow để app tự tạo cột — HUONG_DAN_SHAREPOINT.md, Bước 5b).")
 
         items = []
         for _, row in df.iterrows():
@@ -353,7 +398,10 @@ class DongBoList:
                 if cot["kieu"] == "so":
                     so = pd.to_numeric(v, errors="coerce")
                     if pd.isna(so):
-                        raise LoiLuuTru(f"List '{ten}', cột '{c}': '{v}' không phải là số.")
+                        raise LoiLuuTru(
+                            f"List '{ten}', cột '{c}': '{v}' không phải là số — cột này trên SharePoint đang kiểu Số. "
+                            "Đổi sang 'Một dòng văn bản' (bấm tiêu đề cột → Cài đặt cột → Chỉnh sửa → Loại), hoặc "
+                            "cập nhật flow để app tự đổi (HUONG_DAN_SHAREPOINT.md, Bước 5b).")
                     fields[cot["name"]] = int(so) if float(so).is_integer() else float(so)
                 elif cot["kieu"] == "bool":
                     fields[cot["name"]] = str(v).strip().lower() in ("1", "true", "x", "có", "co", "yes")
@@ -641,12 +689,27 @@ class GraphSharePoint(DongBoList):
             if r.status_code != 200:
                 raise LoiLuuTru(f"Không đọc được cột của List ({r.status_code}).")
             self._cot_cache[list_id] = [
-                {"name": c["name"], "displayName": c.get("displayName", c["name"]),
+                {"name": c["name"], "displayName": c.get("displayName", c["name"]), "id": c.get("id"),
                  "kieu": "so" if "number" in c else "bool" if "boolean" in c else "text"}
                 for c in r.json().get("value", [])
                 if c.get("name") == "Title" or not (c.get("readOnly") or c.get("hidden"))
             ]
         return self._cot_cache[list_id]
+
+    def _tao_cot(self, list_id: str, ten_hien_thi: str, kieu: str):
+        ten_noi_bo = re.sub(r"[^A-Za-z0-9]", "", khoa_cot(ten_hien_thi).title()) or "Cot"
+        if not ten_noi_bo[0].isalpha():
+            ten_noi_bo = "C" + ten_noi_bo
+        r = self._goi("POST", f"/sites/{self._site()}/lists/{list_id}/columns",
+                      json={"name": ten_noi_bo, "displayName": ten_hien_thi,
+                            ("number" if kieu == "so" else "text"): {}})
+        if r.status_code not in (200, 201):
+            raise LoiLuuTru(f"Graph trả lỗi {r.status_code} (cần quyền Sites.Manage.All): {r.text[:200]}")
+
+    def _doi_sang_chu(self, list_id: str, cot: dict):
+        r = self._goi("PATCH", f"/sites/{self._site()}/lists/{list_id}/columns/{cot.get('id')}", json={"text": {}})
+        if r.status_code != 200:
+            raise LoiLuuTru(f"Graph trả lỗi {r.status_code}: {r.text[:200]}")
 
     def _cot_tho(self, list_id: str) -> list[dict]:
         r = self._goi("GET", f"/sites/{self._site()}/lists/{list_id}/columns")
@@ -892,6 +955,33 @@ class PowerAutomate(DongBoList):
             "(3) bước Response cuối được đặt 'Configure run after → has failed' hoặc nằm ngoài/trước "
             "các vòng lặp nên vẫn trả 200 khi lỗi; (4) Site Address của bước ghi khác bước đọc."
         )
+
+    LOI_FLOW_CHUA_SUA_CAU_TRUC = (
+        "flow sp_url chưa có bước sửa cấu trúc List (thao_tac = \"cau_truc\") — thêm 1 lần theo "
+        "HUONG_DAN_SHAREPOINT.md, Bước 5b, rồi thử lại")
+
+    def _gui_cau_truc(self, ten: str, phuong_thuc: str, duong_dan: str, noi_dung: dict):
+        # xoa_ids / items rỗng: flow cũ (chưa có bước 5b) đi vào nhánh ghi và không làm gì cả
+        self._post("sp_url", {"thao_tac": "cau_truc", "list": ten.replace("'", "''"), "phuong_thuc": phuong_thuc,
+                              "duong_dan": duong_dan, "noi_dung": noi_dung, "xoa_ids": [], "items": []})
+
+    def _tao_cot(self, ten: str, ten_hien_thi: str, kieu: str):
+        so = kieu == "so"
+        self._gui_cau_truc(ten, "POST", "fields", {
+            "__metadata": {"type": "SP.FieldNumber" if so else "SP.FieldText"},
+            "Title": ten_hien_thi, "FieldTypeKind": 9 if so else 2})
+        self._xoa_cache_cot(ten)
+        k = khoa_cot(ten_hien_thi)
+        if not any(khoa_cot(c["displayName"]) == k for c in self._cot_list(ten)):
+            raise LoiLuuTru(self.LOI_FLOW_CHUA_SUA_CAU_TRUC)
+
+    def _doi_sang_chu(self, ten: str, cot: dict):
+        self._gui_cau_truc(ten, "PATCH", f"fields/getbyinternalnameortitle('{cot['name']}')",
+                           {"__metadata": {"type": "SP.Field"}, "FieldTypeKind": 2})
+        self._xoa_cache_cot(ten)
+        moi = next((c for c in self._cot_list(ten) if c["name"] == cot["name"]), None)
+        if moi is None or moi["kieu"] == "so":
+            raise LoiLuuTru(self.LOI_FLOW_CHUA_SUA_CAU_TRUC)
 
     def _cot_tho(self, ten: str) -> list[dict]:
         """Mọi cột hiển thị (kể cả cột chỉ đọc như cột tính toán), kèm kiểu để mở rộng cột tra cứu."""

@@ -243,6 +243,34 @@ toán tử **is equal to**, ô phải gõ `doc`.
      - *Body* (fx): `item()`
 3. Sau 2 vòng lặp, thêm **Response**: *Status Code* `200`, *Body* `{"ok": true}`.
 
+### Bước 5b — (làm 1 lần) Cho app TỰ tạo cột còn thiếu / đổi kiểu cột
+Khi app cần thêm cột mới (VD **Nhóm giờ học** ở List `LopHoc`) hoặc cần đổi cột **Khối** của
+`GioHocTheoKhoi` từ kiểu Số sang chữ (để ghi được `6 ESL`), app gửi cho flow `thao_tac = "cau_truc"`.
+Thêm vào nhánh **False**, đặt **SAU 2 vòng lặp** và **TRƯỚC bước Response** cuối:
+
+1. **Condition** — đổi tên `La_cau_truc`: (fx) `triggerBody()?['thao_tac']` **is equal to** `cau_truc`.
+2. Trong nhánh **True** của `La_cau_truc`, thêm **Condition** `La_PATCH`:
+   (fx) `triggerBody()?['phuong_thuc']` **is equal to** `PATCH`.
+   - Nhánh **True** → **Send an HTTP request to SharePoint**, đổi tên `Sua_cot`:
+     - *Site Address*: như Bước 4 · *Method*: `PATCH`
+     - *Uri* (fx):
+       ```
+       concat('_api/web/lists/getbytitle(''', triggerBody()?['list'], ''')/', triggerBody()?['duong_dan'])
+       ```
+     - *Headers*: `Accept` = `application/json;odata=verbose`,
+       `Content-Type` = `application/json;odata=verbose`, `IF-MATCH` = `*`
+     - *Body* (fx): `triggerBody()?['noi_dung']`
+   - Nhánh **False** → **Send an HTTP request to SharePoint**, đổi tên `Tao_cot`: giống `Sua_cot`
+     nhưng *Method* = `POST` và **không** có header `IF-MATCH`.
+3. Nhánh **False** của `La_cau_truc`: để trống. Bấm **Save** (URL của flow không đổi).
+
+(Tuỳ chọn) thêm vào JSON schema của trigger 2 thuộc tính
+`"phuong_thuc": {"type": "string"}, "noi_dung": {"type": "object"}` — không thêm cũng chạy được.
+
+Dùng: module ☁️ → mục **2b** → **🛠️ Tự tạo cột thiếu** (hoặc cứ bấm **⬆️ Ghi các bảng lên List** —
+app tự tạo cột / đổi kiểu trước khi ghi). Tài khoản tạo flow cần quyền sửa List (chủ List là được).
+Chưa làm bước này thì app báo *"flow sp_url chưa có bước sửa cấu trúc List"* và không thay đổi gì.
+
 ### Bước 6 — Lưu & dán URL vào Secrets
 Bấm **Save** → mở lại trigger, copy **HTTP URL**, rồi thêm vào Secrets của
 ứng dụng (Streamlit Cloud: *Manage app → Settings → Secrets*):
