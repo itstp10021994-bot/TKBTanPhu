@@ -1125,6 +1125,7 @@ DEFAULTS = dict(
     exam_subjects=SAMPLE_EXAM_SUBJECTS,
     free_depts=["Tổ Ngoại ngữ"],
     tn_hoc_sinh=pd.DataFrame(columns=tn.COT_CHUAN),
+    tn_phong=pd.DataFrame(columns=[tn.COT_TEN_PHONG, tn.COT_SUC_CHUA]),
 )
 
 DEFAULT_CONSTRAINT_TOGGLES = dict(
@@ -2007,7 +2008,8 @@ def module_thi_tot_nghiep():
         )
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            st.number_input("Sức chứa 1 phòng", 1, 60, step=1, key="tn_suc_chua")
+            st.number_input("Sức chứa 1 phòng (khi tự tạo phòng)", 1, 60, step=1, key="tn_suc_chua",
+                            help="Dùng khi chưa nhập danh sách phòng ở mục 3, hoặc khi danh sách phòng thiếu chỗ.")
         with c2:
             st.number_input("Sĩ số tối thiểu để môn 1 có phòng riêng", 1, 60, step=1, key="tn_si_so_min",
                             help="Nhóm môn 1 ít hơn số này được ghép chung với nhóm nhỏ khác.")
@@ -2015,14 +2017,66 @@ def module_thi_tot_nghiep():
             st.text_input("Tiền tố SBD", key="tn_tien_to", help="VD 'TP' → TP001. Để trống: 001, 002…")
         with c4:
             st.number_input("SBD bắt đầu từ", 1, 99999, step=1, key="tn_so_bat_dau")
-        st.text_area("Tên phòng thi theo thứ tự (không bắt buộc)", key="tn_ten_phong", height=70,
-                     help="Mỗi phòng cách nhau dấu phẩy hoặc xuống dòng, VD: P.101, P.102, … "
-                          "Để trống: Phòng 01, Phòng 02…")
+
+    with the_khung():
+        section_header(
+            "3", "Danh sách phòng thi (tên & sức chứa từng phòng)",
+            "Upload file Excel / CSV có cột <b>Tên phòng</b> và <b>Sức chứa</b> (hoặc <i>Số lượng</i>), hoặc gõ thẳng "
+            "vào bảng. Phòng được dùng <b>theo đúng thứ tự</b> trong bảng. Để trống bảng: app tự tạo Phòng 01, 02… "
+            "theo “Sức chứa 1 phòng” ở trên; tổng sức chứa thiếu thì app tự thêm phòng.",
+        )
+        p1, p2 = st.columns([1, 2])
+        with p1:
+            st.download_button(
+                "📄 Tải file mẫu danh sách phòng", width="stretch", key="dl_mau_phong_tn",
+                data=df_to_excel_bytes(pd.DataFrame({tn.COT_TEN_PHONG: ["P.101", "P.102", "P.103"],
+                                                     tn.COT_SUC_CHUA: [24, 24, 20]}), "Phong_thi_TN"),
+                file_name="mau_phong_thi_tot_nghiep.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        with p2:
+            up_p = st.file_uploader("📤 Upload danh sách phòng (thay bảng)", type=["xlsx", "xls", "csv"],
+                                    key="up_tn_phong")
+        if up_p is not None and ss.get("_imported_tn_phong") != f"{up_p.name}:{up_p.size}":
+            try:
+                raw = (pd.read_csv(up_p, header=None, dtype=str, encoding="utf-8-sig", sep=None, engine="python")
+                       if up_p.name.lower().endswith(".csv") else pd.read_excel(up_p, header=None, dtype=str))
+                bang_p, ghi_chu = tn.doc_danh_sach_phong(raw)
+                ss.tn_phong = bang_p
+                ss["_imported_tn_phong"] = f"{up_p.name}:{up_p.size}"
+                ss.pop("editor_tn_phong", None)
+                ss["_tn_phong_ghi_chu"] = [f"✅ Đã nhập {len(bang_p)} phòng, tổng {int(bang_p[tn.COT_SUC_CHUA].sum())} "
+                                           f"chỗ từ '{up_p.name}'."] + ghi_chu
+                st.rerun()
+            except Exception as e:
+                st.error(f"Không đọc được file phòng: {e}")
+        if not isinstance(ss.get("tn_phong"), pd.DataFrame):
+            ss.tn_phong = pd.DataFrame(columns=[tn.COT_TEN_PHONG, tn.COT_SUC_CHUA])
+        _bp = ss.tn_phong.reindex(columns=[tn.COT_TEN_PHONG, tn.COT_SUC_CHUA])
+        ss.tn_phong = pd.DataFrame({  # kiểu cột ổn định cho bảng sửa (bảng rỗng / nạp lại từ bản lưu)
+            tn.COT_TEN_PHONG: _bp[tn.COT_TEN_PHONG].map(lambda v: "" if _o_trong(v) else str(v)).astype(object),
+            tn.COT_SUC_CHUA: pd.to_numeric(_bp[tn.COT_SUC_CHUA], errors="coerce").astype("float64"),
+        })
+        for gc in ss.pop("_tn_phong_ghi_chu", []):
+            (st.success if gc.startswith("✅") else st.warning if gc.startswith("⚠️") else st.caption)(gc)
+        ss.tn_phong = st.data_editor(
+            ss.tn_phong, num_rows="dynamic", width="stretch", key="editor_tn_phong", height=240,
+            column_config={
+                tn.COT_TEN_PHONG: st.column_config.TextColumn(required=True),
+                tn.COT_SUC_CHUA: st.column_config.NumberColumn(min_value=1, max_value=200, step=1, format="%d",
+                                                               required=True),
+            },
+        )
+        ds_phong = tn.phong_tu_bang(ss.tn_phong)
+        if ds_phong:
+            tong_cho, so_hs = sum(c for _, c in ds_phong), len(ss.tn_hoc_sinh)
+            (st.caption if tong_cho >= so_hs else st.warning)(
+                f"{len(ds_phong)} phòng · tổng {tong_cho} chỗ · {so_hs} học sinh"
+                + ("" if tong_cho >= so_hs else f" — THIẾU {so_hs - tong_cho} chỗ, app sẽ tự thêm phòng."))
 
     kq = tn.xep_phong(
         ss.tn_hoc_sinh, suc_chua=int(ss.tn_suc_chua), si_so_toi_thieu=int(ss.tn_si_so_min),
-        tien_to_sbd=str(ss.tn_tien_to or "").strip(), so_bat_dau=int(ss.tn_so_bat_dau),
-        ten_phong=re.split(r"[,\n;]+", str(ss.tn_ten_phong or "")),
+        tien_to_sbd=str(ss.tn_tien_to or "").strip(), so_bat_dau=int(ss.tn_so_bat_dau), phong_thi=ds_phong,
     )
     phong, tk, hs = kq["phong"], kq["thong_ke"], kq["hoc_sinh"]
     if phong.empty:
@@ -2031,7 +2085,7 @@ def module_thi_tot_nghiep():
     so_thuan = int((phong["Loại phòng"] == "Cùng môn 1 & môn 2").sum())
     hien_o_so_lieu([
         ("sky", "🧑‍🎓", len(hs), "Học sinh dự thi", f"{len(tk)} môn tự chọn"),
-        ("mint", "🚪", len(phong), "Phòng thi", f"Sức chứa {int(ss.tn_suc_chua)} chỗ"),
+        ("mint", "🚪", len(phong), "Phòng thi", f"Tổng {int(phong['Sức chứa'].sum())} chỗ"),
         ("coral", "🎯", so_thuan, "Phòng cùng môn 1 & 2",
          f"{int((phong['Loại phòng'] == 'Cùng môn 1').sum())} phòng cùng môn 1"),
         ("yellow", "🥇", tk.iloc[0]["Môn"], "Môn 1 đông nhất", f"{int(tk.iloc[0]['Số HS thi'])} học sinh"),
@@ -2040,7 +2094,7 @@ def module_thi_tot_nghiep():
         st.warning(cb)
 
     with the_khung():
-        section_header("3", "Thống kê môn thi", "Thứ hạng theo số học sinh thi — quyết định môn 1 / môn 2.")
+        section_header("4", "Thống kê môn thi", "Thứ hạng theo số học sinh thi — quyết định môn 1 / môn 2.")
         t1, t2 = st.columns([3, 2])
         with t1:
             st.dataframe(tk, width="stretch", hide_index=True)
@@ -2056,8 +2110,10 @@ def module_thi_tot_nghiep():
             )
 
     with the_khung():
-        section_header("4", "Kết quả xếp phòng", "SBD đánh liên tục theo thứ tự phòng. Xuất Excel để in danh sách.")
+        section_header("5", "Kết quả xếp phòng", "SBD đánh liên tục theo thứ tự phòng. Xuất Excel để in danh sách.")
         st.dataframe(phong, width="stretch", hide_index=True)
+        if kq["phong_trong"]:
+            st.caption("🚪 Phòng không dùng tới: " + ", ".join(f"{t} ({c} chỗ)" for t, c in kq["phong_trong"]))
         p_chon = st.selectbox("Xem danh sách phòng", ["(tất cả)"] + phong["Phòng"].tolist(), key="tn_xem_phong")
         st.dataframe(hs if p_chon == "(tất cả)" else hs[hs["Phòng"] == p_chon], width="stretch", hide_index=True,
                      height=360)

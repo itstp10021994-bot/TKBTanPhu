@@ -117,31 +117,74 @@ def doc_danh_sach(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     return ra, ghi_chu
 
 
-def _xep_phan_le(nhom_le: list[list], suc_chua: int) -> list[list]:
-    """Xếp các nhóm lẻ (mỗi nhóm cùng cặp môn, < sức chứa) vào ÍT phòng nhất = ceil(tổng / sức chứa):
-    nhóm lớn vào trước, nhóm vừa chỗ trống thì đặt nguyên; nhóm không vừa chỗ nào mới bị tách,
-    phần tách đặt vào phòng còn trống nhiều nhất -> mỗi phòng ít cặp môn nhất có thể."""
-    tong = sum(len(g) for g in nhom_le)
-    if not tong:
+COT_TEN_PHONG, COT_SUC_CHUA = "Tên phòng", "Sức chứa"
+
+
+def doc_danh_sach_phong(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+    """File danh sách phòng (tự tìm dòng tiêu đề) -> 2 cột: Tên phòng, Sức chứa."""
+    df = df.dropna(how="all").dropna(axis=1, how="all")
+    mau_ten, mau_so = ["tenphong", "phongthi", "phong", "ten"], ["succhua", "soluong", "socho", "siso", "sl", "sohs"]
+    if not (_tim_cot([str(c) for c in df.columns], mau_ten, tranh=("succhua",))
+            and _tim_cot([str(c) for c in df.columns], mau_so)):
+        for i in range(min(len(df), 15)):
+            hang = [str(v) for v in df.iloc[i].tolist()]
+            if _tim_cot(hang, mau_so) and _tim_cot(hang, mau_ten, tranh=("succhua",)):
+                df = df.iloc[i + 1:].copy()
+                df.columns = [" ".join(h.split()) for h in hang]
+                break
+    cot = [str(c) for c in df.columns]
+    c_so = _tim_cot(cot, mau_so)
+    c_ten = _tim_cot([c for c in cot if c != c_so], mau_ten)
+    if not c_ten or not c_so:
+        raise ValueError("Không tìm thấy cột 'Tên phòng' và cột 'Sức chứa' (hoặc 'Số lượng') trong file.")
+    ra = pd.DataFrame({
+        COT_TEN_PHONG: df[c_ten].map(lambda v: "" if _o_trong(v) else " ".join(str(v).split())),
+        COT_SUC_CHUA: pd.to_numeric(df[c_so], errors="coerce"),
+    })
+    ra = ra[ra[COT_TEN_PHONG] != ""]
+    loi = ra[ra[COT_SUC_CHUA].isna() | (ra[COT_SUC_CHUA] <= 0)]
+    ra = ra.drop(loi.index)
+    ra[COT_SUC_CHUA] = ra[COT_SUC_CHUA].astype(int)
+    ghi_chu = [f"Cột dùng: Tên phòng = '{c_ten}', Sức chứa = '{c_so}'."]
+    if len(loi):
+        ghi_chu.append(f"⚠️ Bỏ {len(loi)} phòng không có sức chứa hợp lệ: {', '.join(loi[COT_TEN_PHONG])}.")
+    return ra.reset_index(drop=True), ghi_chu
+
+
+def phong_tu_bang(df: pd.DataFrame | None) -> list[tuple[str, int]]:
+    """Bảng phòng (đã sửa trên app) -> [(tên, sức chứa)] hợp lệ, giữ thứ tự."""
+    if df is None or df.empty:
         return []
-    k = -(-tong // suc_chua)
-    phong = [[] for _ in range(k)]
+    ra = []
+    for _, r in df.iterrows():
+        ten, so = r.get(COT_TEN_PHONG), pd.to_numeric(r.get(COT_SUC_CHUA), errors="coerce")
+        if not _o_trong(ten) and pd.notna(so) and so > 0:
+            ra.append((" ".join(str(ten).split()), int(so)))
+    return ra
+
+
+def _xep_vao_phong(nhom_le: list[list], cho: list[int]) -> list[list]:
+    """Xếp các nhóm (mỗi nhóm cùng cặp môn) vào các phòng có sức chứa `cho`: nhóm lớn vào trước, nhóm vừa
+    chỗ trống thì đặt NGUYÊN vào phòng vừa khít nhất; nhóm không vừa chỗ nào mới bị tách, phần tách vào
+    phòng còn trống nhiều nhất -> mỗi phòng ít cặp môn nhất có thể."""
+    phong = [[] for _ in cho]
     for g in sorted(nhom_le, key=lambda g: -len(g)):
-        vua = [p for p in phong if suc_chua - len(p) >= len(g)]
-        if vua:  # đặt nguyên nhóm vào phòng vừa khít nhất
-            min(vua, key=lambda p: suc_chua - len(p) - len(g)).extend(g)
+        vua = [i for i in range(len(cho)) if cho[i] - len(phong[i]) >= len(g)]
+        if vua:
+            phong[min(vua, key=lambda i: cho[i] - len(phong[i]) - len(g))].extend(g)
             continue
         con = list(g)
         while con:
-            p = max(phong, key=lambda p: suc_chua - len(p))
-            cho = suc_chua - len(p)
-            p.extend(con[:cho]); con = con[cho:]
-    return [p for p in phong if p]
+            i = max(range(len(cho)), key=lambda i: cho[i] - len(phong[i]))
+            trong = cho[i] - len(phong[i])
+            phong[i].extend(con[:trong]); con = con[trong:]
+    return phong
 
 
 def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 12, tien_to_sbd: str = "",
-              so_bat_dau: int = 1, ten_phong: list[str] | None = None) -> dict:
-    """-> {"hoc_sinh": DataFrame, "phong": DataFrame, "thong_ke": DataFrame, "canh_bao": [..]}."""
+              so_bat_dau: int = 1, phong_thi: list[tuple[str, int]] | None = None) -> dict:
+    """phong_thi: [(tên phòng, sức chứa)] theo thứ tự dùng; None/rỗng -> tự tạo phòng 'Phòng 01'... sức chứa
+    `suc_chua`. Thiếu chỗ thì tự thêm phòng. -> {"hoc_sinh", "phong", "thong_ke", "canh_bao", "phong_trong"}."""
     suc_chua = max(int(suc_chua), 1)
     hs, canh_bao = [], []
     for _, r in df.iterrows():
@@ -177,31 +220,59 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 12, t
     def _sap(ds):
         return sorted(ds, key=lambda h: (h["lop"], khoa(h["ten"].split(" ")[-1] if h["ten"] else ""), khoa(h["ten"])))
 
-    phong = []
+    hang_doi = list(phong_thi or [])
+    co_ds_phong, so_tu_dong = bool(hang_doi), [0]
+
+    def _lay_phong():
+        if hang_doi:
+            return hang_doi.pop(0)
+        so_tu_dong[0] += 1
+        return (None, suc_chua)
+
+    phong = []   # [(tên | None, sức chứa, [hs])]
     for m1, ds in nhom:
+        lay = []
+        while sum(c for _, c in lay) < len(ds):   # lấy ít phòng nhất (theo thứ tự danh sách) đủ chỗ cho nhóm
+            lay.append(_lay_phong())
         cap = defaultdict(list)
         for h in ds:
             cap[(h["mon1"], h["mon2"])].append(h)
-        thu_tu = sorted(cap, key=lambda k: (-len(cap[k]), hang[k[0]], k[1]))
-        le = []
-        for k in thu_tu:  # 1) phòng thuần 1 cặp môn
-            g = _sap(cap[k])
-            while len(g) >= suc_chua:
-                phong.append(g[:suc_chua]); g = g[suc_chua:]
-            le.append(g)
-        phong.extend(_xep_phan_le([g for g in le if g], suc_chua))   # 2) phần lẻ: ít phòng nhất, ít tách nhóm nhất
+        nhom_cap = [_sap(cap[k]) for k in sorted(cap, key=lambda k: (-len(cap[k]), hang[k[0]], k[1]))]
+        noi_dung = [None] * len(lay)
+        for i, (_, c) in enumerate(lay):          # 1) phòng thuần 1 cặp môn: cặp đông đủ kín phòng
+            lon = max(range(len(nhom_cap)), key=lambda j: len(nhom_cap[j]), default=None)
+            if lon is not None and len(nhom_cap[lon]) >= c:
+                noi_dung[i], nhom_cap[lon] = nhom_cap[lon][:c], nhom_cap[lon][c:]
+        con = [i for i in range(len(lay)) if noi_dung[i] is None]   # 2) phần lẻ
+        for i, p in zip(con, _xep_vao_phong([g for g in nhom_cap if g], [lay[i][1] for i in con])):
+            noi_dung[i] = p
+        thua = []
+        for i, (t, c) in enumerate(lay):
+            if noi_dung[i]:
+                phong.append((t, c, noi_dung[i]))
+            elif t is not None:
+                thua.append((t, c))
+        hang_doi[:0] = thua   # phòng không dùng tới trả lại đầu hàng đợi (giữ thứ tự)
 
-    # SBD + tên phòng
-    ten_phong = [t.strip() for t in (ten_phong or []) if str(t).strip()]
+    if co_ds_phong and so_tu_dong[0]:
+        canh_bao.insert(0, f"Tổng sức chứa các phòng đã nhập ÍT hơn số học sinh — đã tự thêm {so_tu_dong[0]} "
+                           f"phòng ({suc_chua} chỗ/phòng). Bổ sung phòng vào danh sách.")
+    dem_tu_dong = 0
+    ds_phong = []
+    for t, c, p in phong:
+        if t is None:
+            dem_tu_dong += 1
+            t = f"Phòng thêm {dem_tu_dong:02d}" if co_ds_phong else f"Phòng {dem_tu_dong:02d}"
+        ds_phong.append((t, c, p))
+
     so, dong_hs, dong_phong = int(so_bat_dau), [], []
     rong = max(3, len(str(int(so_bat_dau) + len(hs))))
-    for i, p in enumerate(phong):
-        tp = ten_phong[i] if i < len(ten_phong) else f"Phòng {i + 1:02d}"
+    for tp, suc, p in ds_phong:
         cap_p = Counter((h["mon1"], h["mon2"]) for h in p)
         m1s = {h["mon1"] for h in p}
         loai = ("Cùng môn 1 & môn 2" if len(cap_p) == 1 else "Cùng môn 1" if len(m1s) == 1 else "Ghép nhiều môn 1")
         dong_phong.append({
-            "Phòng": tp, "Sĩ số": len(p), "Môn 1": ", ".join(sorted(m1s, key=lambda m: hang[m])),
+            "Phòng": tp, "Sức chứa": suc, "Sĩ số": len(p), "Còn trống": suc - len(p), "Môn 1": ", ".join(sorted(m1s, key=lambda m: hang[m])),
             "Cặp môn (môn 1 – môn 2: số HS)": "; ".join(f"{a} – {b}: {n}" for (a, b), n in cap_p.most_common()),
             "Loại phòng": loai,
             "SBD": f"{tien_to_sbd}{str(so).zfill(rong)} → {tien_to_sbd}{str(so + len(p) - 1).zfill(rong)}",
@@ -217,7 +288,7 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 12, t
         for m, n in sorted(dem.items(), key=lambda x: hang[x[0]])
     ])
     return {"hoc_sinh": pd.DataFrame(dong_hs), "phong": pd.DataFrame(dong_phong), "thong_ke": thong_ke,
-            "canh_bao": canh_bao}
+            "canh_bao": canh_bao, "phong_trong": list(hang_doi)}
 
 
 def xuat_excel(kq: dict) -> bytes:
