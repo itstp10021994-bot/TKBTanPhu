@@ -2003,16 +2003,14 @@ def module_thi_tot_nghiep():
         section_header(
             "2", "Cách xếp phòng",
             "Môn có <b>nhiều học sinh thi nhất</b> là môn 1 của học sinh đó, môn còn lại là môn 2. Học sinh <b>cùng "
-            "môn 1 & môn 2</b> được xếp kín từng phòng trước; phần lẻ ghép với học sinh <b>cùng môn 1</b>, ít phòng "
-            "nhất và ít tách nhóm nhất. Nhóm môn 1 ít hơn sĩ số tối thiểu được ghép chung ở cuối.",
+            "môn 1 & môn 2</b> được xếp kín từng phòng trước; phần lẻ ghép với học sinh <b>cùng môn 1</b> (chỉ ghép "
+            "môn 2), ít phòng nhất và ít tách nhóm nhất. <b>Mỗi phòng chỉ có 1 môn 1</b> — nhóm môn 1 ít học sinh "
+            "vẫn có phòng riêng.",
         )
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c3, c4 = st.columns(3)
         with c1:
             st.number_input("Sức chứa 1 phòng (khi tự tạo phòng)", 1, 60, step=1, key="tn_suc_chua",
                             help="Dùng khi chưa nhập danh sách phòng ở mục 3, hoặc khi danh sách phòng thiếu chỗ.")
-        with c2:
-            st.number_input("Sĩ số tối thiểu để môn 1 có phòng riêng", 1, 60, step=1, key="tn_si_so_min",
-                            help="Nhóm môn 1 ít hơn số này được ghép chung với nhóm nhỏ khác.")
         with c3:
             st.text_input("Tiền tố SBD", key="tn_tien_to", help="VD 'TP' → TP001. Để trống: 001, 002…")
         with c4:
@@ -2075,7 +2073,7 @@ def module_thi_tot_nghiep():
                 + ("" if tong_cho >= so_hs else f" — THIẾU {so_hs - tong_cho} chỗ, app sẽ tự thêm phòng."))
 
     kq = tn.xep_phong(
-        ss.tn_hoc_sinh, suc_chua=int(ss.tn_suc_chua), si_so_toi_thieu=int(ss.tn_si_so_min),
+        ss.tn_hoc_sinh, suc_chua=int(ss.tn_suc_chua),
         tien_to_sbd=str(ss.tn_tien_to or "").strip(), so_bat_dau=int(ss.tn_so_bat_dau), phong_thi=ds_phong,
     )
     phong, tk, hs = kq["phong"], kq["thong_ke"], kq["hoc_sinh"]
