@@ -46,6 +46,7 @@ BANG_DU_LIEU = {
     "exam_rooms": "Phong_thi",
     "exam_subjects": "Mon_thi",
     "exam_proctors": "Coi_thi",
+    "tn_hoc_sinh": "HS_thi_TN",
 }
 # Các giá trị đơn / cấu hình
 GIA_TRI_CAU_HINH = [
@@ -53,6 +54,7 @@ GIA_TRI_CAU_HINH = [
     "cfg_school_name", "free_depts", "exam_show_names",
     "ct_period_spread", "ct_room_capacity", "ct_order_group", "ct_dept_free_session", "ct_no_gap",
     "ct_class_compact", "nguon_hs_nam_hoc",
+    "tn_suc_chua", "tn_si_so_min", "tn_tien_to", "tn_so_bat_dau", "tn_ten_phong",
 ]
 
 
