@@ -9,8 +9,8 @@ Mỗi học sinh thi 2 môn tự chọn (VD "Lý - Anh"). Cách xếp:
      (môn 1, môn 2) được xếp kín từng phòng trước (phòng thuần 1 cặp môn);
      phần lẻ của các cặp được ghép tiếp vào phòng chung môn 1, cặp đông
      trước -> số phòng ít nhất và nhiều phòng thi chung cả môn 1 lẫn môn 2.
-  3. Nhóm môn 1 quá ít học sinh (dưới sĩ số tối thiểu) được ghép chung vào
-     các phòng "ghép" cuối cùng, xếp liền theo cặp môn.
+  3. MỖI PHÒNG CHỈ CÓ 1 MÔN 1 (bắt buộc) — chỉ môn 2 được ghép. Nhóm môn 1 ít
+     học sinh vẫn có phòng riêng.
   4. SBD đánh liên tục theo thứ tự phòng.
 
 Độc lập với Streamlit để dễ kiểm thử.
@@ -181,7 +181,7 @@ def _xep_vao_phong(nhom_le: list[list], cho: list[int]) -> list[list]:
     return phong
 
 
-def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 12, tien_to_sbd: str = "",
+def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, tien_to_sbd: str = "",
               so_bat_dau: int = 1, phong_thi: list[tuple[str, int]] | None = None) -> dict:
     """phong_thi: [(tên phòng, sức chứa)] theo thứ tự dùng; None/rỗng -> tự tạo phòng 'Phòng 01'... sức chứa
     `suc_chua`. Thiếu chỗ thì tự thêm phòng. -> {"hoc_sinh", "phong", "thong_ke", "canh_bao", "phong_trong"}."""
@@ -207,15 +207,11 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 12, t
         ms = sorted(h["mon"], key=lambda m: hang[m])
         h["mon1"], h["mon2"] = ms[0], " + ".join(ms[1:])
 
-    # nhóm theo môn 1; nhóm quá nhỏ -> ghép chung
+    # nhóm theo môn 1 — BẮT BUỘC mỗi phòng 1 môn 1 (không ghép các môn 1 với nhau, kể cả nhóm nhỏ)
     theo_mon1 = defaultdict(list)
     for h in hs:
         theo_mon1[h["mon1"]].append(h)
-    nhom, ghep = [], []
-    for m1 in sorted(theo_mon1, key=lambda m: hang[m]):
-        (nhom.append((m1, theo_mon1[m1])) if len(theo_mon1[m1]) >= si_so_toi_thieu else ghep.extend(theo_mon1[m1]))
-    if ghep:
-        nhom.append(("(ghép)", ghep))
+    nhom = [(m1, theo_mon1[m1]) for m1 in sorted(theo_mon1, key=lambda m: hang[m])]
 
     def _sap(ds):
         return sorted(ds, key=lambda h: (h["lop"], khoa(h["ten"].split(" ")[-1] if h["ten"] else ""), khoa(h["ten"])))
