@@ -1988,12 +1988,17 @@ elif LA_ADMIN and module == "🪑 Xếp Phòng Thi":
 # ---------------------------------------------------------------------
 # PHÂN HỆ XẾP PHÒNG THI TỐT NGHIỆP (khối 12) — tab trong module Xếp phòng thi
 # ---------------------------------------------------------------------
+TRUONG_MAC_DINH = "TRƯỜNG TH, THCS VÀ THPT TÂN PHÚ"
+DON_VI_MAC_DINH = "SỞ GIÁO DỤC VÀ ĐÀO TẠO THÀNH PHỐ HỒ CHÍ MINH"
+
+
 def _tieu_de_mau() -> tuple:
-    """(tên trường, tên kỳ thi, đơn vị chủ quản, ghi môn vào tiêu đề) cho mẫu in danh sách phòng."""
+    """(tên trường, tên kỳ thi, đơn vị chủ quản, ghi môn vào tiêu đề) cho mẫu in danh sách phòng.
+    Ô để trống (VD cấu hình lưu từ bản cũ) -> dùng giá trị mặc định, không in thiếu dòng tên trường."""
     ss = st.session_state
-    return (str(ss.get("tn_ten_truong") or ss.get("cfg_school_name") or "").strip().upper(),
+    return (str(ss.get("tn_ten_truong") or "").strip().upper() or TRUONG_MAC_DINH,
             str(ss.get("tn_ten_ky_thi") or "").strip().upper(),
-            str(ss.get("tn_don_vi") or "").strip().upper(),
+            str(ss.get("tn_don_vi") or "").strip().upper() or DON_VI_MAC_DINH,
             bool(ss.get("tn_mon_tieu_de")))
 
 
@@ -2142,14 +2147,16 @@ def module_thi_tot_nghiep():
             st.text_input("Tiền tố SBD", key="tn_tien_to", help="VD 'TP' → TP001. Để trống: 001, 002…")
         with c4:
             st.number_input("SBD bắt đầu từ", 1, 99999, step=1, key="tn_so_bat_dau")
+        for _k, _md in (("tn_ten_truong", TRUONG_MAC_DINH), ("tn_don_vi", DON_VI_MAC_DINH)):
+            if not str(ss.get(_k) or "").strip():   # cấu hình cũ để trống -> điền sẵn để thấy rõ cái sẽ in
+                ss[_k] = _md
         t0, t1, t2 = st.columns(3)
         with t0:
             st.text_input("Đơn vị chủ quản (tiêu ngữ, dòng 1)", key="tn_don_vi",
                           help="In ở góc trái trên cùng, VD: SỞ GIÁO DỤC VÀ ĐÀO TẠO THÀNH PHỐ HỒ CHÍ MINH. Góc phải "
                                "app tự in Quốc hiệu và “Độc lập - Tự do - Hạnh phúc”.")
         with t1:
-            st.text_input("Tên trường (tiêu ngữ, dòng 2 – gạch chân)", key="tn_ten_truong",
-                          placeholder=str(ss.get("cfg_school_name") or "TRƯỜNG TH, THCS VÀ THPT TÂN PHÚ"))
+            st.text_input("Tên trường (tiêu ngữ, dòng 2 – gạch chân)", key="tn_ten_truong")
         with t2:
             st.text_input("Tên kỳ thi (in trên danh sách)", key="tn_ten_ky_thi",
                           help="VD: KỲ KIỂM TRA GIỮA HỌC KÌ I - NĂM HỌC 2026-2027")
