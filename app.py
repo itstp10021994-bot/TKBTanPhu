@@ -1200,9 +1200,17 @@ TEN_FILE_CONG_BO = LOAI_BAN["cong_bo"]["ten_sp"]
 
 
 @st.cache_resource
-def _kho_ban() -> dict:
+def _kho_ban_chung() -> dict:
     """Bộ nhớ chung mọi phiên cho từng loại bản."""
-    return {loai: {"goi": None, "da_thu_nap": False, "loi_nap": "", "lan_thu": 0.0} for loai in LOAI_BAN}
+    return {}
+
+
+def _kho_ban() -> dict:
+    """Như trên, tự thêm loại bản mới (VD 'tai_khoan') khi app cập nhật mà máy chủ còn giữ bộ nhớ cũ."""
+    kho = _kho_ban_chung()
+    for loai in LOAI_BAN:
+        kho.setdefault(loai, {"goi": None, "da_thu_nap": False, "loi_nap": "", "lan_thu": 0.0})
+    return kho
 
 
 def _kho_cong_bo() -> dict:
