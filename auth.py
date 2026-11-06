@@ -49,7 +49,48 @@ import hashlib
 import hmac
 import secrets as _secrets
 
-VAI_TRO = ("admin", "user")
+VAI_TRO = ("admin", "tkb", "thi", "user")
+# admin: toàn quyền · tkb: quản lý thời khoá biểu & dạy thay · thi: quản lý phòng thi · user: xem lịch đã công bố
+TEN_VAI_TRO = {"admin": "Quản trị (admin)", "tkb": "Quản lý TKB & dạy thay", "thi": "Quản lý phòng thi",
+               "user": "Giáo viên (xem lịch)"}
+VAI_TRO_BIEN_TAP = ("admin", "tkb", "thi")   # được nhập liệu / chỉnh sửa trong các module của mình
+MODULE_THEO_VAI_TRO = {
+    "tkb": ["📅 Xếp Thời Khoá Biểu", "🔄 Phân Công Dạy Thay", "👤 Lịch của tôi"],
+    "thi": ["🪑 Xếp Phòng Thi", "👤 Lịch của tôi"],
+}
+_TEN_DN_HOP_LE = __import__("re").compile(r"^[a-z0-9][a-z0-9._-]{2,31}$")
+
+
+def kiem_tra_ten_dn(ten_dn: str) -> str:
+    """'' nếu hợp lệ, ngược lại lý do."""
+    if not _TEN_DN_HOP_LE.match(ten_dn or ""):
+        return "Tên đăng nhập 3–32 ký tự: chữ thường không dấu, số, dấu chấm, gạch ngang, gạch dưới."
+    return ""
+
+
+def tai_khoan_tu_goi(goi: dict | None) -> dict[str, dict]:
+    """Tài khoản tạo trên app (lưu trong bản 'tai_khoan') -> cùng dạng doc_tai_khoan()."""
+    ra = {}
+    for tk in (goi or {}).get("tai_khoan", []) or []:
+        ten_dn = str(tk.get("ten_dn") or "").strip().lower()
+        if not ten_dn or not tk.get("password_hash") or tk.get("khoa"):
+            continue
+        vai_tro = str(tk.get("vai_tro") or "user").strip().lower()
+        ra[ten_dn] = {"ten_dn": ten_dn, "ten": str(tk.get("ten") or ten_dn),
+                      "vai_tro": vai_tro if vai_tro in VAI_TRO else "user",
+                      "password": None, "password_hash": str(tk["password_hash"]), "nguon_tk": "app"}
+    return ra
+
+
+def email_quyen_tu_goi(goi: dict | None) -> dict[str, dict]:
+    """Phân quyền theo email tạo trên app -> {email: {"ten", "vai_tro"}}."""
+    ra = {}
+    for e in (goi or {}).get("email_quyen", []) or []:
+        email = str(e.get("email") or "").strip().lower()
+        vai_tro = str(e.get("vai_tro") or "").strip().lower()
+        if "@" in email and vai_tro in VAI_TRO:
+            ra[email] = {"ten": str(e.get("ten") or ""), "vai_tro": vai_tro}
+    return ra
 SO_VONG_LAP = 200_000
 
 
