@@ -969,119 +969,183 @@ def trang_toan_van(kq: dict) -> list[dict]:
 QUOC_HIEU, TIEU_NGU = "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", "Độc lập - Tự do - Hạnh phúc"
 
 
+# Thông số lấy NGUYÊN từ mẫu của trường (M_UA.xlsx): font mặc định Times New Roman 12, độ rộng cột, dòng 20,1,
+# dòng tiêu ngữ 51, lề, tỉ lệ in 90 %, mỗi phòng 1 trang 39 dòng, 2 đường kẻ ngắn dưới tên trường / tiêu ngữ.
+_RONG_COT_MAU = [4.796875, 11, 21.69921875, 9.3984375, 8.3984375]          # A..E
+_RONG_MON_MAU = [(8.69921875, 14.796875), (11.19921875, 14.09765625)]      # (M.đề, Ký tên) môn 1, môn 2, …
+_DUONG_KE_MAU = [   # (cột từ, lệch từ, cột đến, lệch đến, lệch dòng) — EMU, đúng như file mẫu
+    (2, 504825, 2, 1533525, 514350),    # dưới "TRƯỜNG TH, THCS VÀ THPT TÂN PHÚ"
+    (6, 314325, 8, 66675, 504825),      # dưới "Độc lập - Tự do - Hạnh phúc"
+]
+_DONG_MOI_TRANG = 39
+
+
+def _ve_duong_ke(du_lieu: bytes, dong_dau: list[int]) -> bytes:
+    """Chèn các đường kẻ (connector) của mẫu vào đầu mỗi trang (openpyxl không tự vẽ được hình)."""
+    import zipfile
+
+    neo, so = [], 2
+    for r0 in dong_dau:
+        for c1, o1, c2, o2, dy in _DUONG_KE_MAU:
+            neo.append(
+                f'<xdr:twoCellAnchor><xdr:from><xdr:col>{c1}</xdr:col><xdr:colOff>{o1}</xdr:colOff>'
+                f'<xdr:row>{r0 - 1}</xdr:row><xdr:rowOff>{dy}</xdr:rowOff></xdr:from><xdr:to><xdr:col>{c2}</xdr:col>'
+                f'<xdr:colOff>{o2}</xdr:colOff><xdr:row>{r0 - 1}</xdr:row><xdr:rowOff>{dy}</xdr:rowOff></xdr:to>'
+                f'<xdr:cxnSp macro=""><xdr:nvCxnSpPr><xdr:cNvPr id="{so}" name="Straight Connector {so - 1}"/>'
+                '<xdr:cNvCxnSpPr/></xdr:nvCxnSpPr><xdr:spPr><a:prstGeom prst="line"><a:avLst/></a:prstGeom>'
+                '<a:ln w="9525"><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln></xdr:spPr>'
+                '</xdr:cxnSp><xdr:clientData/></xdr:twoCellAnchor>')
+            so += 1
+    ve = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/'
+          'drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+          + "".join(neo) + "</xdr:wsDr>")
+    vao, ra = zipfile.ZipFile(io.BytesIO(du_lieu)), io.BytesIO()
+    with zipfile.ZipFile(ra, "w", zipfile.ZIP_DEFLATED) as z:
+        ten = vao.namelist()
+        for n in ten:
+            d = vao.read(n)
+            if n == "[Content_Types].xml":
+                d = d.decode().replace("</Types>", '<Override PartName="/xl/drawings/drawing1.xml" ContentType='
+                                       '"application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>').encode()
+            elif n == "xl/worksheets/sheet1.xml":
+                the = ('<drawing xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" '
+                       'r:id="rIdKe1"/>')
+                x = d.decode()
+                vt = min([x.find(t) for t in ("<legacyDrawing", "<tableParts", "<extLst") if x.find(t) >= 0]
+                         or [x.rfind("</worksheet>")])
+                d = (x[:vt] + the + x[vt:]).encode()
+            elif n == "xl/worksheets/_rels/sheet1.xml.rels":
+                d = d.decode().replace("</Relationships>", '<Relationship Id="rIdKe1" Type="http://schemas.'
+                                       'openxmlformats.org/officeDocument/2006/relationships/drawing" '
+                                       'Target="../drawings/drawing1.xml"/></Relationships>').encode()
+            z.writestr(n, d)
+        if "xl/worksheets/_rels/sheet1.xml.rels" not in ten:
+            z.writestr("xl/worksheets/_rels/sheet1.xml.rels",
+                       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.'
+                       'openxmlformats.org/package/2006/relationships"><Relationship Id="rIdKe1" Type="http://schemas.'
+                       'openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/>'
+                       '</Relationships>')
+        z.writestr("xl/drawings/drawing1.xml", ve)
+    return ra.getvalue()
+
+
 def xuat_mau_phong(trang: list[dict], ten_truong: str = "", ten_ky_thi: str = "", don_vi: str = "",
                    ghi_mon_tieu_de: bool = False) -> bytes:
-    """Mẫu in danh sách phòng thi: mỗi phòng 1 trang — tiêu ngữ (trái: đơn vị chủ quản + tên trường gạch chân;
-    phải: Quốc hiệu + "Độc lập - Tự do - Hạnh phúc" gạch chân), tên kỳ thi (+ môn nếu ghi_mon_tieu_de),
-    PHÒNG …; bảng STT | SBD |
-    Họ và tên | (tên) | Lớp | mỗi môn 2 cột (M.đề, Ký tên); em không thi môn nào thì ô môn đó GẠCH CHÉO;
-    cuối trang: số học sinh, dòng vắng, tổng bài/tờ, chữ ký 2 giám thị."""
+    """Mẫu in danh sách phòng thi GIỐNG mẫu của trường: mỗi phòng 1 trang — tiêu ngữ (trái: đơn vị chủ quản +
+    tên trường, phải: Quốc hiệu + "Độc lập - Tự do - Hạnh phúc", có đường kẻ ngắn bên dưới), tên kỳ thi
+    (+ môn nếu ghi_mon_tieu_de), PHÒNG …; bảng STT | SBD | Họ và tên | tên | Lớp | mỗi môn 2 cột (M.đề, Ký tên),
+    em không thi môn nào thì ô môn đó gạch chéo; cuối trang: số học sinh, dòng vắng, tổng bài/tờ, chữ ký giám thị."""
     from openpyxl import Workbook
-    from openpyxl.cell.rich_text import CellRichText, TextBlock
-    from openpyxl.cell.text import InlineFont
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter as cot
+    from openpyxl.utils.indexed_list import IndexedList
     from openpyxl.worksheet.pagebreak import Break
 
     wb = Workbook()
+    wb._fonts = IndexedList([Font(name="Times New Roman", size=12)])   # font mặc định như mẫu -> cột rộng như mẫu
     ws = wb.active
     ws.title = "Danh_sach_phong"
-    mong = Side(style="thin")
+    ws.sheet_format.defaultRowHeight, ws.sheet_format.customHeight = 20.1, True
+    mong, manh = Side(style="thin"), Side(style="hair")
     vien = Border(left=mong, right=mong, top=mong, bottom=mong)
     gach = PatternFill(fill_type="lightUp", fgColor="FF808080", bgColor="FFFFFFFF")
     tnr = lambda sz=12, b=False, i=False: Font(name="Times New Roman", size=sz, bold=b, italic=i)   # noqa: E731
     giua = Alignment(horizontal="center", vertical="center", wrap_text=True)
     trai = Alignment(horizontal="left", vertical="center")
-    so_mon_max = max([len(t["mon"]) for t in trang] or [1])
-    for c, w in zip("ABCDE", (4.8, 11.0, 25.5, 9.4, 8.4)):   # tên dài + dòng tiêu ngữ trái không xuống dòng
-        ws.column_dimensions[c].width = w
-    for k in range(so_mon_max):   # 2 môn đầu đủ rộng cho Quốc hiệu 1 dòng
-        ws.column_dimensions[cot(6 + 2 * k)].width = 8.7
-        ws.column_dimensions[cot(7 + 2 * k)].width = 14.5
+    so_mon_max = max([len(t["mon"]) for t in trang] or [2])
+    for j, w in enumerate(_RONG_COT_MAU, start=1):
+        ws.column_dimensions[cot(j)].width = w
+    for k in range(max(so_mon_max, 2)):
+        w1, w2 = _RONG_MON_MAU[min(k, 1)]
+        ws.column_dimensions[cot(6 + 2 * k)].width, ws.column_dimensions[cot(7 + 2 * k)].width = w1, w2
 
-    def _hai_dong(dong1: str, dong2: str):
-        """2 dòng in đậm, dòng 2 gạch chân (như tiêu ngữ văn bản hành chính)."""
-        dam = InlineFont(rFont="Times New Roman", sz=12, b=True)
-        gach_chan = InlineFont(rFont="Times New Roman", sz=12, b=True, u="single")
-        khoi = ([TextBlock(dam, dong1 + "\n")] if dong1 else []) + ([TextBlock(gach_chan, dong2)] if dong2 else [])
-        return CellRichText(*khoi) if khoi else ""
+    def _o(rr, c, v=None, font=None, can=None, bien=None):
+        x = ws.cell(rr, c) if v is None else ws.cell(rr, c, v)
+        if font is not None:
+            x.font = font
+        if can is not None:
+            x.alignment = can
+        if bien is not None:
+            x.border = bien
+        return x
 
-    r = 1
+    r, dong_dau = 1, []
     for t in trang:
-        cuoi = 5 + 2 * max(len(t["mon"]), 1)
-        chia = 5 if cuoi >= 9 else 3   # cột cuối của khối bên trái
+        so_mon = max(len(t["mon"]), 1)
+        cuoi = 5 + 2 * so_mon            # cột cuối của bảng
+        rong = max(cuoi, 9)              # tiêu đề trải tối thiểu A..I như mẫu
+        dong_dau.append(r)
+        # --- tiêu ngữ (dòng cao 51) ---
         ws.row_dimensions[r].height = 51
-        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=chia)
-        ws.cell(r, 1, _hai_dong(don_vi.upper(), ten_truong.upper()))
-        ws.merge_cells(start_row=r, start_column=chia + 1, end_row=r, end_column=cuoi)
-        ws.cell(r, chia + 1, _hai_dong(QUOC_HIEU, TIEU_NGU))
-        for c in (1, chia + 1):
-            ws.cell(r, c).alignment = giua
-            ws.cell(r, c).font = tnr(12, True)
-        ws.merge_cells(start_row=r + 1, start_column=1, end_row=r + 1, end_column=cuoi)
-        ws.cell(r + 1, 1, ten_ky_thi + (" - MÔN " + " - ".join(_TEN_NGAN.get(m, m.upper()) for m in t["mon"])
-                                        if ghi_mon_tieu_de else "")).font = tnr(12, True)
-        ws.cell(r + 1, 1).alignment = giua
-        ws.merge_cells(start_row=r + 2, start_column=1, end_row=r + 2, end_column=cuoi)
-        ws.cell(r + 2, 1, str(t["phong"]).upper() if str(t["phong"]).upper().startswith("PHÒNG")
-                else f"PHÒNG {str(t['phong']).upper()}").font = tnr(12, True)
-        ws.cell(r + 2, 1).alignment = giua
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=5)
+        _o(r, 1, f"{don_vi}\n{ten_truong}", tnr(12, True), giua)
+        ws.merge_cells(start_row=r, start_column=6, end_row=r, end_column=9)
+        _o(r, 6, f"{QUOC_HIEU}\n{TIEU_NGU}", tnr(12, True), giua)
+        tieu_de = ten_ky_thi + (" - MÔN " + " - ".join(_TEN_NGAN.get(m, m.upper()) for m in t["mon"])
+                                if ghi_mon_tieu_de else "")
+        phong_ten = str(t["phong"]).upper()
+        for k, v in ((1, tieu_de), (2, phong_ten if phong_ten.startswith("PHÒNG") else f"PHÒNG {phong_ten}")):
+            ws.merge_cells(start_row=r + k, start_column=1, end_row=r + k, end_column=rong)
+            _o(r + k, 1, v, tnr(12, True), giua)
+        # --- tiêu đề bảng ---
         h1, h2 = r + 4, r + 5
         for c1, c2, chu in ((1, 1, "STT"), (2, 2, "SBD"), (3, 4, "Họ và tên học sinh"), (5, 5, "Lớp")):
             ws.merge_cells(start_row=h1, start_column=c1, end_row=h2, end_column=c2)
-            ws.cell(h1, c1, chu)
+            _o(h1, c1, chu)
         for k, m in enumerate(t["mon"]):
             c = 6 + 2 * k
             ws.merge_cells(start_row=h1, start_column=c, end_row=h1, end_column=c + 1)
-            ws.cell(h1, c, m)
-            ws.cell(h2, c, "M.đề"); ws.cell(h2, c + 1, "Ký tên")
+            _o(h1, c, m)
+            _o(h2, c, "M.đề"); _o(h2, c + 1, "Ký tên")
         for rr in (h1, h2):
-            ws.row_dimensions[rr].height = 20.1
             for c in range(1, cuoi + 1):
-                x = ws.cell(rr, c)
-                x.font, x.alignment, x.border = tnr(10, True), giua, vien
+                _o(rr, c, None, tnr(10, True), giua, vien)
+        # --- học sinh ---
         for stt, (sbd, ten, lop, thi) in enumerate(t["hs"], start=1):
             rr = h2 + stt
-            ws.row_dimensions[rr].height = 20.1
             sbd_o = int(sbd) if str(sbd).isdigit() and not str(sbd).startswith("0") else sbd
             tach = str(ten).split()
             for c, v in ((1, stt), (2, sbd_o), (3, ten), (4, tach[-1] if tach else ""), (5, lop)):
-                x = ws.cell(rr, c, v)
-                x.alignment, x.border = (trai if c in (3, 4) else giua), vien
-                x.font = Font(name="Times New Roman", size=12)
-            ws.cell(rr, 3).border = Border(left=mong, top=mong, bottom=mong)
-            ws.cell(rr, 4).border = Border(right=mong, top=mong, bottom=mong)
+                _o(rr, c, v, tnr(12), trai if c in (3, 4) else giua, vien)
+            _o(rr, 3, None, bien=Border(left=mong, top=mong, bottom=mong))
+            _o(rr, 4, None, bien=Border(right=mong, top=mong, bottom=mong))
             for k, m in enumerate(t["mon"]):
                 for c in (6 + 2 * k, 7 + 2 * k):
-                    x = ws.cell(rr, c)
-                    x.border = vien
+                    x = _o(rr, c, None, tnr(12), giua, vien)
                     if m not in thi:   # không thi môn này -> gạch chéo
                         x.fill = gach
-        r = h2 + len(t["hs"]) + 2
-        ws.cell(r, 1, f"Danh sách này có {len(t['hs'])} học sinh").font = tnr(11, i=True)
-        ws.merge_cells(start_row=r + 1, start_column=1, end_row=r + 1, end_column=cuoi)
-        ws.cell(r + 1, 1, "Trong đó: - Số học sinh dự thi:......; số học sinh vắng:.....; "
-                          "SBD vắng:............................................").font = tnr(11)
-        ws.merge_cells(start_row=r + 2, start_column=1, end_row=r + 2, end_column=cuoi)
-        ws.cell(r + 2, 1, "Tổng số bài:..............; Tổng số tờ:...............").font = tnr(11)
-        gt2 = max(cuoi - 2, 6)
-        for c1, c2 in ((1, 3), (gt2, cuoi)):
-            ws.merge_cells(start_row=r + 4, start_column=c1, end_row=r + 4, end_column=c2)
-            ws.merge_cells(start_row=r + 5, start_column=c1, end_row=r + 5, end_column=c2)
-        ws.cell(r + 4, 1, "GIÁM THỊ 1").font = tnr(12, True)
-        ws.cell(r + 4, gt2, "GIÁM THỊ 2").font = tnr(12, True)
-        ws.cell(r + 5, 1, "( Ký và ghi rõ họ tên )").font = tnr(11, i=True)
-        ws.cell(r + 5, gt2, "( Ký và ghi rõ họ tên )").font = tnr(11, i=True)
-        for c in (1, gt2):
-            ws.cell(r + 4, c).alignment = ws.cell(r + 5, c).alignment = giua
-        r += 9
-        ws.row_breaks.append(Break(id=r - 1))   # mỗi phòng 1 trang
+        rr = h2 + len(t["hs"]) + 1      # 1 dòng trống có kẻ như mẫu
+        for c in range(1, cuoi + 1):
+            _o(rr, c, None, bien=Border(left=mong, right=mong, top=manh, bottom=mong))
+        ws.merge_cells(start_row=rr, start_column=3, end_row=rr, end_column=4)
+        # --- cuối trang ---
+        f0 = rr + 1
+        _o(f0, 1, f"Danh sách này có {len(t['hs'])} học sinh", tnr(11, i=True), Alignment(horizontal="left"))
+        for k, v in ((1, "Trong đó: - Số học sinh dự thi:......; số học sinh vắng:.....; "
+                         "SBD vắng:............................................"),
+                     (2, "Tổng số bài:..............; Tổng số tờ:...............")):
+            ws.merge_cells(start_row=f0 + k, start_column=1, end_row=f0 + k, end_column=rong)
+            _o(f0 + k, 1, v, tnr(12), Alignment(horizontal="left"))
+        gt2 = rong - 2
+        ws.merge_cells(start_row=f0 + 4, start_column=1, end_row=f0 + 4, end_column=3)
+        ws.merge_cells(start_row=f0 + 5, start_column=1, end_row=f0 + 5, end_column=3)
+        giua_1_dong = Alignment(horizontal="center", vertical="center")   # không xuống dòng (tràn sang 2 bên như mẫu)
+        _o(f0 + 4, 1, "GIÁM THỊ 1", tnr(12, True), giua_1_dong)
+        _o(f0 + 5, 1, "( Ký và ghi rõ họ tên )", tnr(12), giua_1_dong)
+        _o(f0 + 4, gt2, "GIÁM THỊ 2", tnr(12, True), giua_1_dong)
+        _o(f0 + 5, gt2, "( Ký và ghi rõ họ tên )", tnr(12), giua_1_dong)
+        het = max(r + _DONG_MOI_TRANG - 1, f0 + 8)   # mỗi phòng 1 trang (39 dòng như mẫu)
+        ws.row_breaks.append(Break(id=het))
+        r = het + 1
     ws.page_setup.orientation = "portrait"
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
-    ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, 0
-    ws.sheet_properties.pageSetUpPr.fitToPage = True
-    ws.page_margins.left = ws.page_margins.right = 0.4
-    ws.print_options.horizontalCentered = True
+    if so_mon_max <= 2:
+        ws.page_setup.scale = 90
+    else:   # nhiều môn hơn mẫu: thu vừa 1 trang ngang
+        ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, 0
+        ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_margins.left, ws.page_margins.right = 0.2362204724409449, 0.17
+    ws.page_margins.top, ws.page_margins.bottom = 0.5118110236220472, 0.2362204724409449
     buf = io.BytesIO()
     wb.save(buf)
-    return buf.getvalue()
+    return _ve_duong_ke(buf.getvalue(), dong_dau)
