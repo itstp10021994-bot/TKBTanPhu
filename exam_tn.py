@@ -349,8 +349,9 @@ def _toi_uu_theo_phong(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_ch
     for so_bac, muc_tieu in enumerate(bac):   # giải lần lượt từng bậc ưu tiên; seed cố định -> kết quả tất định
         m.Minimize(muc_tieu)
         sv = cp_model.CpSolver()
-        sv.parameters.num_workers = 4
-        sv.parameters.interleave_search = True   # nhiều chiến lược luân phiên nhưng vẫn tất định
+        # 1 luồng: máy chủ Streamlit miễn phí chỉ ~2 nhân CPU, nhiều luồng sẽ bị giới hạn CPU (throttle);
+        # thử nghiệm: kết quả gần như nhau mà tốn CPU ít hơn 3–4 lần
+        sv.parameters.num_workers = 1
         sv.parameters.random_seed = 2026
         sv.parameters.max_deterministic_time = max(1.0, gioi_han_giay / len(bac))
         con_lai = het_gio - time.monotonic()

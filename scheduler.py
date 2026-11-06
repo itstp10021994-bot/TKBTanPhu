@@ -24,6 +24,7 @@ yêu cầu ban đầu được encode ở đây:
 """
 
 from __future__ import annotations
+import os
 from collections import defaultdict
 
 from ortools.sat.python import cp_model
@@ -487,7 +488,8 @@ def solve_timetable(
     # ---------------------------------------------------------------
     solver = cp_model.CpSolver()
     solver.parameters.max_time_in_seconds = cfg.max_solver_seconds
-    solver.parameters.num_search_workers = 8
+    # tối đa 4 luồng: máy chủ Streamlit miễn phí ít CPU, 8 luồng dễ bị giới hạn CPU (throttle)
+    solver.parameters.num_search_workers = max(1, min(4, os.cpu_count() or 2))
     if random_seed is not None:
         solver.parameters.random_seed = int(random_seed)
     status = solver.Solve(model)
