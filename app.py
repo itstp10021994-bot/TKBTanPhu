@@ -1756,7 +1756,7 @@ if not set(COT_GIAO_VIEN).issubset(st.session_state.teachers.columns):
 CFG_DEFAULTS = dict(
     cfg_num_days=6, cfg_periods_per_day=5, cfg_morning_count=3, cfg_max_seconds=30,
     cfg_school_name="",
-    tn_suc_chua=24, tn_si_so_min=12, tn_tien_to="", tn_so_bat_dau=1, tn_ten_phong="",
+    tn_suc_chua=24, tn_si_so_min=12, tn_tien_to="", tn_so_bat_dau=1, tn_ten_phong="", tn_toi_uu=True,
 )
 for key, default in CFG_DEFAULTS.items():
     st.session_state[key] = st.session_state.get(key, default)
@@ -2004,8 +2004,8 @@ def module_thi_tot_nghiep():
             "2", "Cách xếp phòng",
             "Môn có <b>nhiều học sinh thi nhất</b> là môn 1 của học sinh đó, môn còn lại là môn 2. Học sinh <b>cùng "
             "môn 1 & môn 2</b> được xếp kín từng phòng trước; phần lẻ ghép với học sinh <b>cùng môn 1</b> (chỉ ghép "
-            "môn 2), ít phòng nhất và ít tách nhóm nhất. <b>Mỗi phòng chỉ có 1 môn 1</b> — nhóm môn 1 ít học sinh "
-            "vẫn có phòng riêng.",
+            "môn 2). <b>Mỗi phòng chỉ có 1 môn 1</b>. Bật <b>Tối ưu</b>: app chọn môn 1 của từng em trong 2 môn "
+            "của em sao cho tổng số phòng ÍT NHẤT.",
         )
         c1, c3, c4 = st.columns(3)
         with c1:
@@ -2015,6 +2015,12 @@ def module_thi_tot_nghiep():
             st.text_input("Tiền tố SBD", key="tn_tien_to", help="VD 'TP' → TP001. Để trống: 001, 002…")
         with c4:
             st.number_input("SBD bắt đầu từ", 1, 99999, step=1, key="tn_so_bat_dau")
+        st.toggle(
+            "⚡ Tối ưu ÍT PHÒNG NHẤT (khuyến nghị)", key="tn_toi_uu",
+            help="Mỗi phòng vẫn chỉ 1 môn 1. App được chọn môn 1 của từng học sinh là MỘT TRONG 2 môn của em "
+                 "(không bắt buộc môn đông hơn) để gom đủ phòng → tổng số phòng ít nhất. Khi số phòng như nhau, "
+                 "ưu tiên giữ môn đông hơn làm môn 1. Tắt: môn đông hơn luôn là môn 1.",
+        )
 
     with the_khung():
         section_header(
@@ -2072,10 +2078,10 @@ def module_thi_tot_nghiep():
                 f"{len(ds_phong)} phòng · tổng {tong_cho} chỗ · {so_hs} học sinh"
                 + ("" if tong_cho >= so_hs else f" — THIẾU {so_hs - tong_cho} chỗ, app sẽ tự thêm phòng."))
 
-    kq = tn.xep_phong(
-        ss.tn_hoc_sinh, suc_chua=int(ss.tn_suc_chua),
-        tien_to_sbd=str(ss.tn_tien_to or "").strip(), so_bat_dau=int(ss.tn_so_bat_dau), phong_thi=ds_phong,
-    )
+    _tham_so = dict(suc_chua=int(ss.tn_suc_chua), tien_to_sbd=str(ss.tn_tien_to or "").strip(),
+                    so_bat_dau=int(ss.tn_so_bat_dau), phong_thi=ds_phong)
+    kq = tn.xep_phong(ss.tn_hoc_sinh, toi_uu=bool(ss.tn_toi_uu), gioi_han_giay=5, **_tham_so)
+    so_phong_thuong = len(tn.xep_phong(ss.tn_hoc_sinh, toi_uu=False, **_tham_so)["phong"]) if kq["toi_uu"] else None
     phong, tk, hs = kq["phong"], kq["thong_ke"], kq["hoc_sinh"]
     if phong.empty:
         st.warning("Chưa có học sinh nào có môn thi hợp lệ.")
@@ -2088,6 +2094,14 @@ def module_thi_tot_nghiep():
          f"{int((phong['Loại phòng'] == 'Cùng môn 1').sum())} phòng cùng môn 1"),
         ("yellow", "🥇", tk.iloc[0]["Môn"], "Môn 1 đông nhất", f"{int(tk.iloc[0]['Số HS thi'])} học sinh"),
     ])
+    if so_phong_thuong is not None:
+        st.success(
+            f"⚡ Phương án tối ưu: **{len(phong)} phòng**"
+            + (f" — ít hơn {so_phong_thuong - len(phong)} phòng so với cách “môn đông hơn luôn là môn 1” "
+               f"({so_phong_thuong} phòng)" if so_phong_thuong > len(phong) else " — bằng cách xếp thường")
+            + (f". Có {kq['so_doi_mon1']} học sinh được xếp phòng theo môn ít người hơn trong 2 môn của em."
+               if kq["so_doi_mon1"] else ".")
+        )
     for cb in kq["canh_bao"][:10]:
         st.warning(cb)
 

@@ -181,8 +181,69 @@ def _xep_vao_phong(nhom_le: list[list], cho: list[int]) -> list[list]:
     return phong
 
 
+def _toi_uu_mon1(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_chua: int, co_ds_phong: bool,
+                 gioi_han_giay: float = 10.0):
+    """Chọn MÔN XẾP PHÒNG (môn 1) cho từng học sinh trong các môn của em, và số phòng mỗi loại sức chứa cho
+    từng môn, sao cho (ưu tiên giảm dần): 1) chỉ tự thêm phòng khi danh sách phòng KHÔNG đủ chỗ,
+    2) ÍT PHÒNG NHẤT, 3) nhiều học sinh giữ môn đông hơn làm môn 1, 4) ít chỗ trống.
+    Mỗi phòng chỉ 1 môn 1. Phòng gom theo (sức chứa, phòng tự thêm hay không) để bộ giải không phải thử
+    các cách hoán đổi phòng giống nhau. Dùng OR-Tools CP-SAT.
+    -> ({id(hs): môn 1}, {môn: [chỉ số phòng]}, danh sách phòng (kể cả phòng tự thêm)) | None."""
+    from ortools.sat.python import cp_model
+
+    n = len(hs)
+    if not n:
+        return {}, {}, list(phong_ds)
+    mon = sorted({m for h in hs for m in h["mon"]}, key=lambda m: hang[m])
+    cap = defaultdict(list)                      # cặp môn (theo thứ hạng) -> học sinh
+    for h in hs:
+        cap[tuple(sorted(h["mon"], key=lambda m: hang[m]))].append(h)
+    # phòng tự thêm: đủ để mỗi môn có thể lấy thêm phòng (luôn có lời giải)
+    them = -(-n // suc_chua) + len(mon)
+    phong = list(phong_ds) + [(None, suc_chua)] * them
+    loai = defaultdict(list)                     # (sức chứa, tự thêm?) -> chỉ số phòng (theo thứ tự)
+    for r, (t, c) in enumerate(phong):
+        loai[(c, t is None)].append(r)
+    m = cp_model.CpModel()
+    x = {(p, s): m.NewIntVar(0, len(ds), "") for p, ds in cap.items() for s in p}
+    for p, ds in cap.items():
+        m.Add(sum(x[(p, s)] for s in p) == len(ds))
+    z = {(k, s): m.NewIntVar(0, len(rs), "") for k, rs in loai.items() for s in mon}
+    for k, rs in loai.items():
+        m.Add(sum(z[(k, s)] for s in mon) <= len(rs))
+    for s in mon:
+        m.Add(sum(x[(p, s)] for p in cap if s in p) <= sum(k[0] * z[(k, s)] for k in loai))
+    so_phong = sum(z.values())
+    tu_them = sum(z[(k, s)] for k in loai if k[1] for s in mon)
+    doi_mon = sum(len(ds) - x[(p, p[0])] for p, ds in cap.items())
+    cho = sum(k[0] * z[(k, s)] for k in loai for s in mon)
+    m.Minimize((10**12 if co_ds_phong else 0) * tu_them + 10**9 * so_phong + 10**3 * doi_mon + cho)
+    giai = cp_model.CpSolver()
+    giai.parameters.max_time_in_seconds = gioi_han_giay
+    giai.parameters.num_workers = 8
+    if giai.Solve(m) not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+        return None
+    mon1 = {}
+    for p, ds in cap.items():
+        ds = sorted(ds, key=lambda h: (h["lop"], khoa(h["ten"])))
+        i = 0
+        for s in p:
+            k = giai.Value(x[(p, s)])
+            for h in ds[i:i + k]:
+                mon1[id(h)] = s
+            i += k
+    phong_cua, da_lay = defaultdict(list), defaultdict(int)
+    for s in sorted(mon, key=lambda s: -sum(len(ds) for p, ds in cap.items() if s in p)):
+        for k, rs in loai.items():
+            so = giai.Value(z[(k, s)])
+            phong_cua[s] += rs[da_lay[k]:da_lay[k] + so]
+            da_lay[k] += so
+    return mon1, dict(phong_cua), phong
+
+
 def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, tien_to_sbd: str = "",
-              so_bat_dau: int = 1, phong_thi: list[tuple[str, int]] | None = None) -> dict:
+              so_bat_dau: int = 1, phong_thi: list[tuple[str, int]] | None = None, toi_uu: bool = True,
+              gioi_han_giay: float = 10.0) -> dict:
     """phong_thi: [(tên phòng, sức chứa)] theo thứ tự dùng; None/rỗng -> tự tạo phòng 'Phòng 01'... sức chứa
     `suc_chua`. Thiếu chỗ thì tự thêm phòng. -> {"hoc_sinh", "phong", "thong_ke", "canh_bao", "phong_trong"}."""
     suc_chua = max(int(suc_chua), 1)
@@ -205,13 +266,24 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, ti
     hang = {m: i for i, (m, _) in enumerate(sorted(dem.items(), key=lambda x: (-x[1], x[0])), start=1)}
     for h in hs:
         ms = sorted(h["mon"], key=lambda m: hang[m])
-        h["mon1"], h["mon2"] = ms[0], " + ".join(ms[1:])
+        h["mon1"], h["mon2"], h["mon1_tu_nhien"] = ms[0], " + ".join(ms[1:]), ms[0]
+
+    phong_cua, kho_phong = None, None   # phương án tối ưu: môn -> phòng (chỉ số trong kho_phong)
+    if toi_uu and hs:
+        kq_tu = _toi_uu_mon1(hs, hang, list(phong_thi or []), suc_chua, bool(phong_thi), gioi_han_giay)
+        if kq_tu is not None:
+            mon1_moi, phong_cua, kho_phong = kq_tu
+            for h in hs:
+                h["mon1"] = mon1_moi[id(h)]
+                h["mon2"] = " + ".join(m for m in sorted(h["mon"], key=lambda m: hang[m]) if m != h["mon1"])
+        else:
+            canh_bao.append("Không tìm được phương án tối ưu trong thời gian cho phép — dùng cách xếp thường.")
 
     # nhóm theo môn 1 — BẮT BUỘC mỗi phòng 1 môn 1 (không ghép các môn 1 với nhau, kể cả nhóm nhỏ)
     theo_mon1 = defaultdict(list)
     for h in hs:
         theo_mon1[h["mon1"]].append(h)
-    nhom = [(m1, theo_mon1[m1]) for m1 in sorted(theo_mon1, key=lambda m: hang[m])]
+    nhom = [(m1, theo_mon1[m1]) for m1 in sorted(theo_mon1, key=lambda m: (-len(theo_mon1[m]), hang[m]))]
 
     def _sap(ds):
         return sorted(ds, key=lambda h: (h["lop"], khoa(h["ten"].split(" ")[-1] if h["ten"] else ""), khoa(h["ten"])))
@@ -225,11 +297,28 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, ti
         so_tu_dong[0] += 1
         return (None, suc_chua)
 
+    if phong_cua is not None:   # phương án tối ưu: phòng (theo thứ tự danh sách) cấp lại cho từng môn
+        chon = sorted(r for rs in phong_cua.values() for r in rs)
+        hang_doi = [kho_phong[r] for r in range(len(phong_thi or [])) if r not in set(chon)]
+        con_lai = list(chon)   # chỉ số phòng đã chọn, theo thứ tự danh sách
+        lay_cua = {}
+        for m1, _ in nhom:   # môn đông trước lấy các phòng đầu danh sách, đúng các sức chứa bộ giải đã chọn
+            chi_so = []
+            for c in sorted((kho_phong[r][1] for r in phong_cua.get(m1, [])), reverse=True):
+                r = next(r for r in con_lai if kho_phong[r][1] == c)
+                con_lai.remove(r)
+                chi_so.append(r)
+            lay_cua[m1] = [kho_phong[r] for r in sorted(chi_so)]
+        so_tu_dong[0] = sum(1 for rs in phong_cua.values() for r in rs if kho_phong[r][0] is None)
+
     phong = []   # [(tên | None, sức chứa, [hs])]
     for m1, ds in nhom:
-        lay = []
-        while sum(c for _, c in lay) < len(ds):   # lấy ít phòng nhất (theo thứ tự danh sách) đủ chỗ cho nhóm
-            lay.append(_lay_phong())
+        if phong_cua is not None:
+            lay = list(lay_cua[m1])
+        else:
+            lay = []
+            while sum(c for _, c in lay) < len(ds):   # lấy ít phòng nhất (theo thứ tự danh sách) đủ chỗ cho nhóm
+                lay.append(_lay_phong())
         cap = defaultdict(list)
         for h in ds:
             cap[(h["mon1"], h["mon2"])].append(h)
@@ -248,7 +337,10 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, ti
                 phong.append((t, c, noi_dung[i]))
             elif t is not None:
                 thua.append((t, c))
-        hang_doi[:0] = thua   # phòng không dùng tới trả lại đầu hàng đợi (giữ thứ tự)
+        if phong_cua is None:
+            hang_doi[:0] = thua   # phòng không dùng tới trả lại đầu hàng đợi (giữ thứ tự)
+        else:
+            hang_doi.extend(thua)
 
     if co_ds_phong and so_tu_dong[0]:
         canh_bao.insert(0, f"Tổng sức chứa các phòng đã nhập ÍT hơn số học sinh — đã tự thêm {so_tu_dong[0]} "
@@ -283,8 +375,10 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, ti
          "Là môn 1 của": sum(1 for h in hs if h["mon1"] == m), "Là môn 2 của": sum(1 for h in hs if m in h["mon2"])}
         for m, n in sorted(dem.items(), key=lambda x: hang[x[0]])
     ])
+    so_doi = sum(1 for h in hs if h["mon1"] != h["mon1_tu_nhien"])
     return {"hoc_sinh": pd.DataFrame(dong_hs), "phong": pd.DataFrame(dong_phong), "thong_ke": thong_ke,
-            "canh_bao": canh_bao, "phong_trong": list(hang_doi)}
+            "canh_bao": canh_bao, "phong_trong": list(hang_doi), "so_doi_mon1": so_doi,
+            "toi_uu": phong_cua is not None}
 
 
 def xuat_excel(kq: dict) -> bytes:
