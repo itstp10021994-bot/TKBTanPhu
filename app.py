@@ -2225,7 +2225,7 @@ def _the_tu_chon(ds_phong, sbd_chung):
                   "Ít phòng nhất (khuyến nghị): giữ số phòng ÍT NHẤT, trong đó chọn môn số 1 / số 2 của từng em "
                   "để nhiều môn chỉ thi 1 lần nhất (VD Sinh luôn thi lần 1), môn còn phải chia 2 lần thì ít "
                   "học sinh lệch nhất. Gom môn trước: ưu tiên mỗi môn chỉ thi 1 lần, chấp nhận thêm phòng.")
-    r1, r3, r4, r2 = st.columns([1, 1, 1, 2])
+    r1, r3, r4, r5 = st.columns(4)
     with r1:
         st.number_input("Tối đa số môn thi số 2 trong 1 phòng", 1, 4, step=1, key="tn_max_mon2",
                         help="Ràng buộc: mỗi phòng chỉ 1 môn thi số 1 và không quá N môn thi số 2 (mặc định 2).")
@@ -2239,14 +2239,19 @@ def _the_tu_chon(ds_phong, sbd_chung):
                         help="Học sinh 1 lớp không dồn vào 1 phòng. 0: app tự trộn lớp nhiều nhất có thể mà KHÔNG "
                              "tăng số phòng / số môn mỗi ca. Đặt N: bắt buộc mỗi phòng ≤ N em cùng lớp (có thể "
                              "tốn thêm phòng); không được thì app báo và tự trộn.")
-    with r2:
-        st.toggle("🧩 Cho phép 1 phòng có 2 môn thi số 1 (chỉ khi bớt được phòng)", key="tn_ghep_mon1",
-                  help="VD Lí 18 em + PL 7 em ngồi chung 1 phòng → bớt 1 phòng; phòng đó có 2 đề ở ca 1. "
-                       "App chỉ ghép khi nhờ đó dùng ít phòng hơn hoặc ít môn mỗi ca hơn.")
+    with r5:
+        st.number_input("Sĩ số tối thiểu 1 phòng", 0, 60, step=1, key="tn_si_so_min",
+                        help="Không để phòng quá ít học sinh (VD phòng riêng Sinh – Hóa chỉ 9 em): các em được ghép "
+                             "vào phòng khác (VD thi Hóa ca 1 cùng nhóm Lí – Hóa). 0 = không giới hạn. Không xếp được "
+                             "thì app báo và bỏ ràng buộc này.")
+    st.toggle("🧩 Cho phép 1 phòng có 2 môn thi số 1 (chỉ khi bớt được phòng)", key="tn_ghep_mon1",
+              help="VD Lí 18 em + PL 7 em ngồi chung 1 phòng → bớt 1 phòng; phòng đó có 2 đề ở ca 1. "
+                   "App chỉ ghép khi nhờ đó dùng ít phòng hơn hoặc ít môn mỗi ca hơn.")
     _tham_so = dict(suc_chua=int(ss.tn_suc_chua), tien_to_sbd=str(ss.tn_tien_to or "").strip(),
                     so_bat_dau=int(ss.tn_so_bat_dau), phong_thi=ds_phong, gioi_han_giay=10,
                     uu_tien=UU_TIEN_TC[ss.tn_uu_tien_mon], max_mon2=int(ss.tn_max_mon2),
                     max_mon_ca=int(ss.tn_max_mon_ca), max_cung_lop=int(ss.tn_max_cung_lop),
+                    si_so_toi_thieu=int(ss.tn_si_so_min),
                     ghep_mon1=bool(ss.tn_ghep_mon1))
     pa = _phuong_an_tu_chon(_tham_so, sbd_chung) if tu_chon else None
     kq = _xep_tc_pa(ss.tn_hoc_sinh, pa, toi_uu=bool(ss.tn_toi_uu), sbd_cho=sbd_chung, **_tham_so)

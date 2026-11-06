@@ -187,7 +187,7 @@ UU_TIEN_MON, UU_TIEN_PHONG = "mon", "phong"
 def _toi_uu_theo_phong(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_chua: int, co_ds_phong: bool,
                        gioi_han_giay: float = 10.0, uu_tien: str = UU_TIEN_PHONG, max_mon2: int = 2,
                        max_mon1: int = 1, huong: dict | None = None, khong_tach_cap: bool = False,
-                       max_mon_ca: int = 0, max_cung_lop: int = 0):
+                       max_mon_ca: int = 0, max_cung_lop: int = 0, si_so_min: int = 0):
     """Xếp đến TỪNG PHÒNG bằng OR-Tools CP-SAT. Mỗi phòng thuộc 1 "mẫu" (môn thi số 1 ⊆ A, môn thi số 2 ⊆ S):
     |A| <= max_mon1, |S| <= max_mon2. Chọn môn thi số 1 của từng em (hoặc theo `huong` = {frozenset(cặp): môn 1}
     cố định) và số phòng mỗi mẫu/sức chứa, ưu tiên (giảm dần):
@@ -310,6 +310,8 @@ def _toi_uu_theo_phong(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_ch
                 m.Add(sum(theo_lop[(i, c)]) <= tran)
     for i in range(len(mau)):
         m.Add(sum(vao[i]) <= sum(k[0] * r[(i, k)] for k in loai))
+        if si_so_min and int(si_so_min) > 0:   # không có phòng quá ít học sinh (chia đều trong các phòng cùng mẫu)
+            m.Add(sum(vao[i]) >= int(si_so_min) * sum(r[(i, k)] for k in loai))
     for k, rs in loai.items():
         m.Add(sum(r[(i, k)] for i in range(len(mau))) <= len(rs))
     tong = Counter(x for h in hs for x in _k(h))
@@ -534,11 +536,20 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, ti
     if hs:   # tắt tối ưu: môn đông hơn là môn thi số 1, nhưng vẫn xếp phòng theo đúng các ràng buộc
         huong = mon1_theo_cap or (None if toi_uu else
                                   {frozenset(h["mon"]): h["mon1"] for h in hs if len(h["mon"]) == 2})
+        smin = [int(si_so_toi_thieu or 0)]
+
         def _giai(mmc, mcl):
             return _toi_uu_theo_phong(hs, hang, list(phong_thi or []), suc_chua, bool(phong_thi), gioi_han_giay,
                                       uu_tien, max(int(max_mon2), 1), 2 if ghep_mon1 else 1, huong,
-                                      khong_tach_cap, mmc, mcl)
+                                      khong_tach_cap, mmc, mcl, smin[0])
         kq_tu = _giai(max_mon_ca, max_cung_lop)
+        if kq_tu is None and smin[0]:   # sĩ số tối thiểu quá chặt với các ràng buộc khác
+            smin[0] = 0
+            kq_tu = _giai(max_mon_ca, max_cung_lop)
+            if kq_tu is not None:
+                canh_bao.append(f"Không xếp được để mọi phòng có từ {int(si_so_toi_thieu)} học sinh trở lên (cùng "
+                                "các ràng buộc khác) — đã bỏ ràng buộc này. Thử bật “cho phép 1 phòng có 2 môn thi "
+                                "số 1”, hoặc giảm sĩ số tối thiểu.")
         if kq_tu is None and max_cung_lop:   # giới hạn số em cùng lớp quá chặt
             kq_tu = _giai(max_mon_ca, 0)
             if kq_tu is not None:
