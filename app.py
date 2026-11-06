@@ -1872,7 +1872,10 @@ with st.sidebar:
             if _bo["dang_chay"] or _bo["cho"]:
                 st.caption("☁️ Đang tự động lưu lên SharePoint…")
             elif _tt["loi"]:
-                st.error("⚠️ Tự động lưu lên SharePoint lỗi: " + " | ".join(_tt["loi"])[:400])
+                st.error("⚠️ Tự động lưu lên SharePoint lỗi: " + " | ".join(_tt["loi"])[:600])
+                _site_url = re.search(r"site: (https?://[^\s|]+?)\.?(?:\s|$)", " | ".join(_tt["loi"]))
+                if _site_url:
+                    st.link_button("🌐 Mở site SharePoint của app", _site_url.group(1), width="stretch")
             elif _tt["luc"]:
                 st.caption(f"☁️ Đã tự động lưu lên SharePoint lúc {_tt['luc']}")
             else:
@@ -4004,6 +4007,13 @@ elif module == "☁️ Lưu trữ SharePoint":
                 if kiem_tra_btn:
                     with st.spinner("Đang kiểm tra các List..."):
                         kq_kt = ket_noi_list.kiem_tra_list({b: cot_cua_bang[b] for b in bang_chon})
+                        try:
+                            _site = ket_noi_list.dia_chi_site()
+                        except Exception:
+                            _site = None
+                    if _site and _site[0]:
+                        st.info(f"🌐 Site SharePoint app đang dùng: **{_site[1] or 'site'}** — [{_site[0]}]({_site[0]}) "
+                                "(các List như LopHoc, GiaoVien, TKB_CongBo đều nằm ở site này).")
                     st.dataframe(pd.DataFrame([
                         {"Bảng": TEN_BANG_VN.get(x["bang"], x["bang"]), "List": x["list"],
                          "Trạng thái": ("✅ Đủ cột" if not x["thieu"] else "⚠️ Thiếu cột") if x["co_list"]
