@@ -1757,7 +1757,7 @@ CFG_DEFAULTS = dict(
     cfg_num_days=6, cfg_periods_per_day=5, cfg_morning_count=3, cfg_max_seconds=30,
     cfg_school_name="",
     tn_suc_chua=24, tn_si_so_min=12, tn_tien_to="", tn_so_bat_dau=1, tn_ten_phong="", tn_toi_uu=True,
-    tn_sbd_chung=True, tn_chia_deu=False, tn_uu_tien_mon="🎯 Mỗi môn chỉ thi 1 lần (số 1 hoặc số 2)",
+    tn_sbd_chung=True, tn_chia_deu=False, tn_uu_tien_mon="🚪 Ít phòng nhất, rồi gom môn chỉ thi 1 lần tối đa",
 )
 for key, default in CFG_DEFAULTS.items():
     st.session_state[key] = st.session_state.get(key, default)
@@ -1998,7 +1998,8 @@ def _the_toan_van(ds_phong):
         )
 
 
-UU_TIEN_TC = {"🎯 Mỗi môn chỉ thi 1 lần (số 1 hoặc số 2)": tn.UU_TIEN_MON, "🚪 Ít phòng nhất": tn.UU_TIEN_PHONG}
+UU_TIEN_TC = {"🚪 Ít phòng nhất, rồi gom môn chỉ thi 1 lần tối đa": tn.UU_TIEN_PHONG,
+              "🎯 Gom môn chỉ thi 1 lần trước (có thể thêm phòng)": tn.UU_TIEN_MON}
 
 
 def module_thi_tot_nghiep():
@@ -2135,9 +2136,9 @@ def module_thi_tot_nghiep():
         st.radio("Ưu tiên khi tối ưu", list(UU_TIEN_TC), key="tn_uu_tien_mon", horizontal=True,
                  disabled=not ss.tn_toi_uu,
                  help="Môn 1 = môn thi số 1 (thi lần 1), môn 2 = môn thi số 2; cả 2 môn thi cùng 1 phòng. "
-                      "Mỗi môn chỉ thi 1 lần: app chọn môn thi số 1 / số 2 của từng em sao cho mỗi môn luôn là "
-                      "môn số 1 HOẶC luôn là môn số 2 (VD Sinh luôn thi lần 1) — ít môn phải thi cả 2 lần nhất, "
-                      "rồi mới ít phòng. Ít phòng nhất: số phòng ít nhất trước, rồi mới gom môn về 1 lần thi.")
+                      "Ít phòng nhất (khuyến nghị): giữ số phòng ÍT NHẤT, trong đó chọn môn số 1 / số 2 của từng em "
+                      "để nhiều môn chỉ thi 1 lần nhất (VD Sinh luôn thi lần 1), môn còn phải chia 2 lần thì ít "
+                      "học sinh lệch nhất. Gom môn trước: ưu tiên mỗi môn chỉ thi 1 lần, chấp nhận thêm phòng.")
         _tham_so = dict(suc_chua=int(ss.tn_suc_chua), tien_to_sbd=str(ss.tn_tien_to or "").strip(),
                         so_bat_dau=int(ss.tn_so_bat_dau), phong_thi=ds_phong)
         kq = tn.xep_phong(ss.tn_hoc_sinh, toi_uu=bool(ss.tn_toi_uu), gioi_han_giay=5, sbd_cho=sbd_chung,
@@ -2168,7 +2169,10 @@ def module_thi_tot_nghiep():
             f"🗓️ **{gon}/{len(tk)} môn chỉ thi 1 lần**"
             + (" — " + "; ".join(f"{r['Môn']}: {r['Thi ở'].lower()}" for _, r in tk.iterrows()
                                  if r["Thi ở"] != "Cả 2 lần") + ".")
-            + (f" Môn phải thi cả 2 lần: {', '.join(kq['mon_tach'])} ({kq['hs_lech']} học sinh thi ở lần ít người hơn)"
+            + (" Môn phải chia 2 lần: " + "; ".join(
+                f"{r['Môn']} ({int(r['Là môn 1 của'])} em lần 1 / {int(r['Là môn 2 của'])} em lần 2)"
+                for _, r in tk.iterrows() if r["Thi ở"] == "Cả 2 lần")
+               + f" — tổng {kq['hs_lech']} học sinh thi ở lần ít người hơn"
                " — do các cặp môn của học sinh đan chéo nhau (VD có em Anh + Lí, em Anh + Địa, em Lí + Địa) nên "
                "không thể để mọi môn chỉ 1 lần; app đã chọn cách tách ít nhất." if kq["mon_tach"] else ""))
         for cb in kq["canh_bao"][:10]:
