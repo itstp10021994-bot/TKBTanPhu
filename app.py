@@ -87,6 +87,7 @@ a{ color:var(--chinh-d) !important; }
 
 /* ---------- Ô số liệu (như "Your Classes") ---------- */
 .o-so-lieu{ display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:14px; margin:0 0 18px 0; }
+.chip-ca{ display:inline-block; margin:2px 8px 8px 0; padding:8px 14px; border-radius:999px; background:var(--card); box-shadow:var(--shadow); border-left:5px solid #2B9BF0; }
 .o-sl{ border-radius:20px; padding:16px 18px; background:var(--card); box-shadow:var(--shadow); position:relative; overflow:hidden; }
 .o-sl .bieu-tuong{ width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center;
     font-size:1.25rem; margin-bottom:10px; background:rgba(255,255,255,.85); }
@@ -1759,7 +1760,7 @@ CFG_DEFAULTS = dict(
     cfg_school_name="",
     tn_suc_chua=24, tn_si_so_min=12, tn_tien_to="", tn_so_bat_dau=1, tn_ten_phong="", tn_toi_uu=True,
     tn_sbd_chung=True, tn_chia_deu=False, tn_uu_tien_mon="🚪 Ít phòng nhất, rồi gom môn chỉ thi 1 lần tối đa",
-    tn_cach_ca1="⚡ Tự động tối ưu", tn_ca1_cap="", tn_ghep_mon1=False, tn_max_mon2=2,
+    tn_cach_ca1="⚡ Tự động tối ưu", tn_ca1_cap="", tn_ghep_mon1=False, tn_max_mon2=2, tn_max_mon_ca=0,
 )
 for key, default in CFG_DEFAULTS.items():
     st.session_state[key] = st.session_state.get(key, default)
@@ -2190,17 +2191,23 @@ def module_thi_tot_nghiep():
                       "Ít phòng nhất (khuyến nghị): giữ số phòng ÍT NHẤT, trong đó chọn môn số 1 / số 2 của từng em "
                       "để nhiều môn chỉ thi 1 lần nhất (VD Sinh luôn thi lần 1), môn còn phải chia 2 lần thì ít "
                       "học sinh lệch nhất. Gom môn trước: ưu tiên mỗi môn chỉ thi 1 lần, chấp nhận thêm phòng.")
-        r1, r2 = st.columns([1, 2])
+        r1, r3, r2 = st.columns([1, 1, 2])
         with r1:
             st.number_input("Tối đa số môn thi số 2 trong 1 phòng", 1, 4, step=1, key="tn_max_mon2",
                             help="Ràng buộc: mỗi phòng chỉ 1 môn thi số 1 và không quá N môn thi số 2 (mặc định 2).")
+        with r3:
+            st.number_input("Tối đa số môn mỗi ca (0 = tự tối ưu)", 0, 12, step=1, key="tn_max_mon_ca",
+                            help="Số môn khác nhau thi trong 1 ca (số đề phải phát). 0: app tự làm ÍT NHẤT và cân bằng "
+                                 "2 ca (VD ca 1: 5 môn, ca 2: 5 môn). Đặt N: bắt buộc mỗi ca ≤ N môn; không được thì "
+                                 "app báo và dùng số môn ít nhất có thể.")
         with r2:
             st.toggle("🧩 Cho phép 1 phòng có 2 môn thi số 1 (chỉ khi bớt được phòng)", key="tn_ghep_mon1",
                       help="VD Lí 18 em + PL 7 em ngồi chung 1 phòng → bớt 1 phòng; phòng đó có 2 đề ở ca 1. "
-                           "App chỉ ghép khi nhờ đó dùng ít phòng hơn.")
+                           "App chỉ ghép khi nhờ đó dùng ít phòng hơn hoặc ít môn mỗi ca hơn.")
         _tham_so = dict(suc_chua=int(ss.tn_suc_chua), tien_to_sbd=str(ss.tn_tien_to or "").strip(),
                         so_bat_dau=int(ss.tn_so_bat_dau), phong_thi=ds_phong, gioi_han_giay=10,
                         uu_tien=UU_TIEN_TC[ss.tn_uu_tien_mon], max_mon2=int(ss.tn_max_mon2),
+                        max_mon_ca=int(ss.tn_max_mon_ca),
                         ghep_mon1=bool(ss.tn_ghep_mon1))
         pa = _phuong_an_tu_chon(_tham_so, sbd_chung) if tu_chon else None
         kq = _xep_tc_pa(ss.tn_hoc_sinh, pa, toi_uu=bool(ss.tn_toi_uu), sbd_cho=sbd_chung, **_tham_so)
@@ -2230,6 +2237,9 @@ def module_thi_tot_nghiep():
                 + (f". Có {kq['so_doi_mon1']} học sinh được xếp phòng theo môn ít người hơn trong 2 môn của em."
                    if kq["so_doi_mon1"] else ".")
             )
+        st.markdown(" ".join(
+            f"<span class='chip-ca'><b>Ca {c}: {len(kq['mon_ca'][c])} môn</b> — {html.escape(', '.join(kq['mon_ca'][c]))}"
+            "</span>" for c in (1, 2)), unsafe_allow_html=True)
         gon = len(tk) - len(kq["mon_tach"])
         (st.info if kq["mon_tach"] else st.success)(
             f"🗓️ **{gon}/{len(tk)} môn chỉ thi 1 lần**"

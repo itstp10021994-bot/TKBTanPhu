@@ -186,12 +186,15 @@ UU_TIEN_MON, UU_TIEN_PHONG = "mon", "phong"
 
 def _toi_uu_theo_phong(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_chua: int, co_ds_phong: bool,
                        gioi_han_giay: float = 10.0, uu_tien: str = UU_TIEN_PHONG, max_mon2: int = 2,
-                       max_mon1: int = 1, huong: dict | None = None, khong_tach_cap: bool = False):
+                       max_mon1: int = 1, huong: dict | None = None, khong_tach_cap: bool = False,
+                       max_mon_ca: int = 0):
     """Xếp đến TỪNG PHÒNG bằng OR-Tools CP-SAT. Mỗi phòng thuộc 1 "mẫu" (môn thi số 1 ⊆ A, môn thi số 2 ⊆ S):
     |A| <= max_mon1, |S| <= max_mon2. Chọn môn thi số 1 của từng em (hoặc theo `huong` = {frozenset(cặp): môn 1}
     cố định) và số phòng mỗi mẫu/sức chứa, ưu tiên (giảm dần):
-      "phong": [tự thêm phòng] → ít phòng → ít phòng ghép 2 môn 1 → ít môn thi cả 2 lần → ít HS lệch → ít chỗ trống
-      "mon":   [tự thêm phòng] → ít môn thi cả 2 lần → ít HS lệch → ít phòng → ít phòng ghép → ít chỗ trống
+      "phong": [tự thêm phòng] → ít phòng → ít môn thi cả 2 lần → ít môn ở ca đông môn hơn → ít phòng ghép
+               2 môn 1 → ít HS lệch → ít chỗ trống
+      "mon":   [tự thêm phòng] → ít môn thi cả 2 lần → ít môn ở ca đông môn hơn → ít HS lệch → ít phòng
+               → ít phòng ghép → ít chỗ trống
     khong_tach_cap=True: cả cặp môn cùng 1 hướng (để điền được vào bảng tự chọn).
     -> ([(tên | None, sức chứa, [hs])], phòng danh sách không dùng, số phòng tự thêm) | None. Gán h["mon1"], h["mon2"]."""
     from itertools import combinations
@@ -271,7 +274,7 @@ def _toi_uu_theo_phong(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_ch
     for k, rs in loai.items():
         m.Add(sum(r[(i, k)] for i in range(len(mau))) <= len(rs))
     tong = Counter(x for h in hs for x in _k(h))
-    co, lech = [], []
+    co, lech, co1, co2 = [], [], [], []
     for a in mon:
         n1 = sum(y[p] for p in cap if p[0] == a) + sum(len(cap[p]) - y[p] for p in cap if p[1] == a) \
             + len(don.get(a, []))
@@ -281,13 +284,20 @@ def _toi_uu_theo_phong(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_ch
         l = m.NewIntVar(0, tong[a], "")
         m.Add(l >= n1 - tong[a] * tren)
         m.Add(l >= tong[a] - n1 - tong[a] * (1 - tren))
-        co += [c1, c2]; lech.append(l)
+        co += [c1, c2]; co1.append(c1); co2.append(c2); lech.append(l)
     so_phong = sum(r.values())
     tu_them = sum(v for (i, k), v in r.items() if k[1])
     ghep = sum(v for (i, k), v in r.items() if len(mau[i][0]) > 1)
     cho = sum(k[0] * v for (i, k), v in r.items())
     tach, hs_lech = sum(co), sum(lech)
-    bac = ([so_phong, ghep, tach, hs_lech, cho] if uu_tien == UU_TIEN_PHONG else [tach, hs_lech, so_phong, ghep, cho])
+    # số môn của ca đông môn hơn (càng nhỏ càng cân bằng 2 ca: VD ca 1 có 5 môn, ca 2 có 5 môn)
+    mon_ca_max = m.NewIntVar(0, len(mon), "")
+    m.Add(mon_ca_max >= sum(co1))
+    m.Add(mon_ca_max >= sum(co2))
+    if max_mon_ca and int(max_mon_ca) > 0:   # ràng buộc cứng: mỗi ca tối đa N môn
+        m.Add(mon_ca_max <= int(max_mon_ca))
+    bac = ([so_phong, tach, mon_ca_max, ghep, hs_lech, cho] if uu_tien == UU_TIEN_PHONG
+           else [tach, mon_ca_max, hs_lech, so_phong, ghep, cho])
     if co_ds_phong:
         bac.insert(0, tu_them)
     bien = [v for v in y.values() if not isinstance(v, int) and hasattr(v, "Index")] + list(r.values())
@@ -358,7 +368,7 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, ti
               so_bat_dau: int = 1, phong_thi: list[tuple[str, int]] | None = None, toi_uu: bool = True,
               gioi_han_giay: float = 10.0, sbd_cho: dict | None = None, uu_tien: str = UU_TIEN_MON,
               mon1_theo_cap: dict | None = None, ghep_mon1: bool = False, max_mon2: int = 2,
-              khong_tach_cap: bool = False) -> dict:
+              khong_tach_cap: bool = False, max_mon_ca: int = 0) -> dict:
     """uu_tien (khi tối ưu): "mon" = mỗi môn chỉ thi ở 1 lần (luôn là môn thi số 1 hoặc số 2) trước, rồi ít phòng;
     "phong" = ít phòng trước.
     mon1_theo_cap: {frozenset({môn a, môn b}): môn thi số 1} — phương án tự chọn (bỏ qua tối ưu tự động).
@@ -401,9 +411,18 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, ti
                                   {frozenset(h["mon"]): h["mon1"] for h in hs if len(h["mon"]) == 2})
         kq_tu = _toi_uu_theo_phong(hs, hang, list(phong_thi or []), suc_chua, bool(phong_thi), gioi_han_giay,
                                    uu_tien, max(int(max_mon2), 1), 2 if ghep_mon1 else 1, huong,
-                                   khong_tach_cap)
+                                   khong_tach_cap, max_mon_ca)
+        if kq_tu is None and max_mon_ca:   # giới hạn môn/ca quá chặt: giải lại không giới hạn
+            kq_tu = _toi_uu_theo_phong(hs, hang, list(phong_thi or []), suc_chua, bool(phong_thi), gioi_han_giay,
+                                       uu_tien, max(int(max_mon2), 1), 2 if ghep_mon1 else 1, huong,
+                                       khong_tach_cap, 0)
+            if kq_tu is not None:
+                canh_bao.append(f"Không xếp được với giới hạn mỗi ca tối đa {int(max_mon_ca)} môn — đã xếp với số "
+                                "môn mỗi ca ít nhất có thể (xem dòng Ca 1 / Ca 2).")
         if kq_tu is None:
-            canh_bao.append("Không tìm được phương án tối ưu trong thời gian cho phép — dùng cách xếp thường.")
+            canh_bao.append(
+                "Không tìm được phương án tối ưu trong thời gian cho phép — dùng cách xếp thường "
+                "(KHÔNG đảm bảo các ràng buộc).")
         else:
             phong, hang_doi, so_tu_dong[0] = kq_tu
             da_toi_uu = bool(toi_uu and not mon1_theo_cap)
@@ -512,9 +531,12 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, ti
             mon_tach.append(m); hs_lech += min(a, n - a)
         lan.append("Cả 2 lần" if a and n - a else ("Môn thi số 1" if a else "Môn thi số 2"))
     thong_ke.insert(2, "Thi ở", lan)
+    mon_ca = {1: [m for m, l in zip(thong_ke["Môn"], lan) if l != "Môn thi số 2"],
+              2: [m for m, l in zip(thong_ke["Môn"], lan) if l != "Môn thi số 1"]}
     return {"hoc_sinh": pd.DataFrame(dong_hs), "phong": pd.DataFrame(dong_phong), "thong_ke": thong_ke,
             "canh_bao": canh_bao, "phong_trong": list(hang_doi), "so_doi_mon1": so_doi,
-            "toi_uu": da_toi_uu, "mon_tach": mon_tach, "hs_lech": hs_lech}
+            "toi_uu": da_toi_uu, "mon_tach": mon_tach, "hs_lech": hs_lech,
+            "mon_ca": mon_ca}
 
 
 # ---------------------------------------------------------------------
