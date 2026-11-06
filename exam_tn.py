@@ -614,20 +614,20 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, ti
                                       uu_tien, max(int(max_mon2), 1), 2 if ghep_mon1 else 1, huong,
                                       khong_tach_cap, mmc, mcl, smin[0], uu_tien_phong)
         kq_tu = _giai(max_mon_ca, max_cung_lop)
-        if kq_tu == KHONG_KHA_THI and smin[0]:   # sĩ số tối thiểu quá chặt với các ràng buộc khác
+        if kq_tu in (None, KHONG_KHA_THI) and smin[0]:   # sĩ số tối thiểu quá chặt với các ràng buộc khác
             smin[0] = 0
             kq_tu = _giai(max_mon_ca, max_cung_lop)
             if kq_tu not in (None, KHONG_KHA_THI):
                 canh_bao.append(f"Không xếp được để mọi phòng có từ {int(si_so_toi_thieu)} học sinh trở lên (cùng "
                                 "các ràng buộc khác) — đã bỏ ràng buộc này. Thử bật “cho phép 1 phòng có 2 môn thi "
                                 "số 1”, hoặc giảm sĩ số tối thiểu.")
-        if kq_tu == KHONG_KHA_THI and max_cung_lop:   # giới hạn số em cùng lớp quá chặt
+        if kq_tu in (None, KHONG_KHA_THI) and max_cung_lop:   # giới hạn số em cùng lớp quá chặt
             kq_tu = _giai(max_mon_ca, 0)
             if kq_tu not in (None, KHONG_KHA_THI):
                 canh_bao.append(f"Không xếp được với giới hạn tối đa {int(max_cung_lop)} em cùng lớp / phòng (cùng "
                                 "các ràng buộc môn) — đã bỏ giới hạn này, app vẫn trộn lớp nhiều nhất có thể. "
                                 "Hãy tăng giới hạn hoặc cho thêm phòng.")
-        if kq_tu == KHONG_KHA_THI and max_mon_ca:   # giới hạn môn/ca quá chặt: giải lại không giới hạn
+        if kq_tu in (None, KHONG_KHA_THI) and max_mon_ca:   # giới hạn môn/ca quá chặt: giải lại không giới hạn
             kq_tu = _giai(0, 0)
             if kq_tu not in (None, KHONG_KHA_THI):
                 canh_bao.append(f"Không xếp được với giới hạn mỗi ca tối đa {int(max_mon_ca)} môn — đã xếp với số "

@@ -76,7 +76,22 @@ LIST_MAC_DINH = {
     # — chỉ dùng khi kết nối không lưu được file (flow Power Automate sp_url)
     "cong_bo": "TKB_CongBo",
 }
-KICH_THUOC_PHAN = 20_000  # số ký tự JSON mỗi mục của List công bố
+KICH_THUOC_PHAN = 50_000  # số ký tự mỗi mục của List công bố (cột Nhiều dòng văn bản tối đa 63.999)
+TIEN_TO_NEN = "z1:"       # nội dung nén zlib + base64 (nhỏ hơn nhiều lần -> ít mục, ghi / đọc nhanh hơn)
+
+
+def nen_goi(goi: dict) -> str:
+    import zlib
+    van_ban = json.dumps(goi, ensure_ascii=False, separators=(",", ":"))
+    return TIEN_TO_NEN + base64.b64encode(zlib.compress(van_ban.encode("utf-8"), 9)).decode("ascii")
+
+
+def giai_nen_chuoi(van_ban: str) -> dict:
+    """Ngược nen_goi; chuỗi JSON thường (bản cũ chưa nén) cũng đọc được."""
+    if van_ban.startswith(TIEN_TO_NEN):
+        import zlib
+        return json.loads(zlib.decompress(base64.b64decode(van_ban[len(TIEN_TO_NEN):])).decode("utf-8"))
+    return json.loads(van_ban)
 # Cột kiểu số của ứng dụng (đọc từ List về thì đổi sang số)
 COT_SO = {"Khối", "Tiết", "Nhóm thứ tự", "Số tiết/tuần", "Số phòng cùng loại", "Sức chứa", "Số cột bàn"}
 
@@ -508,7 +523,7 @@ class DongBoList:
         """Ghi AN TOÀN: tạo đủ các mục của bản mới (gắn mốc thời gian) rồi mới xoá các mục cũ —
         đứt giữa chừng thì bản cũ vẫn còn nguyên, lần đọc sau vẫn lấy được bản đầy đủ mới nhất."""
         ten, ref, cot = self._list_cong_bo()
-        van_ban = json.dumps(goi, ensure_ascii=False, separators=(",", ":"))
+        van_ban = nen_goi(goi)
         phan = [van_ban[i:i + KICH_THUOC_PHAN] for i in range(0, len(van_ban), KICH_THUOC_PHAN)] or [""]
         moc = str(goi.get("thoi_gian_luu") or datetime.now(GIO_VN).replace(tzinfo=None).isoformat(timespec="seconds"))
         moc = f"{moc}.{int(time.time() * 1000) % 1000:03d}"  # 2 lần lưu cùng 1 giây vẫn khác mốc
@@ -541,12 +556,12 @@ class DongBoList:
             if not van_ban.strip():
                 continue
             try:
-                return json.loads(van_ban)
+                return giai_nen_chuoi(van_ban)
             except ValueError:
                 # cột bị để kiểu văn bản đa dạng thức -> SharePoint bọc HTML, bóc ra
                 import html as _html
                 try:
-                    return json.loads(_html.unescape(re.sub(r"<[^>]+>", "", van_ban)))
+                    return giai_nen_chuoi(_html.unescape(re.sub(r"<[^>]+>", "", van_ban)).strip())
                 except ValueError:
                     continue
         return None
