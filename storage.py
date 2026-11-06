@@ -56,6 +56,7 @@ GIA_TRI_CAU_HINH = [
     "ct_period_spread", "ct_room_capacity", "ct_order_group", "ct_dept_free_session", "ct_no_gap",
     "ct_class_compact", "nguon_hs_nam_hoc",
     "tn_suc_chua", "tn_si_so_min", "tn_tien_to", "tn_so_bat_dau", "tn_ten_phong", "tn_toi_uu",
+    "tn_sbd_chung", "tn_chia_deu",
 ]
 
 
