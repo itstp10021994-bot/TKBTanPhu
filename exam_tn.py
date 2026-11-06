@@ -966,11 +966,19 @@ def trang_toan_van(kq: dict) -> list[dict]:
             for p in kq["phong"]["Phòng"]]
 
 
-def xuat_mau_phong(trang: list[dict], ten_truong: str = "", ten_ky_thi: str = "") -> bytes:
-    """Mẫu in danh sách phòng thi: mỗi phòng 1 trang — tên trường, kỳ thi + môn, PHÒNG …; bảng STT | SBD |
+QUOC_HIEU, TIEU_NGU = "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM", "Độc lập - Tự do - Hạnh phúc"
+
+
+def xuat_mau_phong(trang: list[dict], ten_truong: str = "", ten_ky_thi: str = "", don_vi: str = "",
+                   ghi_mon_tieu_de: bool = False) -> bytes:
+    """Mẫu in danh sách phòng thi: mỗi phòng 1 trang — tiêu ngữ (trái: đơn vị chủ quản + tên trường gạch chân;
+    phải: Quốc hiệu + "Độc lập - Tự do - Hạnh phúc" gạch chân), tên kỳ thi (+ môn nếu ghi_mon_tieu_de),
+    PHÒNG …; bảng STT | SBD |
     Họ và tên | (tên) | Lớp | mỗi môn 2 cột (M.đề, Ký tên); em không thi môn nào thì ô môn đó GẠCH CHÉO;
     cuối trang: số học sinh, dòng vắng, tổng bài/tờ, chữ ký 2 giám thị."""
     from openpyxl import Workbook
+    from openpyxl.cell.rich_text import CellRichText, TextBlock
+    from openpyxl.cell.text import InlineFont
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter as cot
     from openpyxl.worksheet.pagebreak import Break
@@ -985,20 +993,34 @@ def xuat_mau_phong(trang: list[dict], ten_truong: str = "", ten_ky_thi: str = ""
     giua = Alignment(horizontal="center", vertical="center", wrap_text=True)
     trai = Alignment(horizontal="left", vertical="center")
     so_mon_max = max([len(t["mon"]) for t in trang] or [1])
-    for c, w in zip("ABCDE", (5.3, 12.2, 24.1, 9.5, 8.5)):
+    for c, w in zip("ABCDE", (4.8, 11.0, 25.5, 9.4, 8.4)):   # tên dài + dòng tiêu ngữ trái không xuống dòng
         ws.column_dimensions[c].width = w
-    for k in range(so_mon_max):
-        ws.column_dimensions[cot(6 + 2 * k)].width = 7.5
-        ws.column_dimensions[cot(7 + 2 * k)].width = 13.5 if so_mon_max <= 2 else 11
+    for k in range(so_mon_max):   # 2 môn đầu đủ rộng cho Quốc hiệu 1 dòng
+        ws.column_dimensions[cot(6 + 2 * k)].width = 8.7
+        ws.column_dimensions[cot(7 + 2 * k)].width = 14.5
+
+    def _hai_dong(dong1: str, dong2: str):
+        """2 dòng in đậm, dòng 2 gạch chân (như tiêu ngữ văn bản hành chính)."""
+        dam = InlineFont(rFont="Times New Roman", sz=12, b=True)
+        gach_chan = InlineFont(rFont="Times New Roman", sz=12, b=True, u="single")
+        khoi = ([TextBlock(dam, dong1 + "\n")] if dong1 else []) + ([TextBlock(gach_chan, dong2)] if dong2 else [])
+        return CellRichText(*khoi) if khoi else ""
+
     r = 1
     for t in trang:
         cuoi = 5 + 2 * max(len(t["mon"]), 1)
-        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=4)
-        ws.cell(r, 1, ten_truong).font = tnr(12, True)
-        ws.cell(r, 1).alignment = giua
+        chia = 5 if cuoi >= 9 else 3   # cột cuối của khối bên trái
+        ws.row_dimensions[r].height = 51
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=chia)
+        ws.cell(r, 1, _hai_dong(don_vi.upper(), ten_truong.upper()))
+        ws.merge_cells(start_row=r, start_column=chia + 1, end_row=r, end_column=cuoi)
+        ws.cell(r, chia + 1, _hai_dong(QUOC_HIEU, TIEU_NGU))
+        for c in (1, chia + 1):
+            ws.cell(r, c).alignment = giua
+            ws.cell(r, c).font = tnr(12, True)
         ws.merge_cells(start_row=r + 1, start_column=1, end_row=r + 1, end_column=cuoi)
-        ws.cell(r + 1, 1, f"{ten_ky_thi} - MÔN " + " - ".join(_TEN_NGAN.get(m, m.upper()) for m in t["mon"])
-                ).font = tnr(12, True)
+        ws.cell(r + 1, 1, ten_ky_thi + (" - MÔN " + " - ".join(_TEN_NGAN.get(m, m.upper()) for m in t["mon"])
+                                        if ghi_mon_tieu_de else "")).font = tnr(12, True)
         ws.cell(r + 1, 1).alignment = giua
         ws.merge_cells(start_row=r + 2, start_column=1, end_row=r + 2, end_column=cuoi)
         ws.cell(r + 2, 1, str(t["phong"]).upper() if str(t["phong"]).upper().startswith("PHÒNG")
@@ -1026,7 +1048,7 @@ def xuat_mau_phong(trang: list[dict], ten_truong: str = "", ten_ky_thi: str = ""
             for c, v in ((1, stt), (2, sbd_o), (3, ten), (4, tach[-1] if tach else ""), (5, lop)):
                 x = ws.cell(rr, c, v)
                 x.alignment, x.border = (trai if c in (3, 4) else giua), vien
-                x.font = Font(name="Times New Roman", size=11)
+                x.font = Font(name="Times New Roman", size=12)
             ws.cell(rr, 3).border = Border(left=mong, top=mong, bottom=mong)
             ws.cell(rr, 4).border = Border(right=mong, top=mong, bottom=mong)
             for k, m in enumerate(t["mon"]):
