@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import io
 import re
+import time
 import unicodedata
 from collections import Counter, defaultdict
 
@@ -182,6 +183,7 @@ def _xep_vao_phong(nhom_le: list[list], cho: list[int]) -> list[list]:
 
 
 UU_TIEN_MON, UU_TIEN_PHONG = "mon", "phong"
+KHONG_KHA_THI = "INFEASIBLE"   # bộ giải chứng minh không có lời giải (khác với hết giờ)
 
 
 def _toi_uu_theo_phong(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_chua: int, co_ds_phong: bool,
@@ -343,17 +345,23 @@ def _toi_uu_theo_phong(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_ch
         bac.insert(0, tu_them)
     bien = [v for v in y.values() if not isinstance(v, int) and hasattr(v, "Index")] + list(r.values())
     giai = None
-    for muc_tieu in bac:   # giải lần lượt từng bậc ưu tiên; seed cố định -> kết quả tất định
+    het_gio = time.monotonic() + max(float(gioi_han_giay), 2.0)   # giới hạn THỜI GIAN THỰC cho cả lần giải
+    for so_bac, muc_tieu in enumerate(bac):   # giải lần lượt từng bậc ưu tiên; seed cố định -> kết quả tất định
         m.Minimize(muc_tieu)
         sv = cp_model.CpSolver()
         sv.parameters.num_workers = 4
         sv.parameters.interleave_search = True   # nhiều chiến lược luân phiên nhưng vẫn tất định
         sv.parameters.random_seed = 2026
         sv.parameters.max_deterministic_time = max(1.0, gioi_han_giay / len(bac))
+        con_lai = het_gio - time.monotonic()
+        if giai is not None and con_lai <= 0.2:
+            break   # hết giờ: giữ kết quả các bậc đã giải
+        # bậc đầu (tìm phương án khả thi) được nhiều thời gian hơn; máy chậm vẫn không treo lâu
+        sv.parameters.max_time_in_seconds = max(0.5, con_lai * (0.4 if so_bac == 0 else 1 / (len(bac) - so_bac)))
         st = sv.Solve(m)
         if st not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             if giai is None:
-                return None
+                return KHONG_KHA_THI if st == cp_model.INFEASIBLE else None
             break
         giai = sv
         m.ClearHints()
@@ -472,6 +480,7 @@ def _tron_lop(phong: list, mau_phong: list, _k) -> list:
         sv.parameters.num_workers = 1
         sv.parameters.random_seed = 2026
         sv.parameters.max_deterministic_time = 2.0
+        sv.parameters.max_time_in_seconds = 2.0
         if sv.Solve(m) not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
             break
         giai = sv
@@ -543,28 +552,30 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, ti
                                       uu_tien, max(int(max_mon2), 1), 2 if ghep_mon1 else 1, huong,
                                       khong_tach_cap, mmc, mcl, smin[0])
         kq_tu = _giai(max_mon_ca, max_cung_lop)
-        if kq_tu is None and smin[0]:   # sĩ số tối thiểu quá chặt với các ràng buộc khác
+        if kq_tu == KHONG_KHA_THI and smin[0]:   # sĩ số tối thiểu quá chặt với các ràng buộc khác
             smin[0] = 0
             kq_tu = _giai(max_mon_ca, max_cung_lop)
-            if kq_tu is not None:
+            if kq_tu not in (None, KHONG_KHA_THI):
                 canh_bao.append(f"Không xếp được để mọi phòng có từ {int(si_so_toi_thieu)} học sinh trở lên (cùng "
                                 "các ràng buộc khác) — đã bỏ ràng buộc này. Thử bật “cho phép 1 phòng có 2 môn thi "
                                 "số 1”, hoặc giảm sĩ số tối thiểu.")
-        if kq_tu is None and max_cung_lop:   # giới hạn số em cùng lớp quá chặt
+        if kq_tu == KHONG_KHA_THI and max_cung_lop:   # giới hạn số em cùng lớp quá chặt
             kq_tu = _giai(max_mon_ca, 0)
-            if kq_tu is not None:
+            if kq_tu not in (None, KHONG_KHA_THI):
                 canh_bao.append(f"Không xếp được với giới hạn tối đa {int(max_cung_lop)} em cùng lớp / phòng (cùng "
                                 "các ràng buộc môn) — đã bỏ giới hạn này, app vẫn trộn lớp nhiều nhất có thể. "
                                 "Hãy tăng giới hạn hoặc cho thêm phòng.")
-        if kq_tu is None and max_mon_ca:   # giới hạn môn/ca quá chặt: giải lại không giới hạn
+        if kq_tu == KHONG_KHA_THI and max_mon_ca:   # giới hạn môn/ca quá chặt: giải lại không giới hạn
             kq_tu = _giai(0, 0)
-            if kq_tu is not None:
+            if kq_tu not in (None, KHONG_KHA_THI):
                 canh_bao.append(f"Không xếp được với giới hạn mỗi ca tối đa {int(max_mon_ca)} môn — đã xếp với số "
                                 "môn mỗi ca ít nhất có thể (xem dòng Ca 1 / Ca 2).")
-        if kq_tu is None:
+        if kq_tu in (None, KHONG_KHA_THI):
             canh_bao.append(
-                "Không tìm được phương án tối ưu trong thời gian cho phép — dùng cách xếp thường "
-                "(KHÔNG đảm bảo các ràng buộc).")
+                ("Không có cách xếp thoả mọi ràng buộc" if kq_tu == KHONG_KHA_THI else
+                 "Không tìm được phương án trong thời gian cho phép")
+                + " — dùng cách xếp thường (KHÔNG đảm bảo các ràng buộc). Hãy nới ràng buộc hoặc thêm phòng.")
+            kq_tu = None
         else:
             phong, hang_doi, so_tu_dong[0] = kq_tu
             da_toi_uu = bool(toi_uu and not mon1_theo_cap)
