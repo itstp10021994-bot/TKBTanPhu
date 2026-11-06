@@ -626,7 +626,7 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, ti
             t = f"Phòng thêm {dem_tu_dong:02d}" if co_ds_phong else f"Phòng {dem_tu_dong:02d}"
         ds_phong.append((t, c, p))
 
-    so, dong_hs, dong_phong = int(so_bat_dau), [], []
+    so, dong_hs, dong_phong, sbd_theo_dong = int(so_bat_dau), [], [], {}
     rong = max(3, len(str(int(so_bat_dau) + len(hs))))
     for tp, suc, p in ds_phong:
         cap_p = Counter((h["mon1"], h["mon2"]) for h in p)
@@ -647,7 +647,8 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, ti
         else:   # trong phòng xếp theo vần ABC -> các lớp ngồi xen kẽ
             p = sorted(p, key=lambda h: (khoa_ten_vn(h["ten"]), h["lop"]))
         for stt, h in enumerate(p, start=1):
-            dong_hs.append({"SBD": sbd_cho.get(h["idx"], "") if sbd_cho else f"{tien_to_sbd}{str(so).zfill(rong)}",
+            sbd_theo_dong[h["idx"]] = sbd_cho.get(h["idx"], "") if sbd_cho else f"{tien_to_sbd}{str(so).zfill(rong)}"
+            dong_hs.append({"SBD": sbd_theo_dong[h["idx"]],
                             "Phòng": tp, "STT trong phòng": stt,
                             "Họ và tên": h["ten"], "Lớp": h["lop"], "Mã HS": h["ma"],
                             "Môn 1": h["mon1"], "Môn 2": h["mon2"]})
@@ -669,7 +670,7 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, ti
     mon_ca = {1: [m for m, l in zip(thong_ke["Môn"], lan) if l != "Môn thi số 2"],
               2: [m for m, l in zip(thong_ke["Môn"], lan) if l != "Môn thi số 1"]}
     return {"hoc_sinh": pd.DataFrame(dong_hs), "phong": pd.DataFrame(dong_phong), "thong_ke": thong_ke,
-            "canh_bao": canh_bao, "phong_trong": list(hang_doi), "so_doi_mon1": so_doi,
+            "canh_bao": canh_bao, "phong_trong": list(hang_doi), "so_doi_mon1": so_doi, "sbd_theo_dong": sbd_theo_dong,
             "toi_uu": da_toi_uu, "mon_tach": mon_tach, "hs_lech": hs_lech,
             "mon_ca": mon_ca}
 
@@ -729,15 +730,22 @@ def sbd_theo_abc(df: pd.DataFrame, tien_to_sbd: str = "", so_bat_dau: int = 1) -
 
 
 def xep_phong_abc(df: pd.DataFrame, suc_chua: int = 24, tien_to_sbd: str = "", so_bat_dau: int = 1,
-                  phong_thi: list[tuple[str, int]] | None = None, chia_deu: bool = False) -> dict:
+                  phong_thi: list[tuple[str, int]] | None = None, chia_deu: bool = False,
+                  sbd_cho: dict | None = None) -> dict:
     """Toán – Ngữ văn: toàn bộ học sinh theo vần ABC, lần lượt kín từng phòng (theo thứ tự danh sách phòng).
-    chia_deu=True: dùng ít phòng nhất nhưng chia sĩ số đều nhau giữa các phòng."""
+    chia_deu=True: chia sĩ số đều nhau — có danh sách phòng thì dùng hết các phòng đã nhập (phòng thưa nhất),
+    không có thì dùng ít phòng nhất. sbd_cho: dùng SBD của phòng môn tự chọn (xếp theo thứ tự SBD)."""
     suc_chua = max(int(suc_chua), 1)
     thu_tu = sap_abc(df)
     sbd = sbd_theo_abc(df, tien_to_sbd, so_bat_dau)
+    if sbd_cho:   # dùng SBD của phòng môn tự chọn, xếp theo thứ tự SBD
+        sbd = {i: sbd_cho.get(i, sbd[i]) for i in thu_tu}
+        thu_tu = sorted(thu_tu, key=lambda i: (i not in sbd_cho, str(sbd[i])))
     n, canh_bao = len(thu_tu), []
     ds = list(phong_thi or [])
     phong, tong = [], 0
+    if chia_deu and ds and sum(c for _, c in ds) >= n:   # chia đều: dùng TẤT CẢ phòng đã nhập -> phòng thưa nhất
+        phong, ds, tong = list(ds), [], sum(c for _, c in ds)
     while tong < n:   # ít phòng nhất theo thứ tự danh sách; thiếu thì tự thêm
         if ds:
             phong.append(ds.pop(0))
@@ -748,12 +756,11 @@ def xep_phong_abc(df: pd.DataFrame, suc_chua: int = 24, tien_to_sbd: str = "", s
     if phong_thi and so_them:
         canh_bao.append(f"Tổng sức chứa các phòng đã nhập ÍT hơn số học sinh — đã tự thêm {so_them} phòng "
                         f"({suc_chua} chỗ/phòng). Bổ sung phòng vào danh sách.")
-    if chia_deu and phong:   # chia đều: mỗi phòng ~ n / số phòng, không vượt sức chứa
-        con, si_so = n, []
-        for k, (_, c) in enumerate(phong):
-            con_phong = len(phong) - k
-            si_so.append(min(c, -(-con // con_phong)))
-            con -= si_so[-1]
+    if chia_deu and phong:   # chia đều: mỗi phòng ~ n / số phòng, không vượt sức chứa (phòng nhỏ tính trước)
+        con, si_so = n, [0] * len(phong)
+        for k, j in enumerate(sorted(range(len(phong)), key=lambda j: (phong[j][1], j))):
+            si_so[j] = min(phong[j][1], -(-con // (len(phong) - k)))
+            con -= si_so[j]
     else:
         si_so, con = [], n
         for _, c in phong:
@@ -777,7 +784,7 @@ def xep_phong_abc(df: pd.DataFrame, suc_chua: int = 24, tien_to_sbd: str = "", s
                             "Họ và tên": str(r.get(COT_TEN) or ""), "Lớp": str(r.get(COT_LOP) or ""),
                             "Mã HS": str(r.get(COT_MA) or ""), "Môn tự chọn": str(r.get(COT_MON) or "")})
     return {"hoc_sinh": pd.DataFrame(dong_hs), "phong": pd.DataFrame(dong_phong), "canh_bao": canh_bao,
-            "phong_trong": ds}
+            "phong_trong": ds, "theo_sbd_tu_chon": bool(sbd_cho)}
 
 
 def xuat_excel(kq: dict) -> bytes:
@@ -843,3 +850,131 @@ def phuong_an_tu_chuoi(chuoi: str) -> dict:
             if len(cap) == 2 and chon in cap:
                 ra[frozenset(cap)] = chon
     return ra
+
+
+# ---------------------------------------------------------------------
+# XUẤT DANH SÁCH PHÒNG THI THEO MẪU IN (mỗi phòng 1 trang)
+# ---------------------------------------------------------------------
+_TEN_NGAN = {"Vật lí": "LÝ", "Hóa học": "HÓA", "Sinh học": "SINH", "Tiếng Anh": "ANH", "Địa lí": "ĐỊA",
+             "Lịch sử": "SỬ", "GDKT&PL": "GDKT&PL", "Tin học": "TIN", "Toán": "TOÁN", "Ngữ văn": "VĂN"}
+
+
+def trang_tu_chon(kq: dict) -> list[dict]:
+    """Kết quả xep_phong -> các trang in: mỗi phòng các cột môn (môn thi số 1 trước, rồi môn thi số 2)."""
+    hs = kq["hoc_sinh"]
+    trang = []
+    for _, p in kq["phong"].iterrows():
+        mon = [m for m in str(p.get("Môn 1") or "").split(", ") if m]
+        mon += [m for m in str(p.get("Môn 2") or "").split(", ") if m and m not in mon]
+        dong = []
+        for _, h in hs[hs["Phòng"] == p["Phòng"]].iterrows():
+            thi = {h["Môn 1"]} | {m for m in str(h["Môn 2"] or "").split(" + ") if m}
+            dong.append((h["SBD"], h["Họ và tên"], h["Lớp"], thi))
+        trang.append({"phong": p["Phòng"], "mon": mon, "hs": dong})
+    return trang
+
+
+def trang_toan_van(kq: dict) -> list[dict]:
+    hs = kq["hoc_sinh"]
+    return [{"phong": p, "mon": ["Toán", "Ngữ văn"],
+             "hs": [(h["SBD"], h["Họ và tên"], h["Lớp"], {"Toán", "Ngữ văn"}) for _, h in hs[hs["Phòng"] == p].iterrows()]}
+            for p in kq["phong"]["Phòng"]]
+
+
+def xuat_mau_phong(trang: list[dict], ten_truong: str = "", ten_ky_thi: str = "") -> bytes:
+    """Mẫu in danh sách phòng thi: mỗi phòng 1 trang — tên trường, kỳ thi + môn, PHÒNG …; bảng STT | SBD |
+    Họ và tên | (tên) | Lớp | mỗi môn 2 cột (M.đề, Ký tên); em không thi môn nào thì ô môn đó GẠCH CHÉO;
+    cuối trang: số học sinh, dòng vắng, tổng bài/tờ, chữ ký 2 giám thị."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter as cot
+    from openpyxl.worksheet.pagebreak import Break
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Danh_sach_phong"
+    mong = Side(style="thin")
+    vien = Border(left=mong, right=mong, top=mong, bottom=mong)
+    gach = PatternFill(fill_type="lightUp", fgColor="FF808080", bgColor="FFFFFFFF")
+    tnr = lambda sz=12, b=False, i=False: Font(name="Times New Roman", size=sz, bold=b, italic=i)   # noqa: E731
+    giua = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    trai = Alignment(horizontal="left", vertical="center")
+    so_mon_max = max([len(t["mon"]) for t in trang] or [1])
+    for c, w in zip("ABCDE", (5.3, 12.2, 24.1, 9.5, 8.5)):
+        ws.column_dimensions[c].width = w
+    for k in range(so_mon_max):
+        ws.column_dimensions[cot(6 + 2 * k)].width = 7.5
+        ws.column_dimensions[cot(7 + 2 * k)].width = 13.5 if so_mon_max <= 2 else 11
+    r = 1
+    for t in trang:
+        cuoi = 5 + 2 * max(len(t["mon"]), 1)
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=4)
+        ws.cell(r, 1, ten_truong).font = tnr(12, True)
+        ws.cell(r, 1).alignment = giua
+        ws.merge_cells(start_row=r + 1, start_column=1, end_row=r + 1, end_column=cuoi)
+        ws.cell(r + 1, 1, f"{ten_ky_thi} - MÔN " + " - ".join(_TEN_NGAN.get(m, m.upper()) for m in t["mon"])
+                ).font = tnr(12, True)
+        ws.cell(r + 1, 1).alignment = giua
+        ws.merge_cells(start_row=r + 2, start_column=1, end_row=r + 2, end_column=cuoi)
+        ws.cell(r + 2, 1, str(t["phong"]).upper() if str(t["phong"]).upper().startswith("PHÒNG")
+                else f"PHÒNG {str(t['phong']).upper()}").font = tnr(12, True)
+        ws.cell(r + 2, 1).alignment = giua
+        h1, h2 = r + 4, r + 5
+        for c1, c2, chu in ((1, 1, "STT"), (2, 2, "SBD"), (3, 4, "Họ và tên học sinh"), (5, 5, "Lớp")):
+            ws.merge_cells(start_row=h1, start_column=c1, end_row=h2, end_column=c2)
+            ws.cell(h1, c1, chu)
+        for k, m in enumerate(t["mon"]):
+            c = 6 + 2 * k
+            ws.merge_cells(start_row=h1, start_column=c, end_row=h1, end_column=c + 1)
+            ws.cell(h1, c, m)
+            ws.cell(h2, c, "M.đề"); ws.cell(h2, c + 1, "Ký tên")
+        for rr in (h1, h2):
+            ws.row_dimensions[rr].height = 20.1
+            for c in range(1, cuoi + 1):
+                x = ws.cell(rr, c)
+                x.font, x.alignment, x.border = tnr(10, True), giua, vien
+        for stt, (sbd, ten, lop, thi) in enumerate(t["hs"], start=1):
+            rr = h2 + stt
+            ws.row_dimensions[rr].height = 20.1
+            sbd_o = int(sbd) if str(sbd).isdigit() and not str(sbd).startswith("0") else sbd
+            tach = str(ten).split()
+            for c, v in ((1, stt), (2, sbd_o), (3, ten), (4, tach[-1] if tach else ""), (5, lop)):
+                x = ws.cell(rr, c, v)
+                x.alignment, x.border = (trai if c in (3, 4) else giua), vien
+                x.font = Font(name="Times New Roman", size=11)
+            ws.cell(rr, 3).border = Border(left=mong, top=mong, bottom=mong)
+            ws.cell(rr, 4).border = Border(right=mong, top=mong, bottom=mong)
+            for k, m in enumerate(t["mon"]):
+                for c in (6 + 2 * k, 7 + 2 * k):
+                    x = ws.cell(rr, c)
+                    x.border = vien
+                    if m not in thi:   # không thi môn này -> gạch chéo
+                        x.fill = gach
+        r = h2 + len(t["hs"]) + 2
+        ws.cell(r, 1, f"Danh sách này có {len(t['hs'])} học sinh").font = tnr(11, i=True)
+        ws.merge_cells(start_row=r + 1, start_column=1, end_row=r + 1, end_column=cuoi)
+        ws.cell(r + 1, 1, "Trong đó: - Số học sinh dự thi:......; số học sinh vắng:.....; "
+                          "SBD vắng:............................................").font = tnr(11)
+        ws.merge_cells(start_row=r + 2, start_column=1, end_row=r + 2, end_column=cuoi)
+        ws.cell(r + 2, 1, "Tổng số bài:..............; Tổng số tờ:...............").font = tnr(11)
+        gt2 = max(cuoi - 2, 6)
+        for c1, c2 in ((1, 3), (gt2, cuoi)):
+            ws.merge_cells(start_row=r + 4, start_column=c1, end_row=r + 4, end_column=c2)
+            ws.merge_cells(start_row=r + 5, start_column=c1, end_row=r + 5, end_column=c2)
+        ws.cell(r + 4, 1, "GIÁM THỊ 1").font = tnr(12, True)
+        ws.cell(r + 4, gt2, "GIÁM THỊ 2").font = tnr(12, True)
+        ws.cell(r + 5, 1, "( Ký và ghi rõ họ tên )").font = tnr(11, i=True)
+        ws.cell(r + 5, gt2, "( Ký và ghi rõ họ tên )").font = tnr(11, i=True)
+        for c in (1, gt2):
+            ws.cell(r + 4, c).alignment = ws.cell(r + 5, c).alignment = giua
+        r += 9
+        ws.row_breaks.append(Break(id=r - 1))   # mỗi phòng 1 trang
+    ws.page_setup.orientation = "portrait"
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_margins.left = ws.page_margins.right = 0.4
+    ws.print_options.horizontalCentered = True
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
