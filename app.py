@@ -1757,6 +1757,7 @@ CFG_DEFAULTS = dict(
     cfg_num_days=6, cfg_periods_per_day=5, cfg_morning_count=3, cfg_max_seconds=30,
     cfg_school_name="",
     tn_suc_chua=24, tn_si_so_min=12, tn_tien_to="", tn_so_bat_dau=1, tn_ten_phong="", tn_toi_uu=True,
+    tn_sbd_chung=True, tn_chia_deu=False,
 )
 for key, default in CFG_DEFAULTS.items():
     st.session_state[key] = st.session_state.get(key, default)
@@ -1964,6 +1965,39 @@ elif LA_ADMIN and module == "🪑 Xếp Phòng Thi":
 # ---------------------------------------------------------------------
 # PHÂN HỆ XẾP PHÒNG THI TỐT NGHIỆP (khối 12) — tab trong module Xếp phòng thi
 # ---------------------------------------------------------------------
+def _the_toan_van(ds_phong):
+    """Kết quả xếp phòng Toán – Ngữ văn theo vần ABC."""
+    ss = st.session_state
+    kq = tn.xep_phong_abc(ss.tn_hoc_sinh, suc_chua=int(ss.tn_suc_chua), tien_to_sbd=str(ss.tn_tien_to or "").strip(),
+                          so_bat_dau=int(ss.tn_so_bat_dau), phong_thi=ds_phong, chia_deu=bool(ss.tn_chia_deu))
+    phong, hs = kq["phong"], kq["hoc_sinh"]
+    if phong.empty:
+        st.warning("Chưa có học sinh.")
+        return
+    hien_o_so_lieu([
+        ("sky", "🧑‍🎓", len(hs), "Học sinh dự thi", "Toán & Ngữ văn"),
+        ("mint", "🚪", len(phong), "Phòng thi", f"Tổng {int(phong['Sức chứa'].sum())} chỗ"),
+        ("yellow", "🔤", f"{hs['SBD'].iloc[0]} → {hs['SBD'].iloc[-1]}", "Số báo danh", "Theo vần ABC"),
+    ])
+    for cb in kq["canh_bao"]:
+        st.warning(cb)
+    with the_khung():
+        section_header("4", "Phòng thi Toán – Ngữ văn (theo vần ABC)",
+                       "Toàn bộ học sinh sắp theo <b>tên</b>, rồi <b>họ đệm</b> (đúng thứ tự chữ cái tiếng Việt: "
+                       "a ă â b c d đ…, dấu ngang huyền hỏi ngã sắc nặng), xếp lần lượt từng phòng.")
+        st.dataframe(phong, width="stretch", hide_index=True)
+        if kq["phong_trong"]:
+            st.caption("🚪 Phòng không dùng tới: " + ", ".join(f"{t} ({c} chỗ)" for t, c in kq["phong_trong"]))
+        p_chon = st.selectbox("Xem danh sách phòng", ["(tất cả)"] + phong["Phòng"].tolist(), key="tn_tv_xem_phong")
+        st.dataframe(hs if p_chon == "(tất cả)" else hs[hs["Phòng"] == p_chon], width="stretch", hide_index=True,
+                     height=360)
+        st.download_button(
+            "📊 Xuất Excel phòng thi Toán – Ngữ văn", data=tn.xuat_excel(kq), type="primary",
+            file_name="xep_phong_thi_toan_van.xlsx", key="dl_tn_tv",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+
 def module_thi_tot_nghiep():
     ss = st.session_state
     if not isinstance(ss.get("tn_hoc_sinh"), pd.DataFrame):
@@ -2015,8 +2049,17 @@ def module_thi_tot_nghiep():
             st.text_input("Tiền tố SBD", key="tn_tien_to", help="VD 'TP' → TP001. Để trống: 001, 002…")
         with c4:
             st.number_input("SBD bắt đầu từ", 1, 99999, step=1, key="tn_so_bat_dau")
+        g1, g2 = st.columns(2)
+        with g1:
+            st.toggle("🔢 Một SBD cho cả kỳ thi (đánh theo vần ABC)", key="tn_sbd_chung",
+                      help="Bật: SBD đánh theo vần ABC (như phòng Toán – Văn) và dùng NGUYÊN SBD đó ở phòng môn tự "
+                           "chọn. Tắt: phòng môn tự chọn đánh SBD riêng liên tục theo phòng.")
+        with g2:
+            st.toggle("⚖️ Toán – Văn: chia đều sĩ số các phòng", key="tn_chia_deu",
+                      help="Tắt: xếp kín lần lượt từng phòng (phòng cuối có thể ít). Bật: vẫn ít phòng nhất nhưng "
+                           "sĩ số các phòng đều nhau.")
         st.toggle(
-            "⚡ Tối ưu ÍT PHÒNG NHẤT (khuyến nghị)", key="tn_toi_uu",
+            "⚡ Môn tự chọn: tối ưu ÍT PHÒNG NHẤT (khuyến nghị)", key="tn_toi_uu",
             help="Mỗi phòng vẫn chỉ 1 môn 1. App được chọn môn 1 của từng học sinh là MỘT TRONG 2 môn của em "
                  "(không bắt buộc môn đông hơn) để gom đủ phòng → tổng số phòng ít nhất. Khi số phòng như nhau, "
                  "ưu tiên giữ môn đông hơn làm môn 1. Tắt: môn đông hơn luôn là môn 1.",
@@ -2078,63 +2121,72 @@ def module_thi_tot_nghiep():
                 f"{len(ds_phong)} phòng · tổng {tong_cho} chỗ · {so_hs} học sinh"
                 + ("" if tong_cho >= so_hs else f" — THIẾU {so_hs - tong_cho} chỗ, app sẽ tự thêm phòng."))
 
-    _tham_so = dict(suc_chua=int(ss.tn_suc_chua), tien_to_sbd=str(ss.tn_tien_to or "").strip(),
-                    so_bat_dau=int(ss.tn_so_bat_dau), phong_thi=ds_phong)
-    kq = tn.xep_phong(ss.tn_hoc_sinh, toi_uu=bool(ss.tn_toi_uu), gioi_han_giay=5, **_tham_so)
-    so_phong_thuong = len(tn.xep_phong(ss.tn_hoc_sinh, toi_uu=False, **_tham_so)["phong"]) if kq["toi_uu"] else None
-    phong, tk, hs = kq["phong"], kq["thong_ke"], kq["hoc_sinh"]
-    if phong.empty:
-        st.warning("Chưa có học sinh nào có môn thi hợp lệ.")
-        return
-    so_thuan = int((phong["Loại phòng"] == "Cùng môn 1 & môn 2").sum())
-    hien_o_so_lieu([
-        ("sky", "🧑‍🎓", len(hs), "Học sinh dự thi", f"{len(tk)} môn tự chọn"),
-        ("mint", "🚪", len(phong), "Phòng thi", f"Tổng {int(phong['Sức chứa'].sum())} chỗ"),
-        ("coral", "🎯", so_thuan, "Phòng cùng môn 1 & 2",
-         f"{int((phong['Loại phòng'] == 'Cùng môn 1').sum())} phòng cùng môn 1"),
-        ("yellow", "🥇", tk.iloc[0]["Môn"], "Môn 1 đông nhất", f"{int(tk.iloc[0]['Số HS thi'])} học sinh"),
-    ])
-    if so_phong_thuong is not None:
-        st.success(
-            f"⚡ Phương án tối ưu: **{len(phong)} phòng**"
-            + (f" — ít hơn {so_phong_thuong - len(phong)} phòng so với cách “môn đông hơn luôn là môn 1” "
-               f"({so_phong_thuong} phòng)" if so_phong_thuong > len(phong) else " — bằng cách xếp thường")
-            + (f". Có {kq['so_doi_mon1']} học sinh được xếp phòng theo môn ít người hơn trong 2 môn của em."
-               if kq["so_doi_mon1"] else ".")
-        )
-    for cb in kq["canh_bao"][:10]:
-        st.warning(cb)
-
-    with the_khung():
-        section_header("4", "Thống kê môn thi", "Thứ hạng theo số học sinh thi — quyết định môn 1 / môn 2.")
-        t1, t2 = st.columns([3, 2])
-        with t1:
-            st.dataframe(tk, width="stretch", hide_index=True)
-        with t2:
-            import altair as alt
-            st.altair_chart(
-                alt.Chart(tk).mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6, color="#2B9BF0").encode(
-                    x=alt.X("Môn:N", sort=None, title=None, axis=alt.Axis(labelAngle=-35, labelOverlap=False)),
-                    y=alt.Y("Số HS thi:Q", title="Số HS thi"),
-                    tooltip=["Môn", "Số HS thi", "Là môn 1 của", "Là môn 2 của"],
-                ).properties(height=260),
-                width="stretch",
+    _tab_tv, _tab_tc = st.tabs(["📘 Toán – Ngữ văn (theo vần ABC)", "🧪 Môn tự chọn (tối ưu phòng)"])
+    sbd_chung = tn.sbd_theo_abc(ss.tn_hoc_sinh, str(ss.tn_tien_to or "").strip(), int(ss.tn_so_bat_dau)) \
+        if ss.tn_sbd_chung else None
+    with _tab_tv:
+        _the_toan_van(ds_phong)
+    with _tab_tc:
+        _tham_so = dict(suc_chua=int(ss.tn_suc_chua), tien_to_sbd=str(ss.tn_tien_to or "").strip(),
+                        so_bat_dau=int(ss.tn_so_bat_dau), phong_thi=ds_phong)
+        kq = tn.xep_phong(ss.tn_hoc_sinh, toi_uu=bool(ss.tn_toi_uu), gioi_han_giay=5, sbd_cho=sbd_chung,
+                          **_tham_so)
+        so_phong_thuong = len(tn.xep_phong(ss.tn_hoc_sinh, toi_uu=False, **_tham_so)["phong"]) if kq["toi_uu"] else None
+        phong, tk, hs = kq["phong"], kq["thong_ke"], kq["hoc_sinh"]
+        if phong.empty:
+            st.warning("Chưa có học sinh nào có môn thi hợp lệ.")
+            return
+        so_thuan = int((phong["Loại phòng"] == "Cùng môn 1 & môn 2").sum())
+        hien_o_so_lieu([
+            ("sky", "🧑‍🎓", len(hs), "Học sinh dự thi", f"{len(tk)} môn tự chọn"),
+            ("mint", "🚪", len(phong), "Phòng thi", f"Tổng {int(phong['Sức chứa'].sum())} chỗ"),
+            ("coral", "🎯", so_thuan, "Phòng cùng môn 1 & 2",
+             f"{int((phong['Loại phòng'] == 'Cùng môn 1').sum())} phòng cùng môn 1"),
+            ("yellow", "🥇", tk.iloc[0]["Môn"], "Môn 1 đông nhất", f"{int(tk.iloc[0]['Số HS thi'])} học sinh"),
+        ])
+        if so_phong_thuong is not None:
+            st.success(
+                f"⚡ Phương án tối ưu: **{len(phong)} phòng**"
+                + (f" — ít hơn {so_phong_thuong - len(phong)} phòng so với cách “môn đông hơn luôn là môn 1” "
+                   f"({so_phong_thuong} phòng)" if so_phong_thuong > len(phong) else " — bằng cách xếp thường")
+                + (f". Có {kq['so_doi_mon1']} học sinh được xếp phòng theo môn ít người hơn trong 2 môn của em."
+                   if kq["so_doi_mon1"] else ".")
             )
+        for cb in kq["canh_bao"][:10]:
+            st.warning(cb)
 
-    with the_khung():
-        section_header("5", "Kết quả xếp phòng", "SBD đánh liên tục theo thứ tự phòng. Xuất Excel để in danh sách.")
-        st.dataframe(phong, width="stretch", hide_index=True)
-        if kq["phong_trong"]:
-            st.caption("🚪 Phòng không dùng tới: " + ", ".join(f"{t} ({c} chỗ)" for t, c in kq["phong_trong"]))
-        p_chon = st.selectbox("Xem danh sách phòng", ["(tất cả)"] + phong["Phòng"].tolist(), key="tn_xem_phong")
-        st.dataframe(hs if p_chon == "(tất cả)" else hs[hs["Phòng"] == p_chon], width="stretch", hide_index=True,
-                     height=360)
-        st.download_button(
-            "📊 Xuất Excel xếp phòng thi tốt nghiệp", data=tn.xuat_excel(kq), type="primary",
-            file_name="xep_phong_thi_tot_nghiep.xlsx", key="dl_tn",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-        st.caption("Danh sách học sinh và cách xếp được tự động lưu cùng dữ liệu của app (SharePoint nếu đã cấu hình).")
+        with the_khung():
+            section_header("4", "Thống kê môn thi", "Thứ hạng theo số học sinh thi — quyết định môn 1 / môn 2.")
+            t1, t2 = st.columns([3, 2])
+            with t1:
+                st.dataframe(tk, width="stretch", hide_index=True)
+            with t2:
+                import altair as alt
+                st.altair_chart(
+                    alt.Chart(tk).mark_bar(cornerRadiusTopLeft=6, cornerRadiusTopRight=6, color="#2B9BF0").encode(
+                        x=alt.X("Môn:N", sort=None, title=None, axis=alt.Axis(labelAngle=-35, labelOverlap=False)),
+                        y=alt.Y("Số HS thi:Q", title="Số HS thi"),
+                        tooltip=["Môn", "Số HS thi", "Là môn 1 của", "Là môn 2 của"],
+                    ).properties(height=260),
+                    width="stretch",
+                )
+
+        with the_khung():
+            section_header("5", "Kết quả xếp phòng môn tự chọn",
+                           ("SBD chung cả kỳ thi (theo vần ABC, giống phòng Toán – Văn)." if sbd_chung else
+                            "SBD đánh liên tục theo thứ tự phòng.") + " Xuất Excel để in danh sách.")
+            st.dataframe(phong, width="stretch", hide_index=True)
+            if kq["phong_trong"]:
+                st.caption("🚪 Phòng không dùng tới: " + ", ".join(f"{t} ({c} chỗ)" for t, c in kq["phong_trong"]))
+            p_chon = st.selectbox("Xem danh sách phòng", ["(tất cả)"] + phong["Phòng"].tolist(), key="tn_xem_phong")
+            st.dataframe(hs if p_chon == "(tất cả)" else hs[hs["Phòng"] == p_chon], width="stretch", hide_index=True,
+                         height=360)
+            st.download_button(
+                "📊 Xuất Excel xếp phòng thi tốt nghiệp", data=tn.xuat_excel(kq), type="primary",
+                file_name="xep_phong_thi_tot_nghiep.xlsx", key="dl_tn",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+            st.caption("Danh sách học sinh và cách xếp được tự động lưu cùng dữ liệu của app (SharePoint nếu đã cấu hình).")
 
 
 if module == "📅 Xếp Thời Khoá Biểu":

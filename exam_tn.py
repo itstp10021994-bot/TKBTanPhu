@@ -217,12 +217,26 @@ def _toi_uu_mon1(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_chua: in
     tu_them = sum(z[(k, s)] for k in loai if k[1] for s in mon)
     doi_mon = sum(len(ds) - x[(p, p[0])] for p, ds in cap.items())
     cho = sum(k[0] * z[(k, s)] for k in loai for s in mon)
-    m.Minimize((10**12 if co_ds_phong else 0) * tu_them + 10**9 * so_phong + 10**3 * doi_mon + cho)
-    giai = cp_model.CpSolver()
-    giai.parameters.max_time_in_seconds = gioi_han_giay
-    giai.parameters.num_workers = 8
-    if giai.Solve(m) not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
-        return None
+    # Giải lần lượt từng bậc ưu tiên (mỗi bậc là 1 bài nhỏ -> nhanh), cố định kết quả bậc trước rồi giải bậc sau.
+    # Giới hạn thời gian TẤT ĐỊNH (deterministic) + 1 luồng -> mỗi lần chạy ra CÙNG 1 kết quả.
+    giai = None
+    bac = ([tu_them] if co_ds_phong else []) + [so_phong, doi_mon, cho]
+    for muc_tieu in bac:
+        m.Minimize(muc_tieu)
+        g = cp_model.CpSolver()
+        g.parameters.num_workers = 1
+        g.parameters.random_seed = 2026
+        g.parameters.max_deterministic_time = max(1.0, gioi_han_giay / len(bac))
+        st = g.Solve(m)
+        if st not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            if giai is None:
+                return None
+            break
+        giai = g
+        m.ClearHints()
+        for v in list(x.values()) + list(z.values()):
+            m.AddHint(v, g.Value(v))
+        m.Add(muc_tieu <= int(round(g.ObjectiveValue())))
     mon1 = {}
     for p, ds in cap.items():
         ds = sorted(ds, key=lambda h: (h["lop"], khoa(h["ten"])))
@@ -243,15 +257,15 @@ def _toi_uu_mon1(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_chua: in
 
 def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, tien_to_sbd: str = "",
               so_bat_dau: int = 1, phong_thi: list[tuple[str, int]] | None = None, toi_uu: bool = True,
-              gioi_han_giay: float = 10.0) -> dict:
+              gioi_han_giay: float = 10.0, sbd_cho: dict | None = None) -> dict:
     """phong_thi: [(tên phòng, sức chứa)] theo thứ tự dùng; None/rỗng -> tự tạo phòng 'Phòng 01'... sức chứa
     `suc_chua`. Thiếu chỗ thì tự thêm phòng. -> {"hoc_sinh", "phong", "thong_ke", "canh_bao", "phong_trong"}."""
     suc_chua = max(int(suc_chua), 1)
     hs, canh_bao = [], []
-    for _, r in df.iterrows():
+    for idx, r in df.iterrows():
         mon = tach_mon(r.get(COT_MON))
         rec = {"ma": str(r.get(COT_MA) or "").strip(), "ten": str(r.get(COT_TEN) or "").strip(),
-               "lop": str(r.get(COT_LOP) or "").strip(), "mon": mon}
+               "lop": str(r.get(COT_LOP) or "").strip(), "mon": mon, "idx": idx}
         if _o_trong(rec["lop"]) and _o_trong(rec["ten"]):
             continue
         if not mon:
@@ -363,10 +377,14 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, ti
             "Phòng": tp, "Sức chứa": suc, "Sĩ số": len(p), "Còn trống": suc - len(p), "Môn 1": ", ".join(sorted(m1s, key=lambda m: hang[m])),
             "Cặp môn (môn 1 – môn 2: số HS)": "; ".join(f"{a} – {b}: {n}" for (a, b), n in cap_p.most_common()),
             "Loại phòng": loai,
-            "SBD": f"{tien_to_sbd}{str(so).zfill(rong)} → {tien_to_sbd}{str(so + len(p) - 1).zfill(rong)}",
+            "SBD": (f"{tien_to_sbd}{str(so).zfill(rong)} → {tien_to_sbd}{str(so + len(p) - 1).zfill(rong)}"
+                    if not sbd_cho else "SBD chung (theo vần ABC)"),
         })
+        if sbd_cho:   # SBD chung cả kỳ thi: trong phòng xếp theo SBD
+            p = sorted(p, key=lambda h: sbd_cho.get(h["idx"], ""))
         for stt, h in enumerate(p, start=1):
-            dong_hs.append({"SBD": f"{tien_to_sbd}{str(so).zfill(rong)}", "Phòng": tp, "STT trong phòng": stt,
+            dong_hs.append({"SBD": sbd_cho.get(h["idx"], "") if sbd_cho else f"{tien_to_sbd}{str(so).zfill(rong)}",
+                            "Phòng": tp, "STT trong phòng": stt,
                             "Họ và tên": h["ten"], "Lớp": h["lop"], "Mã HS": h["ma"],
                             "Môn 1": h["mon1"], "Môn 2": h["mon2"]})
             so += 1
@@ -381,13 +399,120 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, ti
             "toi_uu": phong_cua is not None}
 
 
+# ---------------------------------------------------------------------
+# TOÁN – NGỮ VĂN: xếp phòng theo vần ABC (tên, rồi họ đệm) — đúng thứ tự chữ cái tiếng Việt
+# ---------------------------------------------------------------------
+_CHU_VN = "a ă â b c d đ e ê f g h i j k l m n o ô ơ p q r s t u ư v w x y z".split()
+_HANG_CHU = {c: i for i, c in enumerate(_CHU_VN)}
+_DAU_THANH = {"\u0300": 1, "\u0309": 2, "\u0303": 3, "\u0301": 4, "\u0323": 5}   # huyền hỏi ngã sắc nặng
+_DAU_CHU = {"\u0306": "ă", "\u0302": "^", "\u031b": "+"}   # trăng (ă), mũ (â ê ô), móc (ơ ư)
+
+
+def _khoa_chu_vn(chu: str) -> tuple:
+    """Khoá so sánh 1 từ theo thứ tự chữ cái tiếng Việt: (thứ tự chữ..., dấu thanh...)."""
+    chu_cai, thanh = [], []
+    for c in unicodedata.normalize("NFD", chu.lower()):
+        if c in _DAU_THANH:
+            if thanh:
+                thanh[-1] = _DAU_THANH[c]
+            continue
+        if c in _DAU_CHU and chu_cai:
+            goc = _CHU_VN[chu_cai[-1]] if chu_cai[-1] < len(_CHU_VN) else ""
+            moi = {"aă": "ă", "a^": "â", "e^": "ê", "o^": "ô", "o+": "ơ", "u+": "ư"}.get(goc + _DAU_CHU[c])
+            if moi:
+                chu_cai[-1] = _HANG_CHU[moi]
+            continue
+        if unicodedata.combining(c):
+            continue
+        chu_cai.append(_HANG_CHU.get(c, 100 + ord(c)))
+        thanh.append(0)
+    return tuple(chu_cai), tuple(thanh)
+
+
+def khoa_ten_vn(ho_ten: str) -> tuple:
+    """Sắp theo TÊN (từ cuối), rồi họ đệm — mỗi phần theo thứ tự chữ cái tiếng Việt."""
+    tu = str(ho_ten or "").split()
+    if not tu:
+        return ((), ()), ((), ())
+    ten, ho_dem = tu[-1], " ".join(tu[:-1])
+    a, b = _khoa_chu_vn(ten), _khoa_chu_vn(ho_dem.replace(" ", "\u0000"))
+    return (a[0], a[1], b[0], b[1])   # tên (chữ cái, rồi dấu) trước, sau đó họ đệm
+
+
+def sap_abc(df: pd.DataFrame) -> list:
+    """Chỉ số các dòng học sinh (có tên hoặc lớp) theo vần ABC; trùng họ tên thì theo lớp, mã."""
+    dong = [(i, r) for i, r in df.iterrows() if not (_o_trong(r.get(COT_TEN)) and _o_trong(r.get(COT_LOP)))]
+    dong.sort(key=lambda x: (khoa_ten_vn(x[1].get(COT_TEN)), str(x[1].get(COT_LOP) or ""), str(x[1].get(COT_MA) or "")))
+    return [i for i, _ in dong]
+
+
+def sbd_theo_abc(df: pd.DataFrame, tien_to_sbd: str = "", so_bat_dau: int = 1) -> dict:
+    """{chỉ số dòng: SBD} đánh theo vần ABC — dùng chung cho cả kỳ thi."""
+    thu_tu = sap_abc(df)
+    rong = max(3, len(str(int(so_bat_dau) + len(thu_tu))))
+    return {i: f"{tien_to_sbd}{str(int(so_bat_dau) + k).zfill(rong)}" for k, i in enumerate(thu_tu)}
+
+
+def xep_phong_abc(df: pd.DataFrame, suc_chua: int = 24, tien_to_sbd: str = "", so_bat_dau: int = 1,
+                  phong_thi: list[tuple[str, int]] | None = None, chia_deu: bool = False) -> dict:
+    """Toán – Ngữ văn: toàn bộ học sinh theo vần ABC, lần lượt kín từng phòng (theo thứ tự danh sách phòng).
+    chia_deu=True: dùng ít phòng nhất nhưng chia sĩ số đều nhau giữa các phòng."""
+    suc_chua = max(int(suc_chua), 1)
+    thu_tu = sap_abc(df)
+    sbd = sbd_theo_abc(df, tien_to_sbd, so_bat_dau)
+    n, canh_bao = len(thu_tu), []
+    ds = list(phong_thi or [])
+    phong, tong = [], 0
+    while tong < n:   # ít phòng nhất theo thứ tự danh sách; thiếu thì tự thêm
+        if ds:
+            phong.append(ds.pop(0))
+        else:
+            phong.append((None, suc_chua))
+        tong += phong[-1][1]
+    so_them = sum(1 for t, _ in phong if t is None)
+    if phong_thi and so_them:
+        canh_bao.append(f"Tổng sức chứa các phòng đã nhập ÍT hơn số học sinh — đã tự thêm {so_them} phòng "
+                        f"({suc_chua} chỗ/phòng). Bổ sung phòng vào danh sách.")
+    if chia_deu and phong:   # chia đều: mỗi phòng ~ n / số phòng, không vượt sức chứa
+        con, si_so = n, []
+        for k, (_, c) in enumerate(phong):
+            con_phong = len(phong) - k
+            si_so.append(min(c, -(-con // con_phong)))
+            con -= si_so[-1]
+    else:
+        si_so, con = [], n
+        for _, c in phong:
+            si_so.append(min(c, con)); con -= si_so[-1]
+    dong_hs, dong_phong, vt, dem = [], [], 0, 0
+    for (t, c), k in zip(phong, si_so):
+        if t is None:
+            dem += 1
+            t = f"Phòng thêm {dem:02d}" if phong_thi else f"Phòng {dem:02d}"
+        nhom = thu_tu[vt:vt + k]; vt += k
+        if not nhom:
+            continue
+        ten_dau, ten_cuoi = (str(df.at[nhom[0], COT_TEN] or ""), str(df.at[nhom[-1], COT_TEN] or ""))
+        dong_phong.append({"Phòng": t, "Sức chứa": c, "Sĩ số": len(nhom), "Còn trống": c - len(nhom),
+                           "SBD": f"{sbd[nhom[0]]} → {sbd[nhom[-1]]}",
+                           "Từ tên → đến tên": f"{ten_dau.split()[-1] if ten_dau.split() else ''} → "
+                                               f"{ten_cuoi.split()[-1] if ten_cuoi.split() else ''}"})
+        for stt, i in enumerate(nhom, start=1):
+            r = df.loc[i]
+            dong_hs.append({"SBD": sbd[i], "Phòng": t, "STT trong phòng": stt,
+                            "Họ và tên": str(r.get(COT_TEN) or ""), "Lớp": str(r.get(COT_LOP) or ""),
+                            "Mã HS": str(r.get(COT_MA) or ""), "Môn tự chọn": str(r.get(COT_MON) or "")})
+    return {"hoc_sinh": pd.DataFrame(dong_hs), "phong": pd.DataFrame(dong_phong), "canh_bao": canh_bao,
+            "phong_trong": ds}
+
+
 def xuat_excel(kq: dict) -> bytes:
     """Danh sách theo phòng (in được), tổng hợp phòng, thống kê môn."""
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as w:
         kq["hoc_sinh"].to_excel(w, sheet_name="Danh_sach_theo_phong", index=False)
         kq["phong"].to_excel(w, sheet_name="Tong_hop_phong", index=False)
-        kq["thong_ke"].to_excel(w, sheet_name="Thong_ke_mon", index=False)
+        if "thong_ke" in kq:
+            kq["thong_ke"].to_excel(w, sheet_name="Thong_ke_mon", index=False)
         hs = kq["hoc_sinh"]
         if not hs.empty:
             hs.sort_values(["Lớp", "Họ và tên"]).to_excel(w, sheet_name="Danh_sach_theo_lop", index=False)
