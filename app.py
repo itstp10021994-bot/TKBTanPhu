@@ -15,6 +15,7 @@ import re
 import threading
 import time as time_mod
 import unicodedata
+from collections import Counter, defaultdict
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
@@ -1758,6 +1759,7 @@ CFG_DEFAULTS = dict(
     cfg_school_name="",
     tn_suc_chua=24, tn_si_so_min=12, tn_tien_to="", tn_so_bat_dau=1, tn_ten_phong="", tn_toi_uu=True,
     tn_sbd_chung=True, tn_chia_deu=False, tn_uu_tien_mon="🚪 Ít phòng nhất, rồi gom môn chỉ thi 1 lần tối đa",
+    tn_cach_ca1="⚡ Tự động tối ưu", tn_ca1_cap="", tn_ghep_mon1=False,
 )
 for key, default in CFG_DEFAULTS.items():
     st.session_state[key] = st.session_state.get(key, default)
@@ -2002,6 +2004,37 @@ UU_TIEN_TC = {"🚪 Ít phòng nhất, rồi gom môn chỉ thi 1 lần tối đ
               "🎯 Gom môn chỉ thi 1 lần trước (có thể thêm phòng)": tn.UU_TIEN_MON}
 
 
+CACH_CA1 = ["⚡ Tự động tối ưu", "✍️ Tự chọn môn thi ca 1 theo cặp môn"]
+
+
+def _phuong_an_tu_chon(tham_so: dict, sbd_chung) -> dict:
+    """Bảng cặp môn để thầy/cô chọn môn thi số 1 (ca 1) -> {frozenset(cặp): môn thi số 1}."""
+    ss = st.session_state
+    if st.button("↺ Điền sẵn theo phương án tự động", key="tn_dien_tu_dong",
+                 help="Lấy môn thi số 1 mà phương án tối ưu tự động chọn cho mỗi cặp (lấy theo số đông) rồi sửa tiếp."):
+        tu_dong = tn.xep_phong(ss.tn_hoc_sinh, gioi_han_giay=5, uu_tien=UU_TIEN_TC[ss.tn_uu_tien_mon], **tham_so)
+        dem = defaultdict(Counter)
+        for _, r in tu_dong["hoc_sinh"].iterrows():
+            if r["Môn 2"] and " + " not in r["Môn 2"]:
+                dem[frozenset((r["Môn 1"], r["Môn 2"]))][r["Môn 1"]] += 1
+        ss.tn_ca1_cap = tn.phuong_an_sang_chuoi({k: c.most_common(1)[0][0] for k, c in dem.items()})
+        ss.pop("editor_tn_ca1", None)
+    bang = tn.cap_mon(ss.tn_hoc_sinh, tn.phuong_an_tu_chuoi(ss.get("tn_ca1_cap", "")))
+    mon_ds = sorted({m for c in bang["Cặp môn"] for m in c.split(" – ")})
+    sua = st.data_editor(
+        bang, key="editor_tn_ca1", hide_index=True, width="stretch", disabled=["Cặp môn", "Số HS"],
+        column_config={"Môn thi số 1": st.column_config.SelectboxColumn(
+            "Môn thi số 1 (ca 1)", options=mon_ds, required=True,
+            help="Chọn 1 trong 2 môn của cặp; môn còn lại thi ca 2.")},
+    )
+    sai = [r["Cặp môn"] for _, r in sua.iterrows() if r["Môn thi số 1"] not in r["Cặp môn"].split(" – ")]
+    if sai:
+        st.warning("Môn thi số 1 phải là 1 trong 2 môn của cặp — đang dùng môn đông hơn cho: " + ", ".join(sai))
+    pa = tn.phuong_an_tu_bang(sua)
+    ss.tn_ca1_cap = tn.phuong_an_sang_chuoi(pa)
+    return pa
+
+
 def module_thi_tot_nghiep():
     ss = st.session_state
     if not isinstance(ss.get("tn_hoc_sinh"), pd.DataFrame):
@@ -2133,16 +2166,33 @@ def module_thi_tot_nghiep():
     with _tab_tc:
         if ss.get("tn_uu_tien_mon") not in UU_TIEN_TC:
             ss.tn_uu_tien_mon = next(iter(UU_TIEN_TC))
+        if ss.get("tn_cach_ca1") not in CACH_CA1:
+            ss.tn_cach_ca1 = CACH_CA1[0]
+        st.radio("Cách chọn môn thi số 1 (ca 1)", CACH_CA1, key="tn_cach_ca1", horizontal=True,
+                 help="Tự động: app tự chọn môn thi số 1 của từng em. Tự chọn: thầy/cô quyết định với mỗi cặp môn, "
+                      "môn nào thi ca 1 (VD Anh – Lí: Anh thi ca 1, Lí thi ca 2); app xếp phòng theo đó.")
+        tu_chon = ss.tn_cach_ca1 == CACH_CA1[1]
         st.radio("Ưu tiên khi tối ưu", list(UU_TIEN_TC), key="tn_uu_tien_mon", horizontal=True,
-                 disabled=not ss.tn_toi_uu,
+                 disabled=not ss.tn_toi_uu or tu_chon,
                  help="Môn 1 = môn thi số 1 (thi lần 1), môn 2 = môn thi số 2; cả 2 môn thi cùng 1 phòng. "
                       "Ít phòng nhất (khuyến nghị): giữ số phòng ÍT NHẤT, trong đó chọn môn số 1 / số 2 của từng em "
                       "để nhiều môn chỉ thi 1 lần nhất (VD Sinh luôn thi lần 1), môn còn phải chia 2 lần thì ít "
                       "học sinh lệch nhất. Gom môn trước: ưu tiên mỗi môn chỉ thi 1 lần, chấp nhận thêm phòng.")
         _tham_so = dict(suc_chua=int(ss.tn_suc_chua), tien_to_sbd=str(ss.tn_tien_to or "").strip(),
                         so_bat_dau=int(ss.tn_so_bat_dau), phong_thi=ds_phong)
+        pa = _phuong_an_tu_chon(_tham_so, sbd_chung) if tu_chon else None
+        st.toggle("🧩 Cho phép ghép 2 nhóm môn thi số 1 nhỏ vào chung 1 phòng (nếu vừa chỗ)", key="tn_ghep_mon1",
+                  disabled=not tu_chon,
+                  help="Chỉ dùng cho phương án tự chọn. Hai môn thi số 1 đều chưa đủ 1 phòng (VD Lí 18 em + PL 7 "
+                       "em) được ngồi chung 1 phòng nếu phòng đủ chỗ → bớt 1 phòng. Phòng đó có 2 đề ở ca 1.")
         kq = tn.xep_phong(ss.tn_hoc_sinh, toi_uu=bool(ss.tn_toi_uu), gioi_han_giay=5, sbd_cho=sbd_chung,
-                          uu_tien=UU_TIEN_TC[ss.tn_uu_tien_mon], **_tham_so)
+                          uu_tien=UU_TIEN_TC[ss.tn_uu_tien_mon], mon1_theo_cap=pa,
+                          ghep_mon1=bool(tu_chon and ss.tn_ghep_mon1), **_tham_so)
+        if tu_chon:
+            tu_dong = tn.xep_phong(ss.tn_hoc_sinh, gioi_han_giay=5, uu_tien=UU_TIEN_TC[ss.tn_uu_tien_mon], **_tham_so)
+            st.info(f"✍️ Phương án tự chọn: **{len(kq['phong'])} phòng**, {len(kq['mon_tach'])} môn chia 2 ca, "
+                    f"{kq['hs_lech']} em lệch ca. So sánh — phương án tự động: **{len(tu_dong['phong'])} phòng**, "
+                    f"{len(tu_dong['mon_tach'])} môn chia 2 ca, {tu_dong['hs_lech']} em lệch ca.")
         so_phong_thuong = len(tn.xep_phong(ss.tn_hoc_sinh, toi_uu=False, **_tham_so)["phong"]) if kq["toi_uu"] else None
         phong, tk, hs = kq["phong"], kq["thong_ke"], kq["hoc_sinh"]
         if phong.empty:
