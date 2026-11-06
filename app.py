@@ -1999,6 +1999,7 @@ def _the_toan_van(ds_phong, kq_tc=None):
     sbd_tc = (kq_tc or {}).get("sbd_theo_dong") or None
     kq = tn.xep_phong_abc(ss.tn_hoc_sinh, suc_chua=int(ss.tn_suc_chua), tien_to_sbd=str(ss.tn_tien_to or "").strip(),
                           so_bat_dau=int(ss.tn_so_bat_dau), phong_thi=ds_phong, chia_deu=bool(ss.tn_chia_deu),
+                          uu_tien_phong=tn.uu_tien_tu_bang(ss.tn_phong) or None,
                           sbd_cho=sbd_tc)
     phong, hs = kq["phong"], kq["hoc_sinh"]
     if phong.empty:
@@ -2165,7 +2166,8 @@ def module_thi_tot_nghiep():
         section_header(
             "3", "Danh sách phòng thi (tên & sức chứa từng phòng)",
             "Upload file Excel / CSV có cột <b>Tên phòng</b> và <b>Sức chứa</b> (hoặc <i>Số lượng</i>), hoặc gõ thẳng "
-            "vào bảng. Phòng được dùng <b>theo đúng thứ tự</b> trong bảng. Để trống bảng: app tự tạo Phòng 01, 02… "
+            "vào bảng. Cột <b>Ưu tiên</b>: <b>Cao</b> = dùng trước & xếp kín, <b>Bình thường</b> = chia đều, "
+            "<b>Thấp</b> = xếp ít / chỉ dùng khi thiếu chỗ (cùng mức thì theo thứ tự trong bảng). Để trống bảng: app tự tạo Phòng 01, 02… "
             "theo “Sức chứa 1 phòng” ở trên; tổng sức chứa thiếu thì app tự thêm phòng.",
         )
         p1, p2 = st.columns([1, 2])
@@ -2173,7 +2175,9 @@ def module_thi_tot_nghiep():
             st.download_button(
                 "📄 Tải file mẫu danh sách phòng", width="stretch", key="dl_mau_phong_tn",
                 data=df_to_excel_bytes(pd.DataFrame({tn.COT_TEN_PHONG: ["P.101", "P.102", "P.103"],
-                                                     tn.COT_SUC_CHUA: [24, 24, 20]}), "Phong_thi_TN"),
+                                                     tn.COT_SUC_CHUA: [24, 24, 20],
+                                                     tn.COT_UU_TIEN: ["Cao", "Bình thường", "Thấp"]}),
+                                       "Phong_thi_TN"),
                 file_name="mau_phong_thi_tot_nghiep.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
@@ -2194,11 +2198,12 @@ def module_thi_tot_nghiep():
             except Exception as e:
                 st.error(f"Không đọc được file phòng: {e}")
         if not isinstance(ss.get("tn_phong"), pd.DataFrame):
-            ss.tn_phong = pd.DataFrame(columns=[tn.COT_TEN_PHONG, tn.COT_SUC_CHUA])
-        _bp = ss.tn_phong.reindex(columns=[tn.COT_TEN_PHONG, tn.COT_SUC_CHUA])
+            ss.tn_phong = pd.DataFrame(columns=[tn.COT_TEN_PHONG, tn.COT_SUC_CHUA, tn.COT_UU_TIEN])
+        _bp = ss.tn_phong.reindex(columns=[tn.COT_TEN_PHONG, tn.COT_SUC_CHUA, tn.COT_UU_TIEN])
         ss.tn_phong = pd.DataFrame({  # kiểu cột ổn định cho bảng sửa (bảng rỗng / nạp lại từ bản lưu)
             tn.COT_TEN_PHONG: _bp[tn.COT_TEN_PHONG].map(lambda v: "" if _o_trong(v) else str(v)).astype(object),
             tn.COT_SUC_CHUA: pd.to_numeric(_bp[tn.COT_SUC_CHUA], errors="coerce").astype("float64"),
+            tn.COT_UU_TIEN: _bp[tn.COT_UU_TIEN].map(lambda v: tn.MUC_UU_TIEN[tn.muc_uu_tien(v)]).astype(object),
         })
         for gc in ss.pop("_tn_phong_ghi_chu", []):
             (st.success if gc.startswith("✅") else st.warning if gc.startswith("⚠️") else st.caption)(gc)
@@ -2208,6 +2213,10 @@ def module_thi_tot_nghiep():
                 tn.COT_TEN_PHONG: st.column_config.TextColumn(required=True),
                 tn.COT_SUC_CHUA: st.column_config.NumberColumn(min_value=1, max_value=200, step=1, format="%d",
                                                                required=True),
+                tn.COT_UU_TIEN: st.column_config.SelectboxColumn(
+                    options=tn.MUC_UU_TIEN, default="Bình thường",
+                    help="Cao: dùng trước, xếp KÍN chỗ. Bình thường: chia đều. Thấp: chỉ dùng khi thiếu chỗ, xếp "
+                         "ít (có thể bỏ trống). Áp dụng cho cả môn tự chọn và Toán – Văn."),
             },
         )
         ds_phong = tn.phong_tu_bang(ss.tn_phong)
@@ -2267,6 +2276,7 @@ def _the_tu_chon(ds_phong, sbd_chung):
                    "App chỉ ghép khi nhờ đó dùng ít phòng hơn hoặc ít môn mỗi ca hơn.")
     _tham_so = dict(suc_chua=int(ss.tn_suc_chua), tien_to_sbd=str(ss.tn_tien_to or "").strip(),
                     so_bat_dau=int(ss.tn_so_bat_dau), phong_thi=ds_phong, gioi_han_giay=12,
+                    uu_tien_phong=tn.uu_tien_tu_bang(ss.tn_phong) or None,
                     uu_tien=UU_TIEN_TC[ss.tn_uu_tien_mon], max_mon2=int(ss.tn_max_mon2),
                     max_mon_ca=int(ss.tn_max_mon_ca), max_cung_lop=int(ss.tn_max_cung_lop),
                     si_so_toi_thieu=int(ss.tn_si_so_min),

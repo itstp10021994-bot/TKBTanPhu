@@ -119,6 +119,36 @@ def doc_danh_sach(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
 
 
 COT_TEN_PHONG, COT_SUC_CHUA = "Tên phòng", "Sức chứa"
+COT_UU_TIEN = "Ưu tiên"   # Cao / Bình thường / Thấp: phòng ưu tiên cao dùng trước, xếp đông; thấp xếp ít / không dùng
+MUC_UU_TIEN = ["Cao", "Bình thường", "Thấp"]
+
+
+def muc_uu_tien(v) -> int:
+    """'Cao'/1 -> 0, 'Thấp'/3 -> 2, còn lại (trống, 'Bình thường', 2) -> 1."""
+    k = khoa(str(v)) if not _o_trong(v) else ""
+    if k in ("cao", "1", "10", "uutien", "uutiencao") or k.startswith("cao"):
+        return 0
+    if k in ("thap", "3", "30") or k.startswith("thap"):
+        return 2
+    return 1
+
+
+def chia_si_so(phong: list[tuple[int, int]], n: int) -> list[int]:
+    """phong: [(sức chứa, mức ưu tiên 0/1/2)] -> sĩ số từng phòng. Mức ưu tiên cao xếp KÍN trước; trong cùng
+    1 mức chia đều (phòng nhỏ tính trước, không vượt sức chứa); mức thấp chỉ nhận phần còn lại (có thể 0)."""
+    si_so, con = [0] * len(phong), int(n)
+    for muc in sorted({m for _, m in phong}):
+        nhom = [j for j, (_, m) in enumerate(phong) if m == muc]
+        if con >= sum(phong[j][0] for j in nhom):
+            for j in nhom:
+                si_so[j] = phong[j][0]
+            con -= sum(phong[j][0] for j in nhom)
+            continue
+        for k, j in enumerate(sorted(nhom, key=lambda j: (phong[j][0], j))):
+            si_so[j] = min(phong[j][0], -(-con // (len(nhom) - k)))
+            con -= si_so[j]
+        con = 0
+    return si_so
 
 
 def doc_danh_sach_phong(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
@@ -138,9 +168,11 @@ def doc_danh_sach_phong(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     c_ten = _tim_cot([c for c in cot if c != c_so], mau_ten)
     if not c_ten or not c_so:
         raise ValueError("Không tìm thấy cột 'Tên phòng' và cột 'Sức chứa' (hoặc 'Số lượng') trong file.")
+    c_ut = _tim_cot([c for c in cot if c not in (c_so, c_ten)], ["uutien", "mucuutien", "thutu"])
     ra = pd.DataFrame({
         COT_TEN_PHONG: df[c_ten].map(lambda v: "" if _o_trong(v) else " ".join(str(v).split())),
         COT_SUC_CHUA: pd.to_numeric(df[c_so], errors="coerce"),
+        COT_UU_TIEN: (df[c_ut].map(lambda v: MUC_UU_TIEN[muc_uu_tien(v)]) if c_ut else MUC_UU_TIEN[1]),
     })
     ra = ra[ra[COT_TEN_PHONG] != ""]
     loi = ra[ra[COT_SUC_CHUA].isna() | (ra[COT_SUC_CHUA] <= 0)]
@@ -150,6 +182,21 @@ def doc_danh_sach_phong(df: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
     if len(loi):
         ghi_chu.append(f"⚠️ Bỏ {len(loi)} phòng không có sức chứa hợp lệ: {', '.join(loi[COT_TEN_PHONG])}.")
     return ra.reset_index(drop=True), ghi_chu
+
+
+def uu_tien_tu_bang(df: pd.DataFrame | None) -> dict:
+    """Bảng phòng -> {tên phòng: mức ưu tiên 0/1/2} (thiếu cột -> rỗng = mọi phòng bình thường)."""
+    if df is None or df.empty or COT_UU_TIEN not in df.columns:
+        return {}
+    return {" ".join(str(r[COT_TEN_PHONG]).split()): muc_uu_tien(r[COT_UU_TIEN])
+            for _, r in df.iterrows() if not _o_trong(r.get(COT_TEN_PHONG))}
+
+
+def _sap_uu_tien(phong_thi, uu_tien_phong):
+    """Danh sách phòng xếp lại: ưu tiên cao trước (giữ thứ tự trong cùng mức)."""
+    if not phong_thi or not uu_tien_phong:
+        return list(phong_thi or [])
+    return sorted(phong_thi, key=lambda p: uu_tien_phong.get(p[0], 1))
 
 
 def phong_tu_bang(df: pd.DataFrame | None) -> list[tuple[str, int]]:
@@ -189,7 +236,8 @@ KHONG_KHA_THI = "INFEASIBLE"   # bộ giải chứng minh không có lời giả
 def _toi_uu_theo_phong(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_chua: int, co_ds_phong: bool,
                        gioi_han_giay: float = 10.0, uu_tien: str = UU_TIEN_PHONG, max_mon2: int = 2,
                        max_mon1: int = 1, huong: dict | None = None, khong_tach_cap: bool = False,
-                       max_mon_ca: int = 0, max_cung_lop: int = 0, si_so_min: int = 0):
+                       max_mon_ca: int = 0, max_cung_lop: int = 0, si_so_min: int = 0,
+                       uu_tien_phong: dict | None = None):
     """Xếp đến TỪNG PHÒNG bằng OR-Tools CP-SAT. Mỗi phòng thuộc 1 "mẫu" (môn thi số 1 ⊆ A, môn thi số 2 ⊆ S):
     |A| <= max_mon1, |S| <= max_mon2. Chọn môn thi số 1 của từng em (hoặc theo `huong` = {frozenset(cặp): môn 1}
     cố định) và số phòng mỗi mẫu/sức chứa, ưu tiên (giảm dần):
@@ -238,9 +286,10 @@ def _toi_uu_theo_phong(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_ch
     n = len(hs)
     them = -(-n // suc_chua) + len(mon)
     kho = list(phong_ds) + [(None, suc_chua)] * them
-    loai = defaultdict(list)
+    loai = defaultdict(list)   # (sức chứa, tự thêm?, mức ưu tiên) -> chỉ số phòng
+    uu = uu_tien_phong or {}
     for r, (t, c) in enumerate(kho):
-        loai[(c, t is None)].append(r)
+        loai[(c, t is None, 2 if t is None else uu.get(t, 1))].append(r)
 
     m = cp_model.CpModel()
     y = {}
@@ -277,7 +326,7 @@ def _toi_uu_theo_phong(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_ch
     fc = {}   # (cặp, môn 1, lớp, mẫu) -> số HS
     cung_lop = 0   # số em cùng lớp nhiều nhất trong 1 phòng (cực tiểu sau các mục tiêu chính)
     if True:
-        L = int(max_cung_lop) if max_cung_lop and int(max_cung_lop) > 0 else max(c for c, _ in loai)
+        L = int(max_cung_lop) if max_cung_lop and int(max_cung_lop) > 0 else max(k[0] for k in loai)
         lop_cap = {p: Counter(h["lop"] for h in ds) for p, ds in cap.items()}
         lop_don = {a: Counter(h["lop"] for h in ds) for a, ds in don.items()}
         theo_lop = defaultdict(list)   # (mẫu, lớp) -> biến
@@ -339,8 +388,9 @@ def _toi_uu_theo_phong(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_ch
     m.Add(mon_ca_max >= sum(co2))
     if max_mon_ca and int(max_mon_ca) > 0:   # ràng buộc cứng: mỗi ca tối đa N môn
         m.Add(mon_ca_max <= int(max_mon_ca))
-    bac = ([so_phong, tach, mon_ca_max, cung_lop, ghep, hs_lech, cho] if uu_tien == UU_TIEN_PHONG
-           else [tach, mon_ca_max, hs_lech, so_phong, cung_lop, ghep, cho])
+    phong_uu = sum(k[2] * v for (i, k), v in r.items())   # dùng phòng ưu tiên cao trước
+    bac = ([so_phong, tach, mon_ca_max, cung_lop, ghep, hs_lech, phong_uu, cho] if uu_tien == UU_TIEN_PHONG
+           else [tach, mon_ca_max, hs_lech, so_phong, cung_lop, ghep, phong_uu, cho])
     if co_ds_phong:
         bac.insert(0, tu_them)
     bien = [v for v in y.values() if not isinstance(v, int) and hasattr(v, "Index")] + list(r.values())
@@ -414,9 +464,9 @@ def _toi_uu_theo_phong(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_ch
     phong, dung, mau_phong = [], set(), []
     for i, rs in phong_mau:
         ds = sorted(hs_mau[i], key=lambda h: (h["lop"], khoa_ten_vn(h["ten"])))
-        si_so, con_hs = {}, len(ds)
-        for j, rr in enumerate(sorted(rs, key=lambda rr: (kho[rr][1], rr))):   # chia đều, phòng nhỏ trước
-            si_so[rr] = min(kho[rr][1], -(-con_hs // (len(rs) - j))); con_hs -= si_so[rr]
+        # chia đều trong cùng mức ưu tiên; phòng ưu tiên cao xếp kín trước
+        si_so = dict(zip(rs, chia_si_so([(kho[rr][1], 2 if kho[rr][0] is None else uu.get(kho[rr][0], 1))
+                                          for rr in rs], len(ds))))
         # XÁO TRỘN LỚP: chia lần lượt (vòng tròn) từng em, đã sắp theo lớp, vào các phòng cùng mẫu
         # -> mỗi lớp rải đều ra các phòng, không dồn 1 lớp vào 1 phòng (mọi phòng cùng mẫu đều đúng ràng buộc môn)
         rs = [rr for rr in rs if si_so[rr]]
@@ -429,6 +479,15 @@ def _toi_uu_theo_phong(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_ch
         for rr in rs:
             phong.append((kho[rr][0], kho[rr][1], noi[rr])); dung.add(rr); mau_phong.append(mau[i])
     phong = _tron_lop(phong, mau_phong, _k)
+    if uu:   # các phòng CÙNG sức chứa: phòng ưu tiên cao nhận nhóm đông hơn (chỉ đổi tên phòng, ràng buộc giữ nguyên)
+        theo_cho = defaultdict(list)
+        for j, (t, c, _) in enumerate(phong):
+            if t is not None:
+                theo_cho[c].append(j)
+        for c, js in theo_cho.items():
+            ten = sorted((phong[j][0] for j in js), key=lambda t: (uu.get(t, 1), [x for x, _ in phong_ds].index(t)))
+            for t, j in zip(ten, sorted(js, key=lambda j: (-len(phong[j][2]), j))):
+                phong[j] = (t, c, phong[j][2])
     phong_trong = [kho[i] for i in range(len(phong_ds)) if i not in dung]
     return phong, phong_trong, sum(1 for i in dung if kho[i][0] is None)
 
@@ -505,7 +564,8 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, ti
               so_bat_dau: int = 1, phong_thi: list[tuple[str, int]] | None = None, toi_uu: bool = True,
               gioi_han_giay: float = 10.0, sbd_cho: dict | None = None, uu_tien: str = UU_TIEN_MON,
               mon1_theo_cap: dict | None = None, ghep_mon1: bool = False, max_mon2: int = 2,
-              khong_tach_cap: bool = False, max_mon_ca: int = 0, max_cung_lop: int = 0) -> dict:
+              khong_tach_cap: bool = False, max_mon_ca: int = 0, max_cung_lop: int = 0,
+              uu_tien_phong: dict | None = None) -> dict:
     """uu_tien (khi tối ưu): "mon" = mỗi môn chỉ thi ở 1 lần (luôn là môn thi số 1 hoặc số 2) trước, rồi ít phòng;
     "phong" = ít phòng trước.
     mon1_theo_cap: {frozenset({môn a, môn b}): môn thi số 1} — phương án tự chọn (bỏ qua tối ưu tự động).
@@ -513,6 +573,7 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, ti
     khong_tach_cap: (tối ưu) mỗi cặp môn chỉ 1 hướng. phong_thi: [(tên phòng, sức chứa)] theo thứ tự dùng; None/rỗng -> tự tạo phòng 'Phòng 01'... sức chứa
     `suc_chua`. Thiếu chỗ thì tự thêm phòng. -> {"hoc_sinh", "phong", "thong_ke", "canh_bao", "phong_trong"}."""
     suc_chua = max(int(suc_chua), 1)
+    phong_thi = _sap_uu_tien(phong_thi, uu_tien_phong)
     hs, canh_bao = [], []
     for idx, r in df.iterrows():
         mon = tach_mon(r.get(COT_MON))
@@ -551,7 +612,7 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, ti
         def _giai(mmc, mcl):
             return _toi_uu_theo_phong(hs, hang, list(phong_thi or []), suc_chua, bool(phong_thi), gioi_han_giay,
                                       uu_tien, max(int(max_mon2), 1), 2 if ghep_mon1 else 1, huong,
-                                      khong_tach_cap, mmc, mcl, smin[0])
+                                      khong_tach_cap, mmc, mcl, smin[0], uu_tien_phong)
         kq_tu = _giai(max_mon_ca, max_cung_lop)
         if kq_tu == KHONG_KHA_THI and smin[0]:   # sĩ số tối thiểu quá chặt với các ràng buộc khác
             smin[0] = 0
@@ -754,11 +815,13 @@ def sbd_theo_abc(df: pd.DataFrame, tien_to_sbd: str = "", so_bat_dau: int = 1) -
 
 def xep_phong_abc(df: pd.DataFrame, suc_chua: int = 24, tien_to_sbd: str = "", so_bat_dau: int = 1,
                   phong_thi: list[tuple[str, int]] | None = None, chia_deu: bool = False,
-                  sbd_cho: dict | None = None) -> dict:
+                  sbd_cho: dict | None = None, uu_tien_phong: dict | None = None) -> dict:
     """Toán – Ngữ văn: toàn bộ học sinh theo vần ABC, lần lượt kín từng phòng (theo thứ tự danh sách phòng).
     chia_deu=True: chia sĩ số đều nhau — có danh sách phòng thì dùng hết các phòng đã nhập (phòng thưa nhất),
     không có thì dùng ít phòng nhất. sbd_cho: dùng SBD của phòng môn tự chọn (xếp theo thứ tự SBD)."""
     suc_chua = max(int(suc_chua), 1)
+    phong_thi = _sap_uu_tien(phong_thi, uu_tien_phong)
+    uu = uu_tien_phong or {}
     thu_tu = sap_abc(df)
     sbd = sbd_theo_abc(df, tien_to_sbd, so_bat_dau)
     if sbd_cho:   # dùng SBD của phòng môn tự chọn, xếp theo thứ tự SBD
@@ -779,11 +842,8 @@ def xep_phong_abc(df: pd.DataFrame, suc_chua: int = 24, tien_to_sbd: str = "", s
     if phong_thi and so_them:
         canh_bao.append(f"Tổng sức chứa các phòng đã nhập ÍT hơn số học sinh — đã tự thêm {so_them} phòng "
                         f"({suc_chua} chỗ/phòng). Bổ sung phòng vào danh sách.")
-    if chia_deu and phong:   # chia đều: mỗi phòng ~ n / số phòng, không vượt sức chứa (phòng nhỏ tính trước)
-        con, si_so = n, [0] * len(phong)
-        for k, j in enumerate(sorted(range(len(phong)), key=lambda j: (phong[j][1], j))):
-            si_so[j] = min(phong[j][1], -(-con // (len(phong) - k)))
-            con -= si_so[j]
+    if chia_deu and phong:   # chia đều trong cùng mức ưu tiên; phòng ưu tiên cao xếp kín trước
+        si_so = chia_si_so([(c, 2 if t is None else uu.get(t, 1)) for t, c in phong], n)
     else:
         si_so, con = [], n
         for _, c in phong:
@@ -795,6 +855,8 @@ def xep_phong_abc(df: pd.DataFrame, suc_chua: int = 24, tien_to_sbd: str = "", s
             t = f"Phòng thêm {dem:02d}" if phong_thi else f"Phòng {dem:02d}"
         nhom = thu_tu[vt:vt + k]; vt += k
         if not nhom:
+            if t in {x for x, _ in (phong_thi or [])}:
+                ds.append((t, c))   # phòng không dùng tới (VD ưu tiên thấp)
             continue
         ten_dau, ten_cuoi = (str(df.at[nhom[0], COT_TEN] or ""), str(df.at[nhom[-1], COT_TEN] or ""))
         dong_phong.append({"Phòng": t, "Sức chứa": c, "Sĩ số": len(nhom), "Còn trống": c - len(nhom),
