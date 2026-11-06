@@ -56,7 +56,7 @@ GIA_TRI_CAU_HINH = [
     "ct_period_spread", "ct_room_capacity", "ct_order_group", "ct_dept_free_session", "ct_no_gap",
     "ct_class_compact", "nguon_hs_nam_hoc",
     "tn_suc_chua", "tn_si_so_min", "tn_tien_to", "tn_so_bat_dau", "tn_ten_phong", "tn_toi_uu",
-    "tn_sbd_chung", "tn_chia_deu", "tn_uu_tien_mon", "tn_cach_ca1", "tn_ca1_cap", "tn_ghep_mon1", "tn_max_mon2", "tn_max_mon_ca", "tn_max_cung_lop",
+    "tn_sbd_chung", "tn_chia_deu", "tn_uu_tien_mon", "tn_cach_ca1", "tn_ca1_cap", "tn_ghep_mon1", "tn_max_mon2", "tn_max_mon_ca", "tn_max_cung_lop", "tn_ten_truong", "tn_ten_ky_thi",
 ]
 
 
