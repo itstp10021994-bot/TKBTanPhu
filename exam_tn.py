@@ -187,15 +187,17 @@ UU_TIEN_MON, UU_TIEN_PHONG = "mon", "phong"
 def _toi_uu_theo_phong(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_chua: int, co_ds_phong: bool,
                        gioi_han_giay: float = 10.0, uu_tien: str = UU_TIEN_PHONG, max_mon2: int = 2,
                        max_mon1: int = 1, huong: dict | None = None, khong_tach_cap: bool = False,
-                       max_mon_ca: int = 0):
+                       max_mon_ca: int = 0, max_cung_lop: int = 0):
     """Xếp đến TỪNG PHÒNG bằng OR-Tools CP-SAT. Mỗi phòng thuộc 1 "mẫu" (môn thi số 1 ⊆ A, môn thi số 2 ⊆ S):
     |A| <= max_mon1, |S| <= max_mon2. Chọn môn thi số 1 của từng em (hoặc theo `huong` = {frozenset(cặp): môn 1}
     cố định) và số phòng mỗi mẫu/sức chứa, ưu tiên (giảm dần):
-      "phong": [tự thêm phòng] → ít phòng → ít môn thi cả 2 lần → ít môn ở ca đông môn hơn → ít phòng ghép
-               2 môn 1 → ít HS lệch → ít chỗ trống
+      "phong": [tự thêm phòng] → ít phòng → ít môn thi cả 2 lần → ít môn ở ca đông môn hơn → trộn lớp
+               → ít phòng ghép 2 môn 1 → ít HS lệch → ít chỗ trống
       "mon":   [tự thêm phòng] → ít môn thi cả 2 lần → ít môn ở ca đông môn hơn → ít HS lệch → ít phòng
                → ít phòng ghép → ít chỗ trống
     khong_tach_cap=True: cả cặp môn cùng 1 hướng (để điền được vào bảng tự chọn).
+    Trộn lớp: cực tiểu số em CÙNG LỚP nhiều nhất trong 1 phòng (sau số phòng / số môn mỗi ca);
+    max_cung_lop > 0: thêm ràng buộc cứng mỗi phòng tối đa chừng ấy em cùng lớp.
     -> ([(tên | None, sức chứa, [hs])], phòng danh sách không dùng, số phòng tự thêm) | None. Gán h["mon1"], h["mon2"]."""
     from itertools import combinations
     from ortools.sat.python import cp_model
@@ -205,7 +207,8 @@ def _toi_uu_theo_phong(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_ch
     nhom = defaultdict(list)
     for h in hs:
         nhom[_k(h)].append(h)
-    cap = {k: sorted(v, key=lambda h: (h["lop"], khoa(h["ten"]))) for k, v in nhom.items() if len(k) == 2}
+    # theo vần ABC (không theo lớp) -> khi 1 cặp môn chia 2 hướng / nhiều mẫu phòng, các lớp được trộn đều
+    cap = {k: sorted(v, key=lambda h: (khoa_ten_vn(h["ten"]), h["lop"])) for k, v in nhom.items() if len(k) == 2}
     don = {k[0]: v for k, v in nhom.items() if len(k) == 1}
     mon = sorted({m for h in hs for m in h["mon"]}, key=lambda m: hang[m])
     huong = huong or {}
@@ -269,6 +272,42 @@ def _toi_uu_theo_phong(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_ch
     for a, ds in don.items():
         m.Add(sum(v for _, v in g[a]) == len(ds))
     r = {(i, k): m.NewIntVar(0, len(rs), "") for i in range(len(mau)) for k, rs in loai.items()}
+    fc = {}   # (cặp, môn 1, lớp, mẫu) -> số HS
+    cung_lop = 0   # số em cùng lớp nhiều nhất trong 1 phòng (cực tiểu sau các mục tiêu chính)
+    if True:
+        L = int(max_cung_lop) if max_cung_lop and int(max_cung_lop) > 0 else max(c for c, _ in loai)
+        lop_cap = {p: Counter(h["lop"] for h in ds) for p, ds in cap.items()}
+        lop_don = {a: Counter(h["lop"] for h in ds) for a, ds in don.items()}
+        theo_lop = defaultdict(list)   # (mẫu, lớp) -> biến
+        for p in cap:
+            for x in p:
+                for i, v in f[(p, x)]:
+                    vs = []
+                    for c, sl in lop_cap[p].items():
+                        fc[(p, x, c, i)] = w = m.NewIntVar(0, sl, "")
+                        vs.append(w); theo_lop[(i, c)].append(w)
+                    m.Add(sum(vs) == v)
+            for c, sl in lop_cap[p].items():
+                m.Add(sum(w for (pp, _, cc, _), w in fc.items() if pp == p and cc == c) == sl)
+        for a in don:
+            for i, v in g[a]:
+                vs = []
+                for c, sl in lop_don[a].items():
+                    fc[(a, a, c, i)] = w = m.NewIntVar(0, sl, "")
+                    vs.append(w); theo_lop[(i, c)].append(w)
+                m.Add(sum(vs) == v)
+            for c, sl in lop_don[a].items():
+                m.Add(sum(w for (pp, _, cc, _), w in fc.items() if pp == a and cc == c) == sl)
+        # mỗi phòng của mẫu i có tối đa cung_lop em lớp c:  Σ(lớp c vào mẫu i) <= cung_lop × số phòng mẫu i
+        cung_lop = m.NewIntVar(1, L, "")
+        tong_phong = sum(len(rs) for rs in loai.values())
+        for i in sorted({i for (i, _) in theo_lop}):
+            so_i = m.NewIntVar(0, tong_phong, "")
+            m.Add(so_i == sum(r[(i, k)] for k in loai))
+            tran = m.NewIntVar(0, L * tong_phong, "")
+            m.AddMultiplicationEquality(tran, [cung_lop, so_i])
+            for c in sorted({c for (ii, c) in theo_lop if ii == i}):
+                m.Add(sum(theo_lop[(i, c)]) <= tran)
     for i in range(len(mau)):
         m.Add(sum(vao[i]) <= sum(k[0] * r[(i, k)] for k in loai))
     for k, rs in loai.items():
@@ -296,8 +335,8 @@ def _toi_uu_theo_phong(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_ch
     m.Add(mon_ca_max >= sum(co2))
     if max_mon_ca and int(max_mon_ca) > 0:   # ràng buộc cứng: mỗi ca tối đa N môn
         m.Add(mon_ca_max <= int(max_mon_ca))
-    bac = ([so_phong, tach, mon_ca_max, ghep, hs_lech, cho] if uu_tien == UU_TIEN_PHONG
-           else [tach, mon_ca_max, hs_lech, so_phong, ghep, cho])
+    bac = ([so_phong, tach, mon_ca_max, cung_lop, ghep, hs_lech, cho] if uu_tien == UU_TIEN_PHONG
+           else [tach, mon_ca_max, hs_lech, so_phong, cung_lop, ghep, cho])
     if co_ds_phong:
         bac.insert(0, tu_them)
     bien = [v for v in y.values() if not isinstance(v, int) and hasattr(v, "Index")] + list(r.values())
@@ -323,7 +362,20 @@ def _toi_uu_theo_phong(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_ch
 
     # gán môn thi số 1 và mẫu phòng cho từng học sinh
     hs_mau = defaultdict(list)
-    for p, ds in cap.items():
+    if fc:   # có giới hạn số em cùng lớp: chia theo từng lớp
+        for p, ds in list(cap.items()) + [((a,), ds) for a, ds in don.items()]:
+            khoa_p = p if len(p) == 2 else p[0]
+            for c in sorted({h["lop"] for h in ds}):
+                con = [h for h in ds if h["lop"] == c]
+                for x in (p if len(p) == 2 else (p[0],)):
+                    for (pp, xx, cc, i), w in fc.items():
+                        if pp == khoa_p and xx == x and cc == c:
+                            so = giai.Value(w)
+                            for h in con[:so]:
+                                h["mon1"] = x
+                                h["mon2"] = " + ".join(t for t in sorted(h["mon"], key=lambda t: hang[t]) if t != x)
+                            hs_mau[i] += con[:so]; con = con[so:]
+    for p, ds in ([] if fc else cap.items()):
         k1 = gt(y[p])
         for x, phan in ((p[0], ds[:k1]), (p[1], ds[k1:])):
             vt = 0
@@ -333,7 +385,7 @@ def _toi_uu_theo_phong(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_ch
             for h in phan:
                 h["mon1"] = x
                 h["mon2"] = " + ".join(t for t in sorted(h["mon"], key=lambda t: hang[t]) if t != x)
-    for a, ds in don.items():
+    for a, ds in ([] if fc else don.items()):
         vt = 0
         for i, v in g[a]:
             so = giai.Value(v)
@@ -348,27 +400,100 @@ def _toi_uu_theo_phong(hs: list[dict], hang: dict, phong_ds: list[tuple], suc_ch
             rs += con[k][:so]; con[k] = con[k][so:]
         if rs and hs_mau[i]:
             phong_mau.append((i, sorted(rs)))
-    phong, dung = [], set()
+    phong, dung, mau_phong = [], set(), []
     for i, rs in phong_mau:
-        ds = sorted(hs_mau[i], key=lambda h: (hang[h["mon1"]], [hang[t] for t in h["mon"] if t != h["mon1"]],
-                                               h["lop"], khoa(h["ten"])))
+        ds = sorted(hs_mau[i], key=lambda h: (h["lop"], khoa_ten_vn(h["ten"])))
         si_so, con_hs = {}, len(ds)
         for j, rr in enumerate(sorted(rs, key=lambda rr: (kho[rr][1], rr))):   # chia đều, phòng nhỏ trước
             si_so[rr] = min(kho[rr][1], -(-con_hs // (len(rs) - j))); con_hs -= si_so[rr]
-        vt = 0
+        # XÁO TRỘN LỚP: chia lần lượt (vòng tròn) từng em, đã sắp theo lớp, vào các phòng cùng mẫu
+        # -> mỗi lớp rải đều ra các phòng, không dồn 1 lớp vào 1 phòng (mọi phòng cùng mẫu đều đúng ràng buộc môn)
+        rs = [rr for rr in rs if si_so[rr]]
+        noi = {rr: [] for rr in rs}
+        j = 0
+        for h in ds:
+            while len(noi[rs[j % len(rs)]]) >= si_so[rs[j % len(rs)]]:
+                j += 1
+            noi[rs[j % len(rs)]].append(h); j += 1
         for rr in rs:
-            if si_so[rr]:
-                phong.append((kho[rr][0], kho[rr][1], ds[vt:vt + si_so[rr]])); dung.add(rr)
-            vt += si_so[rr]
+            phong.append((kho[rr][0], kho[rr][1], noi[rr])); dung.add(rr); mau_phong.append(mau[i])
+    phong = _tron_lop(phong, mau_phong, _k)
     phong_trong = [kho[i] for i in range(len(phong_ds)) if i not in dung]
     return phong, phong_trong, sum(1 for i in dung if kho[i][0] is None)
+
+
+def _tron_lop(phong: list, mau_phong: list, _k) -> list:
+    """Đổi chỗ học sinh giữa các phòng (giữ nguyên sĩ số và ràng buộc môn của từng phòng) để học sinh MỘT LỚP
+    không dồn vào 1 phòng: cực tiểu số em cùng lớp nhiều nhất trong 1 phòng, rồi rải đều (tổng bình phương)."""
+    from ortools.sat.python import cp_model
+
+    nhom = defaultdict(list)   # (lớp, môn 1, môn còn lại) -> HS
+    for _, _, ds in phong:
+        for h in ds:
+            khac = tuple(t for t in _k(h) if t != h["mon1"])
+            nhom[(h["lop"], h["mon1"], khac)].append(h)
+    m = cp_model.CpModel()
+    x = {}
+    for g, ds in nhom.items():
+        for r, (A, S) in enumerate(mau_phong):
+            if g[1] in A and all(t in S for t in g[2]):
+                x[(g, r)] = m.NewIntVar(0, min(len(ds), phong[r][1]), "")
+        m.Add(sum(v for (gg, _), v in x.items() if gg == g) == len(ds))
+    for r, (_, _, ds) in enumerate(phong):
+        m.Add(sum(v for (_, rr), v in x.items() if rr == r) == len(ds))
+    lop = sorted({g[0] for g in nhom})
+    dem = {}
+    for c in lop:
+        for r in range(len(phong)):
+            vs = [v for (g, rr), v in x.items() if rr == r and g[0] == c]
+            if vs:
+                d = m.NewIntVar(0, len(phong[r][2]), "")
+                m.Add(d == sum(vs)); dem[(c, r)] = d
+    cao = m.NewIntVar(0, max(len(p[2]) for p in phong), "")
+    for d in dem.values():
+        m.Add(cao >= d)
+    # rải đều: phạt phần vượt "mức chia đều" của mỗi lớp trong từng nhóm phòng cùng môn thi số 1
+    vuot = []
+    tong_lop = Counter((g[0], g[1]) for g, ds in nhom.items() for _ in ds)
+    so_phong_mon1 = Counter(a for A, _ in mau_phong for a in A)
+    for (c, r), d in dem.items():
+        muc = max(-(-tong_lop[(c, a)] // so_phong_mon1[a]) for a in mau_phong[r][0] if (c, a) in tong_lop) \
+            if any((c, a) in tong_lop for a in mau_phong[r][0]) else 0
+        e = m.NewIntVar(0, len(phong[r][2]), "")
+        m.Add(e >= d - muc); vuot.append(e)
+    for (g, r), v in x.items():   # gợi ý: cách chia hiện tại
+        m.AddHint(v, sum(1 for h in phong[r][2] if (h["lop"], h["mon1"], tuple(t for t in _k(h) if t != h["mon1"])) == g))
+    giai = None
+    for muc_tieu in (cao, sum(vuot)):
+        m.Minimize(muc_tieu)
+        sv = cp_model.CpSolver()
+        sv.parameters.num_workers = 1
+        sv.parameters.random_seed = 2026
+        sv.parameters.max_deterministic_time = 2.0
+        if sv.Solve(m) not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            break
+        giai = sv
+        m.ClearHints()
+        for v in x.values():
+            m.AddHint(v, sv.Value(v))
+        m.Add(muc_tieu <= int(round(sv.ObjectiveValue())))
+    if giai is None:
+        return phong
+    moi = [[] for _ in phong]
+    for g, ds in nhom.items():
+        ds = sorted(ds, key=lambda h: khoa_ten_vn(h["ten"]))
+        vt = 0
+        for r in range(len(phong)):
+            so = giai.Value(x[(g, r)]) if (g, r) in x else 0
+            moi[r] += ds[vt:vt + so]; vt += so
+    return [(t, c, moi[r]) for r, (t, c, _) in enumerate(phong)]
 
 
 def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, tien_to_sbd: str = "",
               so_bat_dau: int = 1, phong_thi: list[tuple[str, int]] | None = None, toi_uu: bool = True,
               gioi_han_giay: float = 10.0, sbd_cho: dict | None = None, uu_tien: str = UU_TIEN_MON,
               mon1_theo_cap: dict | None = None, ghep_mon1: bool = False, max_mon2: int = 2,
-              khong_tach_cap: bool = False, max_mon_ca: int = 0) -> dict:
+              khong_tach_cap: bool = False, max_mon_ca: int = 0, max_cung_lop: int = 0) -> dict:
     """uu_tien (khi tối ưu): "mon" = mỗi môn chỉ thi ở 1 lần (luôn là môn thi số 1 hoặc số 2) trước, rồi ít phòng;
     "phong" = ít phòng trước.
     mon1_theo_cap: {frozenset({môn a, môn b}): môn thi số 1} — phương án tự chọn (bỏ qua tối ưu tự động).
@@ -409,13 +534,19 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, ti
     if hs:   # tắt tối ưu: môn đông hơn là môn thi số 1, nhưng vẫn xếp phòng theo đúng các ràng buộc
         huong = mon1_theo_cap or (None if toi_uu else
                                   {frozenset(h["mon"]): h["mon1"] for h in hs if len(h["mon"]) == 2})
-        kq_tu = _toi_uu_theo_phong(hs, hang, list(phong_thi or []), suc_chua, bool(phong_thi), gioi_han_giay,
-                                   uu_tien, max(int(max_mon2), 1), 2 if ghep_mon1 else 1, huong,
-                                   khong_tach_cap, max_mon_ca)
+        def _giai(mmc, mcl):
+            return _toi_uu_theo_phong(hs, hang, list(phong_thi or []), suc_chua, bool(phong_thi), gioi_han_giay,
+                                      uu_tien, max(int(max_mon2), 1), 2 if ghep_mon1 else 1, huong,
+                                      khong_tach_cap, mmc, mcl)
+        kq_tu = _giai(max_mon_ca, max_cung_lop)
+        if kq_tu is None and max_cung_lop:   # giới hạn số em cùng lớp quá chặt
+            kq_tu = _giai(max_mon_ca, 0)
+            if kq_tu is not None:
+                canh_bao.append(f"Không xếp được với giới hạn tối đa {int(max_cung_lop)} em cùng lớp / phòng (cùng "
+                                "các ràng buộc môn) — đã bỏ giới hạn này, app vẫn trộn lớp nhiều nhất có thể. "
+                                "Hãy tăng giới hạn hoặc cho thêm phòng.")
         if kq_tu is None and max_mon_ca:   # giới hạn môn/ca quá chặt: giải lại không giới hạn
-            kq_tu = _toi_uu_theo_phong(hs, hang, list(phong_thi or []), suc_chua, bool(phong_thi), gioi_han_giay,
-                                       uu_tien, max(int(max_mon2), 1), 2 if ghep_mon1 else 1, huong,
-                                       khong_tach_cap, 0)
+            kq_tu = _giai(0, 0)
             if kq_tu is not None:
                 canh_bao.append(f"Không xếp được với giới hạn mỗi ca tối đa {int(max_mon_ca)} môn — đã xếp với số "
                                 "môn mỗi ca ít nhất có thể (xem dòng Ca 1 / Ca 2).")
@@ -506,11 +637,15 @@ def xep_phong(df: pd.DataFrame, suc_chua: int = 24, si_so_toi_thieu: int = 0, ti
             "Môn 2": ", ".join(sorted({t for h in p for t in h["mon2"].split(" + ") if t}, key=lambda t: hang[t])),
             "Cặp môn (môn 1 – môn 2: số HS)": "; ".join(f"{a} – {b}: {n}" for (a, b), n in cap_p.most_common()),
             "Loại phòng": loai,
+            "Số lớp": len({h["lop"] for h in p}),
+            "Nhiều nhất 1 lớp": "{1} em ({0})".format(*Counter(h["lop"] for h in p).most_common(1)[0]) if p else "",
             "SBD": (f"{tien_to_sbd}{str(so).zfill(rong)} → {tien_to_sbd}{str(so + len(p) - 1).zfill(rong)}"
                     if not sbd_cho else "SBD chung (theo vần ABC)"),
         })
         if sbd_cho:   # SBD chung cả kỳ thi: trong phòng xếp theo SBD
             p = sorted(p, key=lambda h: sbd_cho.get(h["idx"], ""))
+        else:   # trong phòng xếp theo vần ABC -> các lớp ngồi xen kẽ
+            p = sorted(p, key=lambda h: (khoa_ten_vn(h["ten"]), h["lop"]))
         for stt, h in enumerate(p, start=1):
             dong_hs.append({"SBD": sbd_cho.get(h["idx"], "") if sbd_cho else f"{tien_to_sbd}{str(so).zfill(rong)}",
                             "Phòng": tp, "STT trong phòng": stt,
