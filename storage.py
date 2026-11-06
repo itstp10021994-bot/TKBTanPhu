@@ -431,18 +431,49 @@ class DongBoList:
                 "— SharePoint chưa nhận đủ dữ liệu.")
 
     # ---- Bản công bố lưu trong 1 List: cột Tiêu đề + cột "NoiDung" (Nhiều dòng văn bản) ----
-    def _list_cong_bo(self):
+    HUONG_DAN_TAO_CONG_BO = (
+        "tạo List '{ten}' trên SharePoint với 1 cột tên 'NoiDung' kiểu Nhiều dòng văn bản "
+        "(văn bản thuần, TẮT định dạng văn bản đa dạng thức)")
+
+    def _tao_list(self, ten: str):
+        """Tạo List trống (mẫu Danh sách tuỳ chỉnh). Lớp con ghi đè."""
+        raise LoiLuuTru("kết nối này không tạo được List")
+
+    def _tao_cot_nhieu_dong(self, ref, ten_hien_thi: str):
+        """Tạo cột Nhiều dòng văn bản thuần. Lớp con ghi đè."""
+        raise LoiLuuTru("kết nối này không tạo được cột Nhiều dòng văn bản")
+
+    def _list_cong_bo(self, tao_neu_thieu: bool = True):
+        """List chứa bản công bố / bản nháp. Chưa có List / cột 'NoiDung' thì app TỰ TẠO
+        (cần flow có bước 5b hoặc Graph có quyền Sites.Manage.All). tao_neu_thieu=False + chưa có List -> None."""
         ten = self.ten_list("cong_bo")
         ref = self._tim_list(ten)
         if ref is None:
-            raise LoiLuuTru(
-                f"Chưa có List '{ten}' để lưu bản công bố — tạo List này với 1 cột tên 'NoiDung' "
-                "kiểu Nhiều dòng văn bản (văn bản thuần, TẮT định dạng văn bản đa dạng thức)."
-            )
-        cot = next((c for c in self._cot_list(ref) if khoa_cot(c["displayName"]) == "noidung"
-                    or khoa_cot(c["name"]) == "noidung"), None)
+            if not tao_neu_thieu:
+                return None
+            try:
+                self._tao_list(ten)
+            except (LoiLuuTru, requests.RequestException) as e:
+                raise LoiLuuTru(f"Chưa có List '{ten}' và app không tự tạo được ({e}) — hãy "
+                                + self.HUONG_DAN_TAO_CONG_BO.format(ten=ten) + ".")
+            ref = self._tim_list(ten)
+            if ref is None:
+                raise LoiLuuTru(f"Chưa có List '{ten}' (app đã thử tạo nhưng chưa thấy) — hãy "
+                                + self.HUONG_DAN_TAO_CONG_BO.format(ten=ten) + ".")
+        def _tim_cot():
+            return next((c for c in self._cot_list(ref) if khoa_cot(c["displayName"]) == "noidung"
+                         or khoa_cot(c["name"]) == "noidung"), None)
+        cot = _tim_cot()
         if cot is None:
-            raise LoiLuuTru(f"List '{ten}' chưa có cột 'NoiDung' (Nhiều dòng văn bản).")
+            try:
+                self._tao_cot_nhieu_dong(ref, "NoiDung")
+            except (LoiLuuTru, requests.RequestException) as e:
+                raise LoiLuuTru(f"List '{ten}' chưa có cột 'NoiDung' và app không tự tạo được ({e}) — thêm cột "
+                                "'NoiDung' kiểu Nhiều dòng văn bản (văn bản thuần).")
+            self._xoa_cache_cot(ref)
+            cot = _tim_cot()
+            if cot is None:
+                raise LoiLuuTru(f"List '{ten}' chưa có cột 'NoiDung' (Nhiều dòng văn bản, văn bản thuần).")
         return ten, ref, cot["name"]
 
     # Cùng 1 List chứa 2 loại bản: "cong_bo" (bản công bố cho giáo viên) và
@@ -480,8 +511,12 @@ class DongBoList:
         return f"List '{ten}' ({len(phan)} mục)"
 
     def tai_goi_list(self, loai: str = "cong_bo") -> dict | None:
-        """Lấy bản ĐẦY ĐỦ (đủ n/n phần) có mốc mới nhất của loại này."""
-        _, ref, cot = self._list_cong_bo()
+        """Lấy bản ĐẦY ĐỦ (đủ n/n phần) có mốc mới nhất của loại này.
+        Chưa có List -> None (chưa từng lưu: không có gì để ghi đè, lần lưu đầu app tự tạo List)."""
+        kq = self._list_cong_bo(tao_neu_thieu=False)
+        if kq is None:
+            return None
+        _, ref, cot = kq
         theo_moc: dict[str, dict] = {}
         for _, f in self._doc_items(ref):
             if not self._cua_loai(f.get("Title"), loai):
@@ -707,6 +742,22 @@ class GraphSharePoint(DongBoList):
         r = self._goi("POST", f"/sites/{self._site()}/lists/{list_id}/columns",
                       json={"name": ten_noi_bo, "displayName": ten_hien_thi,
                             ("number" if kieu == "so" else "text"): {}})
+        if r.status_code not in (200, 201):
+            raise LoiLuuTru(f"Graph trả lỗi {r.status_code} (cần quyền Sites.Manage.All): {r.text[:200]}")
+
+    def _tao_list(self, ten: str):
+        r = self._goi("POST", f"/sites/{self._site()}/lists",
+                      json={"displayName": ten, "list": {"template": "genericList"},
+                            "columns": [{"name": "NoiDung", "text": {"allowMultipleLines": True,
+                                                                     "textType": "plain"}}]})
+        if r.status_code not in (200, 201):
+            raise LoiLuuTru(f"Graph trả lỗi {r.status_code} (cần quyền Sites.Manage.All): {r.text[:200]}")
+        self._lists = None   # đọc lại danh sách List
+
+    def _tao_cot_nhieu_dong(self, list_id: str, ten_hien_thi: str):
+        r = self._goi("POST", f"/sites/{self._site()}/lists/{list_id}/columns",
+                      json={"name": ten_hien_thi, "displayName": ten_hien_thi,
+                            "text": {"allowMultipleLines": True, "textType": "plain"}})
         if r.status_code not in (200, 201):
             raise LoiLuuTru(f"Graph trả lỗi {r.status_code} (cần quyền Sites.Manage.All): {r.text[:200]}")
 
@@ -978,6 +1029,26 @@ class PowerAutomate(DongBoList):
         k = khoa_cot(ten_hien_thi)
         if not any(khoa_cot(c["displayName"]) == k for c in self._cot_list(ten)):
             raise LoiLuuTru(self.LOI_FLOW_CHUA_SUA_CAU_TRUC)
+
+    def _tao_list(self, ten: str):
+        """Flow chỉ gọi được _api/web/lists/getbytitle('<list>')/<duong_dan> -> đi qua 1 List ĐÃ CÓ của site:
+        getbytitle('<List có sẵn>')/ParentWeb/Lists  (= _api/web/lists) rồi POST để tạo List mới."""
+        neo = next((t for t in [self.ten_list(b) for b in LIST_MAC_DINH if b != "cong_bo"]
+                    if self._tim_list(t) is not None), None)
+        if neo is None:
+            raise LoiLuuTru("site chưa có List nào của app để làm điểm tựa tạo List mới")
+        self._gui_cau_truc(neo, "POST", "ParentWeb/Lists", {
+            "__metadata": {"type": "SP.List"}, "BaseTemplate": 100, "Title": ten,
+            "Description": "Bản lưu / bản công bố của ứng dụng TKB (app tự tạo)"})
+        self._cot_cache.pop(ten, None)
+        if self._tim_list(ten) is None:
+            raise LoiLuuTru(self.LOI_FLOW_CHUA_SUA_CAU_TRUC)
+
+    def _tao_cot_nhieu_dong(self, ten: str, ten_hien_thi: str):
+        self._gui_cau_truc(ten, "POST", "fields", {
+            "__metadata": {"type": "SP.FieldMultiLineText"}, "Title": ten_hien_thi, "FieldTypeKind": 3,
+            "RichText": False, "NumberOfLines": 6})
+        self._xoa_cache_cot(ten)
 
     def _doi_sang_chu(self, ten: str, cot: dict):
         self._gui_cau_truc(ten, "PATCH", f"fields/getbyinternalnameortitle('{cot['name']}')",

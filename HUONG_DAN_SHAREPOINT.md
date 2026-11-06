@@ -367,6 +367,11 @@ bản, tắt rich text). Nút **💾 Lưu cấu hình & dữ liệu** (bản nh�
 vào đó: file `BanNhap_TKB.json` hoặc các dòng `ban_nhap|...` trong List `TKB_CongBo`.
 Chi tiết trong `PHAN_QUYEN.md`.
 
+> **App tự tạo List `TKB_CongBo`**: nếu flow `sp_url` đã có **Bước 5b** (thao_tac `cau_truc`), lần
+> lưu đầu tiên app tự tạo List này kèm cột `NoiDung` (đi qua 1 List có sẵn của app, VD `LopHoc`:
+> `getbytitle('LopHoc')/ParentWeb/Lists`). Chưa có List thì app coi là *chưa có bản lưu* (không
+> tạm dừng tự động lưu). Flow chưa có Bước 5b thì tạo List bằng tay như trên.
+
 ## Lấy danh sách học sinh từ app tuyển sinh (List `data_nhaphoc`)
 
 Nếu danh sách học sinh đã có sẵn trong 1 List trên **site khác** (VD site của app tuyển sinh,
