@@ -87,6 +87,17 @@ a{ color:var(--chinh-d) !important; }
 
 /* ---------- Ô số liệu (như "Your Classes") ---------- */
 .o-so-lieu{ display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:14px; margin:0 0 18px 0; }
+.thanh-buoc{ display:flex; align-items:center; gap:0; margin:4px 0 14px 0; flex-wrap:wrap; }
+.thanh-buoc .buoc{ display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:16px; background:var(--card);
+  box-shadow:var(--shadow); min-width:170px; flex:1 1 170px; }
+.thanh-buoc .buoc .so{ width:34px; height:34px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-weight:900; flex:0 0 34px; background:var(--line); color:var(--text-2); }
+.thanh-buoc .buoc.xong .so{ background:var(--chinh); color:#fff; }
+.thanh-buoc .buoc .ten{ font-weight:800; font-size:.95rem; color:var(--text); }
+.thanh-buoc .buoc .mo-ta{ font-size:.78rem; color:var(--muted); line-height:1.25; }
+.thanh-buoc .buoc.xong{ border:1.5px solid var(--chinh-50); }
+.thanh-buoc .noi{ width:14px; height:3px; background:var(--line); flex:0 0 14px; }
+@media (max-width: 900px){ .thanh-buoc .noi{ display:none; } .thanh-buoc{ gap:8px; } }
 .chip-ca{ display:inline-block; margin:2px 8px 8px 0; padding:8px 14px; border-radius:999px; background:var(--card); box-shadow:var(--shadow); border-left:5px solid #2B9BF0; }
 .o-sl{ border-radius:20px; padding:16px 18px; background:var(--card); box-shadow:var(--shadow); position:relative; overflow:hidden; }
 .o-sl .bieu-tuong{ width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center;
@@ -798,7 +809,8 @@ def chuan_hoa_bang_gv(df: pd.DataFrame) -> pd.DataFrame:
     for c in COT_GIAO_VIEN:
         if c not in df.columns:
             df[c] = "user" if c == "Quyền" else ""
-    df["Quyền"] = df["Quyền"].apply(lambda v: "admin" if str(v).strip().lower() == "admin" else "user")
+    df["Quyền"] = df["Quyền"].apply(lambda v: str(v).strip().lower() if str(v).strip().lower() in auth.VAI_TRO
+                                    else "user")
     df["Email"] = df["Email"].apply(lambda v: "" if _o_trong(v) else str(v).strip().lower())
     return df[COT_GIAO_VIEN + [c for c in df.columns if c not in COT_GIAO_VIEN]]
 
@@ -814,7 +826,8 @@ def gv_theo_email(teachers_df: pd.DataFrame | None) -> dict[str, dict]:
         if email and ten:
             ket_qua[email] = {
                 "ten": ten,
-                "quyen": "admin" if str(r.get("Quyền", "")).strip().lower() == "admin" else "user",
+                "quyen": (str(r.get("Quyền", "")).strip().lower()
+                          if str(r.get("Quyền", "")).strip().lower() in auth.VAI_TRO else "user"),
                 "lop_cn": "" if _o_trong(r.get("Lớp chủ nhiệm")) else str(r["Lớp chủ nhiệm"]).strip(),
             }
     return ket_qua
@@ -1179,6 +1192,8 @@ if "substitutions" not in st.session_state:
 LOAI_BAN = {
     "cong_bo": {"file": Path(__file__).parent / "du_lieu" / "cong_bo.json", "ten_sp": "CongBo_TKB"},
     "ban_nhap": {"file": Path(__file__).parent / "du_lieu" / "ban_nhap.json", "ten_sp": "BanNhap_TKB"},
+    # tài khoản & phân quyền tạo trên app (mật khẩu chỉ lưu mã băm) — KHÔNG nằm trong bản công bố
+    "tai_khoan": {"file": Path(__file__).parent / "du_lieu" / "tai_khoan.json", "ten_sp": "TaiKhoan_TKB"},
 }
 FILE_CONG_BO = LOAI_BAN["cong_bo"]["file"]
 TEN_FILE_CONG_BO = LOAI_BAN["cong_bo"]["ten_sp"]
@@ -1389,13 +1404,19 @@ def luu_tam_cuc_bo(goi: dict):
 #            đã CÔNG BỐ.
 # Tài khoản khai báo trong Secrets ([auth.users.<tên>]) — xem auth.py.
 # =======================================================================
-TAI_KHOAN = auth.doc_tai_khoan(st.secrets)
+TAI_KHOAN_SECRETS = auth.doc_tai_khoan(st.secrets)
+_GOI_TAI_KHOAN = nap_ban("tai_khoan")
+# Không đọc được danh sách tài khoản trên SharePoint (và không có bản trên máy chủ): không cho SỬA danh sách
+# (tránh ghi đè). Muốn app luôn bắt đăng nhập kể cả khi SharePoint lỗi: thêm 1 admin dự phòng trong Secrets.
+TAI_KHOAN_LOI = _kho_ban()["tai_khoan"]["loi_nap"] if _GOI_TAI_KHOAN is None else ""
+TAI_KHOAN = {**auth.tai_khoan_tu_goi(_GOI_TAI_KHOAN), **TAI_KHOAN_SECRETS}   # trùng tên: Secrets thắng
+EMAIL_QUYEN = auth.email_quyen_tu_goi(_GOI_TAI_KHOAN)
 PHAN_QUYEN = auth.doc_phan_quyen(st.secrets)
 CAU_HINH_TEAMS = teams.doc_cau_hinh(st.secrets)
 DANG_NHAP_MS = auth.dang_nhap_microsoft_bat(st.secrets)
 DANG_NHAP_OTP = bool(PHAN_QUYEN["otp_url"])
 BAT_DANG_NHAP = bool(TAI_KHOAN) or DANG_NHAP_MS or DANG_NHAP_OTP
-TEN_VAI_TRO = {"admin": "Quản trị (admin)", "user": "Người dùng (user)"}
+TEN_VAI_TRO = auth.TEN_VAI_TRO
 
 
 def _gv_cong_bo_theo_email() -> dict[str, dict]:
@@ -1412,16 +1433,201 @@ def xac_dinh_vai_tro(email: str) -> str | None:
     Giáo viên đã công bố. user: email thuộc tên miền trường / user_emails, hoặc
     có trong cột Email của bảng Giáo viên đã công bố. Khác: None (từ chối)."""
     email = (email or "").strip().lower()
+    if email in EMAIL_QUYEN:   # phân quyền theo email tạo trên app (module 👥) — ưu tiên
+        return EMAIL_QUYEN[email]["vai_tro"]
     vai_tro = auth.vai_tro_theo_email(email, PHAN_QUYEN)
     gv = _gv_cong_bo_theo_email().get(email)
-    if gv and gv["quyen"] == "admin":
-        return "admin"
+    if gv and gv["quyen"] in auth.VAI_TRO_BIEN_TAP:   # cột Quyền trong bảng Giáo viên (admin / tkb / thi)
+        return gv["quyen"]
     return vai_tro or ("user" if gv else None)
 
 
 def _ten_hien_thi(email: str, mac_dinh: str) -> str:
+    if EMAIL_QUYEN.get((email or "").lower(), {}).get("ten"):
+        return EMAIL_QUYEN[(email or "").lower()]["ten"]
     gv = _gv_cong_bo_theo_email().get((email or "").lower())
     return gv["ten"] if gv else mac_dinh
+
+# ---------------------------------------------------------------------
+# QUẢN LÝ TÀI KHOẢN & PHÂN QUYỀN NGAY TRÊN APP (module 👥, chỉ admin)
+# Lưu ở bản 'tai_khoan' (SharePoint + máy chủ), mật khẩu chỉ lưu mã băm PBKDF2.
+# ---------------------------------------------------------------------
+def _con_duong_admin(ds_tk: list[dict], ds_email: list[dict]) -> bool:
+    """Sau khi đổi, còn ít nhất 1 cách đăng nhập với quyền admin không."""
+    if any(t["vai_tro"] == "admin" for t in TAI_KHOAN_SECRETS.values()) or PHAN_QUYEN["admin_emails"]:
+        return True
+    if any(t.get("vai_tro") == "admin" and not t.get("khoa") for t in ds_tk):
+        return True
+    return (DANG_NHAP_MS or DANG_NHAP_OTP) and any(e.get("vai_tro") == "admin" for e in ds_email)
+
+
+def _luu_tai_khoan(ds_tk: list[dict], ds_email: list[dict]) -> str | None:
+    """Kiểm tra an toàn rồi lưu. -> lỗi (None nếu đã lưu)."""
+    bat_dn_moi = (any(not t.get("khoa") for t in ds_tk) or bool(TAI_KHOAN_SECRETS) or DANG_NHAP_MS
+                  or DANG_NHAP_OTP)
+    if bat_dn_moi and not _con_duong_admin(ds_tk, ds_email):
+        return ("Phải còn ít nhất 1 tài khoản / email có vai trò **Quản trị (admin)** đang hoạt động — nếu không sẽ "
+                "không ai vào được phần quản trị.")
+    toi = NGUOI_DUNG.get("ten_dn")
+    if NGUOI_DUNG.get("nguon") == "noi_bo" and toi and toi not in TAI_KHOAN_SECRETS:
+        cua_toi = next((t for t in ds_tk if t["ten_dn"] == toi), None)
+        if cua_toi is None or cua_toi.get("khoa") or cua_toi.get("vai_tro") != "admin":
+            return "Không thể xoá, khoá hay hạ quyền chính tài khoản admin bạn đang đăng nhập."
+    goi = {"thoi_gian_luu": datetime.now(storage.GIO_VN).replace(tzinfo=None).isoformat(timespec="seconds"),
+           "nguoi_luu": NGUOI_DUNG.get("ten", ""), "tai_khoan": ds_tk, "email_quyen": ds_email}
+    _, loi = luu_ban("tai_khoan", goi, "Máy chủ ứng dụng")
+    for e in loi:
+        st.warning(f"Đã lưu trên máy chủ nhưng chưa lưu lên SharePoint: {e}")
+    return None
+
+
+def quan_ly_tai_khoan():
+    ss = st.session_state
+    if TAI_KHOAN_LOI:
+        st.error(f"Chưa đọc được danh sách tài khoản đã lưu ({TAI_KHOAN_LOI}) — tạm khoá sửa để không ghi đè. "
+                 "Sửa kết nối SharePoint rồi tải lại trang.")
+        return
+    goi = _kho_ban()["tai_khoan"]["goi"] or {}
+    ds_tk = [dict(x) for x in goi.get("tai_khoan", []) or []]
+    ds_email = [dict(x) for x in goi.get("email_quyen", []) or []]
+    ten_vt = auth.TEN_VAI_TRO
+    vt_tu_ten = {v: k for k, v in ten_vt.items()}
+    for tb in ss.pop("_tk_thong_bao", []):
+        st.success(tb)
+    if ds_tk and not any(t["vai_tro"] == "admin" for t in TAI_KHOAN_SECRETS.values()):
+        st.caption("💡 Nên thêm 1 tài khoản admin dự phòng trong Secrets (mục 3): nếu SharePoint lỗi lúc app khởi "
+                   "động, tài khoản trên app tạm không đọc được — admin dự phòng vẫn đăng nhập được.")
+
+    tab_tk, tab_email = st.tabs(["🔐 Tài khoản đăng nhập (tên + mật khẩu)", "📧 Phân quyền theo email trường"])
+    with tab_tk:
+        if ds_tk:
+            df = pd.DataFrame([{"Tên đăng nhập": t["ten_dn"], "Tên hiển thị": t.get("ten", ""),
+                                "Vai trò": ten_vt.get(t.get("vai_tro"), ten_vt["user"]),
+                                "Khoá": bool(t.get("khoa")), "Xoá": False} for t in ds_tk])
+            sua = st.data_editor(
+                df, key="editor_tk_app", hide_index=True, width="stretch", num_rows="fixed",
+                disabled=["Tên đăng nhập"],
+                column_config={
+                    "Vai trò": st.column_config.SelectboxColumn(options=list(ten_vt.values()), required=True),
+                    "Khoá": st.column_config.CheckboxColumn(help="Tạm khoá: không đăng nhập được, giữ tài khoản."),
+                    "Xoá": st.column_config.CheckboxColumn(help="Tick rồi bấm Lưu để xoá hẳn."),
+                })
+            if st.button("💾 Lưu thay đổi tài khoản", type="primary"):
+                cu = {t["ten_dn"]: t for t in ds_tk}
+                moi = []
+                for _, r in sua.iterrows():
+                    if r["Xoá"]:
+                        continue
+                    t = dict(cu[r["Tên đăng nhập"]])
+                    t.update(ten=str(r["Tên hiển thị"] or t["ten_dn"]).strip(),
+                             vai_tro=vt_tu_ten.get(r["Vai trò"], "user"), khoa=bool(r["Khoá"]))
+                    moi.append(t)
+                loi = _luu_tai_khoan(moi, ds_email)
+                if loi:
+                    st.error(loi)
+                else:
+                    ss["_tk_thong_bao"] = [f"✅ Đã lưu {len(moi)} tài khoản."]
+                    ss.pop("editor_tk_app", None)
+                    st.rerun()
+        else:
+            st.info("Chưa có tài khoản nào tạo trên app. Thêm tài khoản bên dưới — tài khoản ĐẦU TIÊN phải là "
+                    "Quản trị (admin); từ đó app yêu cầu đăng nhập.")
+        if TAI_KHOAN_SECRETS:
+            st.caption("Tài khoản khai báo trong Secrets (chỉ xem, sửa ở Secrets): " + ", ".join(
+                f"{t['ten_dn']} ({ten_vt.get(t['vai_tro'], t['vai_tro'])})" for t in TAI_KHOAN_SECRETS.values()))
+
+        c1, c2 = st.columns(2)
+        with c1, st.form("form_them_tk", clear_on_submit=True):
+            st.markdown("**➕ Thêm tài khoản**")
+            ten_dn = st.text_input("Tên đăng nhập", placeholder="vd: nguyenvana")
+            ten = st.text_input("Tên hiển thị", placeholder="vd: Nguyễn Văn A")
+            vai_tro = st.selectbox("Vai trò", list(ten_vt.values()),
+                                   index=0 if not (ds_tk or TAI_KHOAN_SECRETS) else 3)
+            mk1 = st.text_input("Mật khẩu (≥ 8 ký tự)", type="password")
+            mk2 = st.text_input("Nhập lại mật khẩu", type="password")
+            them = st.form_submit_button("Thêm tài khoản", type="primary", width="stretch")
+        if them:
+            ten_dn = (ten_dn or "").strip().lower()
+            loi = (auth.kiem_tra_ten_dn(ten_dn)
+                   or ("Tên đăng nhập đã tồn tại." if ten_dn in TAI_KHOAN or any(t["ten_dn"] == ten_dn for t in ds_tk)
+                       else "")
+                   or ("Mật khẩu cần ít nhất 8 ký tự." if len(mk1 or "") < 8 else "")
+                   or ("Hai lần nhập mật khẩu không khớp." if mk1 != mk2 else ""))
+            if loi:
+                st.error(loi)
+            else:
+                moi = ds_tk + [{"ten_dn": ten_dn, "ten": (ten or ten_dn).strip(), "vai_tro": vt_tu_ten[vai_tro],
+                                "password_hash": auth.bam_mat_khau(mk1), "khoa": False,
+                                "tao_luc": datetime.now(storage.GIO_VN).strftime("%d/%m/%Y %H:%M")}]
+                loi = _luu_tai_khoan(moi, ds_email)
+                if loi:
+                    st.error(loi)
+                else:
+                    ss["_tk_thong_bao"] = [f"✅ Đã thêm tài khoản **{ten_dn}** ({vai_tro})."]
+                    if not BAT_DANG_NHAP and vt_tu_ten[vai_tro] == "admin":
+                        # app trước đó chưa bật đăng nhập: đăng nhập luôn bằng admin vừa tạo để không bị đẩy ra
+                        ss.nguoi_dung = {"ten_dn": ten_dn, "ten": (ten or ten_dn).strip(), "vai_tro": "admin",
+                                         "nguon": "noi_bo"}
+                        ss["_tk_thong_bao"].append("🔐 Từ giờ app YÊU CẦU ĐĂNG NHẬP — bạn đang đăng nhập bằng "
+                                                   f"**{ten_dn}**. Nhớ mật khẩu này!")
+                    ss.pop("editor_tk_app", None)
+                    st.rerun()
+        with c2, st.form("form_doi_mk", clear_on_submit=True):
+            st.markdown("**🔑 Đặt lại mật khẩu**")
+            chon = st.selectbox("Tài khoản", [t["ten_dn"] for t in ds_tk] or ["(chưa có)"])
+            mk1 = st.text_input("Mật khẩu mới (≥ 8 ký tự)", type="password")
+            mk2 = st.text_input("Nhập lại mật khẩu mới", type="password")
+            doi = st.form_submit_button("Đặt lại mật khẩu", width="stretch", disabled=not ds_tk)
+        if doi:
+            if len(mk1 or "") < 8:
+                st.error("Mật khẩu cần ít nhất 8 ký tự.")
+            elif mk1 != mk2:
+                st.error("Hai lần nhập mật khẩu không khớp.")
+            else:
+                moi = [dict(t, password_hash=auth.bam_mat_khau(mk1)) if t["ten_dn"] == chon else t for t in ds_tk]
+                loi = _luu_tai_khoan(moi, ds_email)
+                if loi:
+                    st.error(loi)
+                else:
+                    ss["_tk_thong_bao"] = [f"✅ Đã đặt lại mật khẩu cho **{chon}**."]
+                    st.rerun()
+
+    with tab_email:
+        if not (DANG_NHAP_MS or DANG_NHAP_OTP):
+            st.info("Phân quyền theo email chỉ có tác dụng khi đã bật đăng nhập bằng tài khoản Microsoft hoặc mã gửi "
+                    "qua email (xem mục 3 bên dưới). Vẫn có thể khai báo trước.")
+        st.caption("Gán vai trò cho từng email trường (ưu tiên hơn quy tắc trong Secrets). Email không có trong bảng: "
+                   "theo quy tắc tên miền / bảng Giáo viên như cũ.")
+        df_e = pd.DataFrame([{"Email": e["email"], "Họ tên": e.get("ten", ""),
+                              "Vai trò": ten_vt.get(e.get("vai_tro"), ten_vt["user"])} for e in ds_email],
+                            columns=["Email", "Họ tên", "Vai trò"])
+        sua_e = st.data_editor(
+            df_e, key="editor_email_quyen", hide_index=True, width="stretch", num_rows="dynamic",
+            column_config={"Email": st.column_config.TextColumn(required=True),
+                           "Vai trò": st.column_config.SelectboxColumn(options=list(ten_vt.values()), required=True,
+                                                                       default=ten_vt["user"])})
+        if st.button("💾 Lưu phân quyền theo email", type="primary"):
+            moi, sai = [], []
+            for _, r in sua_e.iterrows():
+                email = str(r["Email"] or "").strip().lower()
+                if not email:
+                    continue
+                if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+                    sai.append(email)
+                    continue
+                moi.append({"email": email, "ten": str(r["Họ tên"] or "").strip(),
+                            "vai_tro": vt_tu_ten.get(r["Vai trò"], "user")})
+            if sai:
+                st.error("Email không hợp lệ: " + ", ".join(sai))
+            else:
+                loi = _luu_tai_khoan(ds_tk, moi)
+                if loi:
+                    st.error(loi)
+                else:
+                    ss["_tk_thong_bao"] = [f"✅ Đã lưu phân quyền cho {len(moi)} email."]
+                    ss.pop("editor_email_quyen", None)
+                    st.rerun()
+
 
 
 # ---- Ghi nhớ đăng nhập (cookie có chữ ký) — không phải nhập mã lại khi tải lại trang ----
@@ -1676,6 +1882,12 @@ def man_hinh_dang_nhap():
     _, giua, _ = st.columns([1, 1.3, 1])
     with giua:
         st.markdown('<div class="login-title">🔐 Đăng nhập</div>', unsafe_allow_html=True)
+        if TAI_KHOAN_LOI:
+            st.error(f"Chưa đọc được danh sách tài khoản đã lưu ({TAI_KHOAN_LOI}). Để an toàn, chỉ tài khoản khai "
+                     "báo trong Secrets / email đăng nhập được cho tới khi đọc lại được.")
+            if st.button("🔄 Đọc lại danh sách tài khoản", width="stretch"):
+                nap_ban("tai_khoan", bat_buoc=True)
+                st.rerun()
         if DANG_NHAP_OTP:
             st.caption("Nhập email của trường, hệ thống gửi mã đăng nhập vào hộp thư Outlook của bạn.")
             _form_ma_email()
@@ -1739,7 +1951,8 @@ if st.session_state.get("_cookie_can_ghi"):
 NGUOI_DUNG = st.session_state.get("nguoi_dung") or {
     "ten_dn": "", "ten": "Chưa bật đăng nhập", "vai_tro": "admin",
 }
-LA_ADMIN = NGUOI_DUNG["vai_tro"] == "admin"
+LA_QUAN_TRI = NGUOI_DUNG["vai_tro"] == "admin"            # toàn quyền (SharePoint, tài khoản, công bố)
+LA_ADMIN = NGUOI_DUNG["vai_tro"] in auth.VAI_TRO_BIEN_TAP   # được nhập liệu / chỉnh sửa (trong module của mình)
 
 # Nạp dữ liệu vào phiên: user luôn theo bản CÔNG BỐ mới nhất; admin nạp 1 lần
 # lúc mở app bản mới hơn giữa BẢN NHÁP (nút 💾 Lưu) và bản công bố — không đè
@@ -1822,7 +2035,8 @@ with st.sidebar:
         "🪑 Xếp Phòng Thi": "🪑 Phòng thi",
         "🔄 Phân Công Dạy Thay": "🔄 Lịch dạy thay",
     }
-    ds_module = MODULE_ADMIN if LA_ADMIN else MODULE_USER
+    ds_module = (MODULE_ADMIN if LA_QUAN_TRI else
+                 auth.MODULE_THEO_VAI_TRO.get(NGUOI_DUNG["vai_tro"], MODULE_USER))
     if st.session_state.get("active_module") not in ds_module:
         st.session_state.pop("active_module", None)
     module = st.radio(
@@ -1903,7 +2117,7 @@ with st.sidebar:
         if _goi_nhap_hien:
             st.caption("💾 Đã lưu lúc " + str(_goi_nhap_hien.get("thoi_gian_luu", "")).replace("T", " ")[:16]
                        + (f" — {_goi_nhap_hien['nguoi_luu']}" if _goi_nhap_hien.get("nguoi_luu") else ""))
-        if st.button("↺ Khôi phục dữ liệu mẫu (toàn bộ)", width="stretch"):
+        if LA_QUAN_TRI and st.button("↺ Khôi phục dữ liệu mẫu (toàn bộ)", width="stretch"):
             st.session_state["_xac_nhan_mau"] = True
         _xac_nhan_mau = False
         if st.session_state.get("_xac_nhan_mau"):
@@ -1975,15 +2189,6 @@ if LA_ADMIN and module == "📅 Xếp Thời Khoá Biểu":
         ("navy", "🗓️", len(_kq.lessons) if _da_xep else "—", "Tiết đã xếp",
          "Đã có thời khoá biểu" if _da_xep else "Chưa xếp lịch"),
     ])
-elif LA_ADMIN and module == "🪑 Xếp Phòng Thi":
-    _ss = st.session_state
-    _suc_chua = int(pd.to_numeric(_ss.exam_rooms.get("Sức chứa"), errors="coerce").fillna(0).sum())
-    hien_o_so_lieu([
-        ("sky", "🧑‍🎓", _so_dong(_ss.exam_students, "Lớp"), "Học sinh dự thi", ""),
-        ("mint", "🚪", _so_dong(_ss.exam_rooms, "Tên phòng"), "Phòng thi", f"Sức chứa {_suc_chua} chỗ"),
-        ("coral", "📝", _so_dong(_ss.exam_subjects, "Môn thi"), "Môn thi", ""),
-        ("yellow", "✅", len(_ss.get("exam_results") or {}), "Môn đã xếp phòng", ""),
-    ])
 
 # ---------------------------------------------------------------------
 # PHÂN HỆ XẾP PHÒNG THI TỐT NGHIỆP (khối 12) — tab trong module Xếp phòng thi
@@ -2006,6 +2211,9 @@ def _the_toan_van(ds_phong, kq_tc=None):
     """Kết quả xếp phòng Toán – Ngữ văn: dùng SBD của phòng môn tự chọn (nếu có), chia đều các phòng."""
     ss = st.session_state
     sbd_tc = (kq_tc or {}).get("sbd_theo_dong") or None
+    st.toggle("⚖️ Chia đều sĩ số các phòng (khuyến nghị)", key="tn_chia_deu",
+              help="Bật: sĩ số đều nhau, không phòng nào quá đông — có danh sách phòng thì dùng hết các phòng (theo "
+                   "mức ưu tiên). Tắt: xếp kín lần lượt từng phòng (ít phòng nhất).")
     kq = tn.xep_phong_abc(ss.tn_hoc_sinh, suc_chua=int(ss.tn_suc_chua), tien_to_sbd=str(ss.tn_tien_to or "").strip(),
                           so_bat_dau=int(ss.tn_so_bat_dau), phong_thi=ds_phong, chia_deu=bool(ss.tn_chia_deu),
                           uu_tien_phong=tn.uu_tien_tu_bang(ss.tn_phong) or None,
@@ -2013,7 +2221,7 @@ def _the_toan_van(ds_phong, kq_tc=None):
     phong, hs = kq["phong"], kq["hoc_sinh"]
     if phong.empty:
         st.warning("Chưa có học sinh.")
-        return
+        return kq
     hien_o_so_lieu([
         ("sky", "🧑‍🎓", len(hs), "Học sinh dự thi", "Toán & Ngữ văn"),
         ("mint", "🚪", len(phong), "Phòng thi", f"Tổng {int(phong['Sức chứa'].sum())} chỗ"),
@@ -2025,7 +2233,7 @@ def _the_toan_van(ds_phong, kq_tc=None):
     for cb in kq["canh_bao"]:
         st.warning(cb)
     with the_khung():
-        section_header("4", "Phòng thi Toán – Ngữ văn",
+        section_header("4a", "Phòng thi Toán – Ngữ văn",
                        ("Mỗi em giữ <b>đúng SBD</b> của phòng môn tự chọn; học sinh xếp theo thứ tự SBD"
                         if sbd_tc else "Học sinh sắp theo <b>tên</b>, rồi <b>họ đệm</b> (thứ tự chữ cái tiếng Việt)")
                        + (" và <b>chia đều</b> sĩ số các phòng (có danh sách phòng thì dùng hết các phòng đã nhập)."
@@ -2036,17 +2244,7 @@ def _the_toan_van(ds_phong, kq_tc=None):
         p_chon = st.selectbox("Xem danh sách phòng", ["(tất cả)"] + phong["Phòng"].tolist(), key="tn_tv_xem_phong")
         st.dataframe(hs if p_chon == "(tất cả)" else hs[hs["Phòng"] == p_chon], width="stretch", hide_index=True,
                      height=360)
-        st.download_button(
-            "🖨️ Xuất danh sách phòng thi Toán – Ngữ văn THEO MẪU (in)", type="primary",
-            data=tn.xuat_mau_phong(tn.trang_toan_van(kq), *_tieu_de_mau()),
-            file_name="danh_sach_phong_thi_toan_van.xlsx", key="dl_tn_tv_mau",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-        st.download_button(
-            "📊 Xuất Excel tổng hợp Toán – Ngữ văn", data=tn.xuat_excel(kq),
-            file_name="xep_phong_thi_toan_van.xlsx", key="dl_tn_tv",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
+    return kq
 
 
 UU_TIEN_TC = {"🚪 Ít phòng nhất, rồi gom môn chỉ thi 1 lần tối đa": tn.UU_TIEN_PHONG,
@@ -2096,23 +2294,46 @@ def _phuong_an_tu_chon(tham_so: dict, sbd_chung) -> dict:
     return pa
 
 
-def module_thi_tot_nghiep():
+def _buoc_thi_html(cac_buoc: list[tuple]) -> str:
+    """Thanh tiến trình các bước: [(số, tên, mô tả trạng thái, xong?)]."""
+    o = []
+    for so, ten, mo_ta, xong in cac_buoc:
+        o.append(f"<div class='buoc {'xong' if xong else 'cho'}'><div class='so'>{'✓' if xong else so}</div>"
+                 f"<div><div class='ten'>{html.escape(ten)}</div><div class='mo-ta'>{html.escape(mo_ta)}</div></div></div>")
+    return "<div class='thanh-buoc'>" + "<div class='noi'></div>".join(o) + "</div>"
+
+
+def _doc_file_bang(up, ham_doc):
+    raw = (pd.read_csv(up, header=None, dtype=str, encoding="utf-8-sig", sep=None, engine="python")
+           if up.name.lower().endswith(".csv") else pd.read_excel(up, header=None, dtype=str))
+    return ham_doc(raw)
+
+
+def _chuan_bang_phong():
     ss = st.session_state
-    if not isinstance(ss.get("tn_hoc_sinh"), pd.DataFrame):
-        ss.tn_hoc_sinh = pd.DataFrame(columns=tn.COT_CHUAN)
+    if not isinstance(ss.get("tn_phong"), pd.DataFrame):
+        ss.tn_phong = pd.DataFrame(columns=[tn.COT_TEN_PHONG, tn.COT_SUC_CHUA, tn.COT_UU_TIEN])
+    _bp = ss.tn_phong.reindex(columns=[tn.COT_TEN_PHONG, tn.COT_SUC_CHUA, tn.COT_UU_TIEN])
+    ss.tn_phong = pd.DataFrame({  # kiểu cột ổn định cho bảng sửa (bảng rỗng / nạp lại từ bản lưu)
+        tn.COT_TEN_PHONG: _bp[tn.COT_TEN_PHONG].map(lambda v: "" if _o_trong(v) else str(v)).astype(object),
+        tn.COT_SUC_CHUA: pd.to_numeric(_bp[tn.COT_SUC_CHUA], errors="coerce").astype("float64"),
+        tn.COT_UU_TIEN: _bp[tn.COT_UU_TIEN].map(lambda v: tn.MUC_UU_TIEN[tn.muc_uu_tien(v)]).astype(object),
+    })
+
+
+def _buoc_du_lieu():
+    """Bước 1: danh sách học sinh + danh sách phòng."""
+    ss = st.session_state
     with the_khung():
-        section_header(
-            "1", "Danh sách học sinh lớp 12 & môn thi tốt nghiệp",
-            "Upload file Excel / CSV có các cột <b>Lớp</b>, <b>Họ và tên</b>, <b>Mã HS</b> (VD Mã VnEdu) và "
-            "<b>Môn thi TN</b> ghi 2 môn tự chọn, VD <i>Lý - Anh</i>. App tự tìm dòng tiêu đề và các cột, hiểu cách "
-            "viết tắt (Lý, Anh, Địa, Sử, Hóa, Sinh, GDKTPL, Tin…); <i>Lý - Anh</i> và <i>Anh - Lý</i> là cùng 1 cặp.",
-        )
-        up = st.file_uploader("📤 Upload danh sách học sinh (thay bảng)", type=["xlsx", "xls", "csv"], key="up_tn")
+        section_header("1a", "Học sinh lớp 12 & môn thi tự chọn",
+                       "File Excel / CSV có cột <b>Lớp</b>, <b>Họ và tên</b>, <b>Mã HS</b> và <b>Môn thi TN</b> "
+                       "(2 môn tự chọn, VD <i>Lý - Anh</i>). App tự tìm dòng tiêu đề, hiểu cách viết tắt (Lý, Anh, "
+                       "Địa, Sử, Hóa, Sinh, GDKTPL, Tin…).")
+        up = st.file_uploader("📤 Upload danh sách học sinh (thay bảng hiện tại)", type=["xlsx", "xls", "csv"],
+                              key="up_tn")
         if up is not None and ss.get("_imported_tn") != f"{up.name}:{up.size}":
             try:
-                raw = (pd.read_csv(up, header=None, dtype=str, encoding="utf-8-sig", sep=None, engine="python")
-                       if up.name.lower().endswith(".csv") else pd.read_excel(up, header=None, dtype=str))
-                df_moi, ghi_chu = tn.doc_danh_sach(raw)
+                df_moi, ghi_chu = _doc_file_bang(up, tn.doc_danh_sach)
                 ss.tn_hoc_sinh = df_moi
                 ss["_imported_tn"] = f"{up.name}:{up.size}"
                 ss.pop("editor_tn_hoc_sinh", None)
@@ -2122,70 +2343,27 @@ def module_thi_tot_nghiep():
                 st.error(f"Không đọc được file: {e}")
         for gc in ss.pop("_tn_ghi_chu", []):
             (st.success if gc.startswith("✅") else st.warning if gc.startswith("⚠️") else st.caption)(gc)
-        ss.tn_hoc_sinh = st.data_editor(
-            ss.tn_hoc_sinh, num_rows="dynamic", width="stretch", key="editor_tn_hoc_sinh", height=320,
-            column_config={tn.COT_MON: st.column_config.TextColumn(
-                width="medium", help="2 môn tự chọn, cách nhau dấu '-' hoặc ',' — VD: Lý - Anh")},
-        )
-    if ss.tn_hoc_sinh.empty:
-        st.info("👆 Upload danh sách học sinh lớp 12 kèm môn thi tốt nghiệp để bắt đầu.")
-        return
+        hs = ss.tn_hoc_sinh
+        if not hs.empty:
+            mon = hs[tn.COT_MON].map(tn.tach_mon)
+            hien_o_so_lieu([
+                ("sky", "🧑‍🎓", len(hs), "Học sinh", f"{hs[tn.COT_LOP].nunique()} lớp"),
+                ("mint", "📚", len({m for ms in mon for m in ms}), "Môn tự chọn", "trong danh sách"),
+                ("coral" if (mon.map(len) != 2).any() else "yellow", "⚠️" if (mon.map(len) != 2).any() else "✅",
+                 int((mon.map(len) != 2).sum()), "Em chưa đủ 2 môn", "kiểm tra cột Môn thi"),
+            ])
+        with st.expander(f"✏️ Xem / sửa danh sách học sinh ({len(hs)} em)", expanded=hs.empty):
+            ss.tn_hoc_sinh = st.data_editor(
+                ss.tn_hoc_sinh, num_rows="dynamic", width="stretch", key="editor_tn_hoc_sinh", height=320,
+                column_config={tn.COT_MON: st.column_config.TextColumn(
+                    width="medium", help="2 môn tự chọn, cách nhau dấu '-' hoặc ',' — VD: Lý - Anh")},
+            )
 
     with the_khung():
-        section_header(
-            "2", "Cách xếp phòng",
-            "Môn có <b>nhiều học sinh thi nhất</b> là môn 1 của học sinh đó, môn còn lại là môn 2. Học sinh <b>cùng "
-            "môn 1 & môn 2</b> được xếp kín từng phòng trước; phần lẻ ghép với học sinh <b>cùng môn 1</b> (chỉ ghép "
-            "môn 2). <b>Mỗi phòng chỉ có 1 môn 1</b>. Bật <b>Tối ưu</b>: app chọn môn 1 của từng em trong 2 môn "
-            "của em sao cho tổng số phòng ÍT NHẤT.",
-        )
-        c1, c3, c4 = st.columns(3)
-        with c1:
-            st.number_input("Sức chứa 1 phòng (khi tự tạo phòng)", 1, 60, step=1, key="tn_suc_chua",
-                            help="Dùng khi chưa nhập danh sách phòng ở mục 3, hoặc khi danh sách phòng thiếu chỗ.")
-        with c3:
-            st.text_input("Tiền tố SBD", key="tn_tien_to", help="VD 'TP' → TP001. Để trống: 001, 002…")
-        with c4:
-            st.number_input("SBD bắt đầu từ", 1, 99999, step=1, key="tn_so_bat_dau")
-        for _k, _md in (("tn_ten_truong", TRUONG_MAC_DINH), ("tn_don_vi", DON_VI_MAC_DINH)):
-            if not str(ss.get(_k) or "").strip():   # cấu hình cũ để trống -> điền sẵn để thấy rõ cái sẽ in
-                ss[_k] = _md
-        t0, t1, t2 = st.columns(3)
-        with t0:
-            st.text_input("Đơn vị chủ quản (tiêu ngữ, dòng 1)", key="tn_don_vi",
-                          help="In ở góc trái trên cùng, VD: SỞ GIÁO DỤC VÀ ĐÀO TẠO THÀNH PHỐ HỒ CHÍ MINH. Góc phải "
-                               "app tự in Quốc hiệu và “Độc lập - Tự do - Hạnh phúc”.")
-        with t1:
-            st.text_input("Tên trường (tiêu ngữ, dòng 2 – gạch chân)", key="tn_ten_truong")
-        with t2:
-            st.text_input("Tên kỳ thi (in trên danh sách)", key="tn_ten_ky_thi",
-                          help="VD: KỲ KIỂM TRA GIỮA HỌC KÌ I - NĂM HỌC 2026-2027")
-        st.checkbox("Ghi tên môn vào dòng tên kỳ thi (VD “… - MÔN LÝ - HÓA”)", key="tn_mon_tieu_de")
-        g1, g2 = st.columns(2)
-        with g1:
-            st.toggle("🔢 SBD đánh theo vần ABC cả khối", key="tn_sbd_chung",
-                      help="Bật: SBD đánh theo vần ABC toàn khối (trong phòng môn tự chọn SBD không liền nhau). "
-                           "Tắt: SBD đánh liên tục theo từng phòng môn tự chọn. Cả 2 cách: Toán – Văn đều dùng "
-                           "LẠI đúng SBD của phòng môn tự chọn.")
-        with g2:
-            st.toggle("⚖️ Toán – Văn: chia đều sĩ số các phòng (khuyến nghị)", key="tn_chia_deu",
-                      help="Bật: sĩ số các phòng đều nhau, không phòng nào quá đông — có danh sách phòng thì dùng "
-                           "hết các phòng đã nhập. Tắt: xếp kín lần lượt từng phòng (ít phòng nhất).")
-        st.toggle(
-            "⚡ Môn tự chọn: tối ưu ÍT PHÒNG NHẤT (khuyến nghị)", key="tn_toi_uu",
-            help="Mỗi phòng vẫn chỉ 1 môn 1. App được chọn môn 1 của từng học sinh là MỘT TRONG 2 môn của em "
-                 "(không bắt buộc môn đông hơn) để gom đủ phòng → tổng số phòng ít nhất. Khi số phòng như nhau, "
-                 "ưu tiên giữ môn đông hơn làm môn 1. Tắt: môn đông hơn luôn là môn 1.",
-        )
-
-    with the_khung():
-        section_header(
-            "3", "Danh sách phòng thi (tên & sức chứa từng phòng)",
-            "Upload file Excel / CSV có cột <b>Tên phòng</b> và <b>Sức chứa</b> (hoặc <i>Số lượng</i>), hoặc gõ thẳng "
-            "vào bảng. Cột <b>Ưu tiên</b>: <b>Cao</b> = dùng trước & xếp kín, <b>Bình thường</b> = chia đều, "
-            "<b>Thấp</b> = xếp ít / chỉ dùng khi thiếu chỗ (cùng mức thì theo thứ tự trong bảng). Để trống bảng: app tự tạo Phòng 01, 02… "
-            "theo “Sức chứa 1 phòng” ở trên; tổng sức chứa thiếu thì app tự thêm phòng.",
-        )
+        section_header("1b", "Phòng thi (tên, sức chứa, mức ưu tiên)",
+                       "Phòng dùng theo thứ tự trong bảng. <b>Ưu tiên</b>: <b>Cao</b> = dùng trước & xếp kín · "
+                       "<b>Bình thường</b> = chia đều · <b>Thấp</b> = chỉ dùng khi thiếu chỗ. Để trống bảng: app tự tạo "
+                       "Phòng 01, 02… theo sức chứa mặc định (bước ②); thiếu chỗ thì app tự thêm phòng.")
         p1, p2 = st.columns([1, 2])
         with p1:
             st.download_button(
@@ -2202,9 +2380,7 @@ def module_thi_tot_nghiep():
                                     key="up_tn_phong")
         if up_p is not None and ss.get("_imported_tn_phong") != f"{up_p.name}:{up_p.size}":
             try:
-                raw = (pd.read_csv(up_p, header=None, dtype=str, encoding="utf-8-sig", sep=None, engine="python")
-                       if up_p.name.lower().endswith(".csv") else pd.read_excel(up_p, header=None, dtype=str))
-                bang_p, ghi_chu = tn.doc_danh_sach_phong(raw)
+                bang_p, ghi_chu = _doc_file_bang(up_p, tn.doc_danh_sach_phong)
                 ss.tn_phong = bang_p
                 ss["_imported_tn_phong"] = f"{up_p.name}:{up_p.size}"
                 ss.pop("editor_tn_phong", None)
@@ -2213,18 +2389,11 @@ def module_thi_tot_nghiep():
                 st.rerun()
             except Exception as e:
                 st.error(f"Không đọc được file phòng: {e}")
-        if not isinstance(ss.get("tn_phong"), pd.DataFrame):
-            ss.tn_phong = pd.DataFrame(columns=[tn.COT_TEN_PHONG, tn.COT_SUC_CHUA, tn.COT_UU_TIEN])
-        _bp = ss.tn_phong.reindex(columns=[tn.COT_TEN_PHONG, tn.COT_SUC_CHUA, tn.COT_UU_TIEN])
-        ss.tn_phong = pd.DataFrame({  # kiểu cột ổn định cho bảng sửa (bảng rỗng / nạp lại từ bản lưu)
-            tn.COT_TEN_PHONG: _bp[tn.COT_TEN_PHONG].map(lambda v: "" if _o_trong(v) else str(v)).astype(object),
-            tn.COT_SUC_CHUA: pd.to_numeric(_bp[tn.COT_SUC_CHUA], errors="coerce").astype("float64"),
-            tn.COT_UU_TIEN: _bp[tn.COT_UU_TIEN].map(lambda v: tn.MUC_UU_TIEN[tn.muc_uu_tien(v)]).astype(object),
-        })
+        _chuan_bang_phong()
         for gc in ss.pop("_tn_phong_ghi_chu", []):
             (st.success if gc.startswith("✅") else st.warning if gc.startswith("⚠️") else st.caption)(gc)
         ss.tn_phong = st.data_editor(
-            ss.tn_phong, num_rows="dynamic", width="stretch", key="editor_tn_phong", height=240,
+            ss.tn_phong, num_rows="dynamic", width="stretch", key="editor_tn_phong", height=260,
             column_config={
                 tn.COT_TEN_PHONG: st.column_config.TextColumn(required=True),
                 tn.COT_SUC_CHUA: st.column_config.NumberColumn(min_value=1, max_value=200, step=1, format="%d",
@@ -2239,16 +2408,121 @@ def module_thi_tot_nghiep():
         if ds_phong:
             tong_cho, so_hs = sum(c for _, c in ds_phong), len(ss.tn_hoc_sinh)
             (st.caption if tong_cho >= so_hs else st.warning)(
-                f"{len(ds_phong)} phòng · tổng {tong_cho} chỗ · {so_hs} học sinh"
+                f"🚪 {len(ds_phong)} phòng · tổng {tong_cho} chỗ · {so_hs} học sinh"
                 + ("" if tong_cho >= so_hs else f" — THIẾU {so_hs - tong_cho} chỗ, app sẽ tự thêm phòng."))
+        else:
+            st.caption(f"Chưa nhập phòng — app tự tạo phòng {int(ss.tn_suc_chua)} chỗ (đổi ở bước ②).")
 
-    _tab_tv, _tab_tc = st.tabs(["📘 Toán – Ngữ văn (theo vần ABC)", "🧪 Môn tự chọn (tối ưu phòng)"])
-    sbd_chung = tn.sbd_theo_abc(ss.tn_hoc_sinh, str(ss.tn_tien_to or "").strip(), int(ss.tn_so_bat_dau)) \
-        if ss.tn_sbd_chung else None
-    with _tab_tc:
-        kq_tc = _the_tu_chon(ds_phong, sbd_chung)
-    with _tab_tv:
-        _the_toan_van(ds_phong, kq_tc)
+
+def _buoc_thiet_lap():
+    """Bước 2: số báo danh, phòng mặc định, tiêu ngữ in."""
+    ss = st.session_state
+    c1, c2 = st.columns(2)
+    with c1:
+        with the_khung():
+            section_header("2a", "Số báo danh", "Một SBD cho cả kỳ thi — Toán – Văn dùng lại đúng SBD của môn tự chọn.")
+            a, b = st.columns(2)
+            with a:
+                st.text_input("Tiền tố SBD", key="tn_tien_to", help="VD 79000 → 79000001. Để trống: 001, 002…")
+            with b:
+                st.number_input("SBD bắt đầu từ", 1, 99999, step=1, key="tn_so_bat_dau")
+            st.toggle("🔢 Đánh SBD theo vần ABC cả khối", key="tn_sbd_chung",
+                      help="Bật: SBD theo vần ABC toàn khối. Tắt: SBD liên tục theo từng phòng môn tự chọn.")
+            rong = max(3, len(str(int(ss.tn_so_bat_dau) + len(ss.tn_hoc_sinh))))
+            st.caption(f"Ví dụ: **{str(ss.tn_tien_to or '').strip()}{str(int(ss.tn_so_bat_dau)).zfill(rong)}**")
+        with the_khung():
+            section_header("2b", "Phòng tự tạo", "Dùng khi chưa nhập danh sách phòng hoặc danh sách thiếu chỗ.")
+            st.number_input("Sức chứa 1 phòng (khi tự tạo phòng)", 1, 60, step=1, key="tn_suc_chua")
+    with c2:
+        with the_khung():
+            section_header("2c", "Tiêu ngữ trên danh sách in",
+                           "Góc trái: đơn vị chủ quản + tên trường · góc phải: Quốc hiệu, tiêu ngữ (app tự in).")
+            for _k, _md in (("tn_ten_truong", TRUONG_MAC_DINH), ("tn_don_vi", DON_VI_MAC_DINH)):
+                if not str(ss.get(_k) or "").strip():   # cấu hình cũ để trống -> điền sẵn để thấy rõ cái sẽ in
+                    ss[_k] = _md
+            st.text_input("Đơn vị chủ quản", key="tn_don_vi")
+            st.text_input("Tên trường", key="tn_ten_truong")
+            st.text_input("Tên kỳ thi", key="tn_ten_ky_thi", help="VD: KỲ KIỂM TRA GIỮA HỌC KÌ I - NĂM HỌC 2026-2027")
+            st.checkbox("Ghi tên môn vào dòng tên kỳ thi (VD “… - MÔN LÝ - HÓA”)", key="tn_mon_tieu_de")
+
+
+def _buoc_xuat(kq_tc, kq_tv):
+    """Bước 5: tải các file in / tổng hợp."""
+    xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    with the_khung():
+        section_header("5a", "Danh sách phòng thi theo mẫu (in)",
+                       "Mỗi phòng 1 trang A4: tiêu ngữ, tên kỳ thi, phòng; mỗi môn 2 cột (M.đề, Ký tên); em không thi "
+                       "môn nào thì ô môn đó gạch chéo; chữ ký 2 giám thị. Sửa tiêu ngữ / tên kỳ thi ở bước ②.")
+        x1, x2 = st.columns(2)
+        with x1:
+            ok = kq_tc is not None and not kq_tc["phong"].empty
+            st.download_button(
+                f"🧪 Môn tự chọn — {len(kq_tc['phong']) if ok else 0} phòng", type="primary", width="stretch",
+                data=tn.xuat_mau_phong(tn.trang_tu_chon(kq_tc), *_tieu_de_mau()) if ok else b"", disabled=not ok,
+                file_name="danh_sach_phong_thi_mon_tu_chon.xlsx", key="dl_tn_mau", mime=xlsx)
+        with x2:
+            ok_tv = kq_tv is not None and not kq_tv["phong"].empty
+            st.download_button(
+                f"📘 Toán – Ngữ văn — {len(kq_tv['phong']) if ok_tv else 0} phòng", type="primary", width="stretch",
+                data=tn.xuat_mau_phong(tn.trang_toan_van(kq_tv), *_tieu_de_mau()) if ok_tv else b"",
+                disabled=not ok_tv, file_name="danh_sach_phong_thi_toan_van.xlsx", key="dl_tn_tv_mau", mime=xlsx)
+    with the_khung():
+        section_header("5b", "Bảng tổng hợp (Excel)", "Danh sách theo phòng, theo lớp, thống kê môn — để kiểm tra, "
+                                                        "tra cứu, gửi giáo viên chủ nhiệm.")
+        y1, y2 = st.columns(2)
+        with y1:
+            ok = kq_tc is not None and not kq_tc["phong"].empty
+            st.download_button("📊 Tổng hợp môn tự chọn", width="stretch", disabled=not ok,
+                               data=tn.xuat_excel(kq_tc) if ok else b"", file_name="xep_phong_thi_tot_nghiep.xlsx",
+                               key="dl_tn", mime=xlsx)
+        with y2:
+            ok_tv = kq_tv is not None and not kq_tv["phong"].empty
+            st.download_button("📊 Tổng hợp Toán – Ngữ văn", width="stretch", disabled=not ok_tv,
+                               data=tn.xuat_excel(kq_tv) if ok_tv else b"", file_name="xep_phong_thi_toan_van.xlsx",
+                               key="dl_tn_tv", mime=xlsx)
+    st.caption("💾 Danh sách học sinh, phòng và mọi thiết lập được tự động lưu (SharePoint nếu đã cấu hình) — mở lại "
+               "app sẽ xếp lại ra đúng kết quả này.")
+
+
+def module_thi_tot_nghiep():
+    ss = st.session_state
+    if not isinstance(ss.get("tn_hoc_sinh"), pd.DataFrame):
+        ss.tn_hoc_sinh = pd.DataFrame(columns=tn.COT_CHUAN)
+    _chuan_bang_phong()
+    thanh_buoc = st.empty()
+    tb1, tb2, tb3, tb4, tb5 = st.tabs(["① Dữ liệu", "② Thiết lập", "③ Môn tự chọn", "④ Toán – Ngữ văn",
+                                       "⑤ In & xuất file"])
+    with tb1:
+        _buoc_du_lieu()
+    with tb2:
+        _buoc_thiet_lap()
+    hs, ds_phong = ss.tn_hoc_sinh, tn.phong_tu_bang(ss.tn_phong)
+    kq_tc = kq_tv = None
+    if hs.empty:
+        for t in (tb3, tb4, tb5):
+            with t:
+                st.info("👈 Làm bước ① trước: upload danh sách học sinh lớp 12 kèm môn thi tự chọn.")
+    else:
+        sbd_chung = tn.sbd_theo_abc(hs, str(ss.tn_tien_to or "").strip(), int(ss.tn_so_bat_dau)) \
+            if ss.tn_sbd_chung else None
+        with tb3:
+            kq_tc = _the_tu_chon(ds_phong, sbd_chung)
+        with tb4:
+            kq_tv = _the_toan_van(ds_phong, kq_tc)
+        with tb5:
+            _buoc_xuat(kq_tc, kq_tv)
+    co_tc = kq_tc is not None and not kq_tc["phong"].empty
+    co_tv = kq_tv is not None and not kq_tv["phong"].empty
+    thanh_buoc.markdown(_buoc_thi_html([
+        ("1", "Dữ liệu", f"{len(hs)} học sinh · {len(ds_phong) or 'tự tạo'} phòng" if not hs.empty
+         else "Chưa có học sinh", not hs.empty),
+        ("2", "Thiết lập", f"SBD {str(ss.tn_tien_to or '').strip()}{int(ss.tn_so_bat_dau):03d}…", not hs.empty),
+        ("3", "Môn tự chọn", f"{len(kq_tc['phong'])} phòng · ca 1: {len(kq_tc['mon_ca'][1])} môn, ca 2: "
+                             f"{len(kq_tc['mon_ca'][2])} môn" if co_tc else "Chưa xếp", co_tc),
+        ("4", "Toán – Ngữ văn", f"{len(kq_tv['phong'])} phòng · {int(kq_tv['phong']['Sĩ số'].min())}–"
+                                f"{int(kq_tv['phong']['Sĩ số'].max())} em/phòng" if co_tv else "Chưa xếp", co_tv),
+        ("5", "In & xuất file", "Sẵn sàng tải về" if co_tc and co_tv else "Chờ các bước trên", co_tc and co_tv),
+    ]), unsafe_allow_html=True)
 
 
 def _the_tu_chon(ds_phong, sbd_chung):
@@ -2258,6 +2532,13 @@ def _the_tu_chon(ds_phong, sbd_chung):
         ss.tn_uu_tien_mon = next(iter(UU_TIEN_TC))
     if ss.get("tn_cach_ca1") not in CACH_CA1:
         ss.tn_cach_ca1 = CACH_CA1[0]
+    khung_cach = the_khung()
+    khung_cach.__enter__()
+    section_header("3a", "Cách xếp phòng môn tự chọn",
+                   "Mỗi em thi 2 môn trong <b>cùng 1 phòng</b>: môn thi số 1 (ca 1) rồi môn thi số 2 (ca 2). Mỗi phòng "
+                   "1 môn thi số 1. App tự tìm cách xếp <b>ít phòng nhất</b>, mỗi môn gọn trong 1 ca, trộn đều các lớp.")
+    st.toggle("⚡ Tối ưu tự động (khuyến nghị)", key="tn_toi_uu",
+              help="Tắt: môn đông người hơn luôn là môn thi số 1 (vẫn giữ các ràng buộc phòng).")
     st.radio("Cách chọn môn thi số 1 (ca 1)", CACH_CA1, key="tn_cach_ca1", horizontal=True,
              help="Tự động: app tự chọn môn thi số 1 của từng em. Tự chọn: thầy/cô quyết định với mỗi cặp môn, "
                   "môn nào thi ca 1 (VD Anh – Lí: Anh thi ca 1, Lí thi ca 2); app xếp phòng theo đó.")
@@ -2268,6 +2549,8 @@ def _the_tu_chon(ds_phong, sbd_chung):
                   "Ít phòng nhất (khuyến nghị): giữ số phòng ÍT NHẤT, trong đó chọn môn số 1 / số 2 của từng em "
                   "để nhiều môn chỉ thi 1 lần nhất (VD Sinh luôn thi lần 1), môn còn phải chia 2 lần thì ít "
                   "học sinh lệch nhất. Gom môn trước: ưu tiên mỗi môn chỉ thi 1 lần, chấp nhận thêm phòng.")
+    khung_nc = st.expander("🔧 Ràng buộc nâng cao (số môn / phòng, số môn / ca, trộn lớp, sĩ số tối thiểu, ghép)")
+    khung_nc.__enter__()
     r1, r3, r4, r5 = st.columns(4)
     with r1:
         st.number_input("Tối đa số môn thi số 2 trong 1 phòng", 1, 4, step=1, key="tn_max_mon2",
@@ -2290,6 +2573,7 @@ def _the_tu_chon(ds_phong, sbd_chung):
     st.toggle("🧩 Cho phép 1 phòng có 2 môn thi số 1 (chỉ khi bớt được phòng)", key="tn_ghep_mon1",
               help="VD Lí 18 em + PL 7 em ngồi chung 1 phòng → bớt 1 phòng; phòng đó có 2 đề ở ca 1. "
                    "App chỉ ghép khi nhờ đó dùng ít phòng hơn hoặc ít môn mỗi ca hơn.")
+    khung_nc.__exit__(None, None, None)
     _tham_so = dict(suc_chua=int(ss.tn_suc_chua), tien_to_sbd=str(ss.tn_tien_to or "").strip(),
                     so_bat_dau=int(ss.tn_so_bat_dau), phong_thi=ds_phong, gioi_han_giay=12,
                     uu_tien_phong=tn.uu_tien_tu_bang(ss.tn_phong) or None,
@@ -2298,6 +2582,7 @@ def _the_tu_chon(ds_phong, sbd_chung):
                     si_so_toi_thieu=int(ss.tn_si_so_min),
                     ghep_mon1=bool(ss.tn_ghep_mon1))
     pa = _phuong_an_tu_chon(_tham_so, sbd_chung) if tu_chon else None
+    khung_cach.__exit__(None, None, None)
     kq = _xep_tc_pa(ss.tn_hoc_sinh, pa, toi_uu=bool(ss.tn_toi_uu), sbd_cho=sbd_chung, **_tham_so)
     if tu_chon:
         tu_dong = _xep_tc(ss.tn_hoc_sinh, **_tham_so)
@@ -2341,7 +2626,7 @@ def _the_tu_chon(ds_phong, sbd_chung):
         st.warning(cb)
 
     with the_khung():
-        section_header("4", "Thống kê môn thi", "Cột <b>Thi ở</b>: môn đó là môn thi số 1 hay số 2 (thi ở lần nào).")
+        section_header("3b", "Thống kê môn thi", "Cột <b>Thi ở</b>: môn đó là môn thi số 1 hay số 2 (thi ở lần nào).")
         t1, t2 = st.columns([3, 2])
         with t1:
             st.dataframe(tk, width="stretch", hide_index=True)
@@ -2357,31 +2642,15 @@ def _the_tu_chon(ds_phong, sbd_chung):
             )
 
     with the_khung():
-        section_header("5", "Kết quả xếp phòng môn tự chọn",
-                       ("SBD chung cả kỳ thi (theo vần ABC, giống phòng Toán – Văn)." if sbd_chung else
-                        "SBD đánh liên tục theo thứ tự phòng.") + " Xuất Excel để in danh sách.")
+        section_header("3c", "Danh sách phòng môn tự chọn",
+                       ("SBD theo vần ABC cả khối." if sbd_chung else "SBD liên tục theo thứ tự phòng.")
+                       + " Tải file in ở bước ⑤.")
         st.dataframe(phong, width="stretch", hide_index=True)
         if kq["phong_trong"]:
             st.caption("🚪 Phòng không dùng tới: " + ", ".join(f"{t} ({c} chỗ)" for t, c in kq["phong_trong"]))
         p_chon = st.selectbox("Xem danh sách phòng", ["(tất cả)"] + phong["Phòng"].tolist(), key="tn_xem_phong")
         st.dataframe(hs if p_chon == "(tất cả)" else hs[hs["Phòng"] == p_chon], width="stretch", hide_index=True,
                      height=360)
-        x1, x2 = st.columns(2)
-        with x1:
-            st.download_button(
-                "🖨️ Xuất danh sách phòng thi THEO MẪU (in)", type="primary", width="stretch",
-                data=tn.xuat_mau_phong(tn.trang_tu_chon(kq), *_tieu_de_mau()),
-                file_name="danh_sach_phong_thi_mon_tu_chon.xlsx", key="dl_tn_mau",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                help="Mỗi phòng 1 trang. Phòng có nhiều môn thì mỗi môn 2 cột (M.đề, Ký tên); em không thi môn "
-                     "nào thì ô của môn đó gạch chéo.")
-        with x2:
-            st.download_button(
-                "📊 Xuất Excel tổng hợp (theo phòng / lớp / thống kê)", data=tn.xuat_excel(kq), width="stretch",
-                file_name="xep_phong_thi_tot_nghiep.xlsx", key="dl_tn",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
-        st.caption("Danh sách học sinh và cách xếp được tự động lưu cùng dữ liệu của app (SharePoint nếu đã cấu hình).")
     return kq
 
 
@@ -2615,8 +2884,9 @@ if module == "📅 Xếp Thời Khoá Biểu":
                             help="Email trường của GV — dùng để đăng nhập và xem 'Lịch của tôi'."),
                         "Lớp chủ nhiệm": st.column_config.SelectboxColumn(options=[""] + class_names),
                         "Quyền": st.column_config.SelectboxColumn(
-                            options=["user", "admin"], required=True,
-                            help="admin = toàn quyền (có hiệu lực sau khi 📢 Công bố). user = chỉ xem lịch của mình."),
+                            options=["user", "tkb", "thi", "admin"], required=True,
+                            help="user = giáo viên, chỉ xem lịch của mình · tkb = quản lý TKB & dạy thay · thi = quản lý "
+                                 "phòng thi · admin = toàn quyền (có hiệu lực sau khi 📢 Công bố)."),
                     },
                 )
             teacher_names = [t for t in st.session_state.teachers["Tên giáo viên"].dropna().tolist() if t.strip()]
@@ -3201,6 +3471,15 @@ elif module == "🪑 Xếp Phòng Thi":
     else:
         _tab_thi_ky = st.container()
     with _tab_thi_ky:
+        if LA_ADMIN:   # ô số liệu của phần thi học kỳ (trước đây nằm trên cùng, lẫn sang tab thi tốt nghiệp)
+            _ss = st.session_state
+            _suc_chua = int(pd.to_numeric(_ss.exam_rooms.get("Sức chứa"), errors="coerce").fillna(0).sum())
+            hien_o_so_lieu([
+                ("sky", "🧑‍🎓", _so_dong(_ss.exam_students, "Lớp"), "Học sinh dự thi", ""),
+                ("mint", "🚪", _so_dong(_ss.exam_rooms, "Tên phòng"), "Phòng thi", f"Sức chứa {_suc_chua} chỗ"),
+                ("coral", "📝", _so_dong(_ss.exam_subjects, "Môn thi"), "Môn thi", ""),
+                ("yellow", "✅", len(_ss.get("exam_results") or {}), "Môn đã xếp phòng", ""),
+            ])
         if LA_ADMIN:
             # tương thích dữ liệu cũ trong phiên làm việc / file Excel định dạng cũ
             try:
@@ -4260,17 +4539,28 @@ elif module == "👥 Tài khoản & Công bố":
 
     with the_khung():
         section_header(
-            "2", "Tài khoản & quyền",
-            "Tài khoản khai báo trong <b>Secrets</b> của ứng dụng (Streamlit Cloud: Manage app → Settings → "
-            "Secrets) — không lưu trong code/GitHub. Thêm/xoá/đổi mật khẩu: sửa Secrets rồi bấm Save.",
+            "2", "Tài khoản & phân quyền",
+            "Thêm / khoá / xoá tài khoản, đặt lại mật khẩu và gán vai trò ngay trên app. Lưu trên SharePoint cùng "
+            "dữ liệu (mật khẩu chỉ lưu <b>mã băm</b>, không ai xem được). Giáo viên không thấy phần này.",
         )
         st.dataframe(pd.DataFrame([
-            {"Quyền": "📅 Thời khoá biểu", "admin": "Nhập liệu, xếp lịch, xuất file", "user": "Xem & xuất PDF/Excel"},
-            {"Quyền": "🪑 Phòng thi", "admin": "Nhập liệu, xếp phòng, xuất file", "user": "Xem & xuất PDF/Excel"},
-            {"Quyền": "🔄 Dạy thay", "admin": "Phân công, lưu, xoá", "user": "Xem & xuất PDF"},
-            {"Quyền": "☁️ SharePoint", "admin": "Lưu / tải / đồng bộ List", "user": "—"},
-            {"Quyền": "👥 Tài khoản & Công bố", "admin": "Công bố, xem tài khoản", "user": "—"},
+            {"Chức năng": "📅 Thời khoá biểu", "Quản trị": "✏️ Toàn quyền", "Quản lý TKB & dạy thay": "✏️ Sửa, xếp lịch",
+             "Quản lý phòng thi": "—", "Giáo viên": "👁️ Xem lịch của mình"},
+            {"Chức năng": "🔄 Dạy thay", "Quản trị": "✏️ Toàn quyền", "Quản lý TKB & dạy thay": "✏️ Phân công",
+             "Quản lý phòng thi": "—", "Giáo viên": "👁️ Xem"},
+            {"Chức năng": "🪑 Phòng thi (kể cả thi tốt nghiệp)", "Quản trị": "✏️ Toàn quyền",
+             "Quản lý TKB & dạy thay": "—", "Quản lý phòng thi": "✏️ Nhập liệu, xếp phòng, in", "Giáo viên": "👁️ Xem lịch coi thi"},
+            {"Chức năng": "☁️ SharePoint · 👥 Tài khoản & Công bố", "Quản trị": "✏️ Toàn quyền",
+             "Quản lý TKB & dạy thay": "—", "Quản lý phòng thi": "—", "Giáo viên": "—"},
         ]), width="stretch", hide_index=True)
+        quan_ly_tai_khoan()
+
+    with the_khung():
+        section_header(
+            "3", "Đăng nhập nâng cao (Secrets)",
+            "Đăng nhập bằng tài khoản Microsoft / mã gửi qua email, và tài khoản dự phòng khai báo trong <b>Secrets</b> "
+            "(Streamlit Cloud: Manage app → Settings → Secrets).",
+        )
 
         st.markdown("**🟦 Đăng nhập bằng tài khoản Microsoft (email Outlook của trường)**")
         if DANG_NHAP_MS:
@@ -4309,12 +4599,13 @@ elif module == "👥 Tài khoản & Công bố":
         else:
             st.info("Chưa bật. Tạo flow gửi mã (xem PHAN_QUYEN.md, mục C) rồi thêm otp_url vào [phan_quyen].")
 
-        st.markdown("**🔐 Tài khoản nội bộ (tên đăng nhập + mật khẩu)** — không bắt buộc, dùng làm admin dự phòng")
-        if TAI_KHOAN:
+        st.markdown("**🔐 Tài khoản trong Secrets** — không bắt buộc, dùng làm admin dự phòng (luôn đăng nhập được, "
+                    "kể cả khi SharePoint lỗi)")
+        if TAI_KHOAN_SECRETS:
             st.dataframe(pd.DataFrame([
                 {"Tên đăng nhập": tk["ten_dn"], "Tên hiển thị": tk["ten"], "Vai trò": TEN_VAI_TRO[tk["vai_tro"]],
                  "Mật khẩu": "mã băm ✅" if tk.get("password_hash") else "chữ thường ⚠️"}
-                for tk in TAI_KHOAN.values()
+                for tk in TAI_KHOAN_SECRETS.values()
             ]), width="stretch", hide_index=True)
         else:
             st.caption("Chưa có. Mẫu khai báo trong Secrets:")

@@ -1,12 +1,23 @@
 # Đăng nhập & phân quyền
 
-| Chức năng | admin | user (giáo viên) |
-|---|---|---|
-| 📅 Thời khoá biểu (toàn trường) | Nhập liệu, xếp lịch, xuất file | — |
-| 🪑 Phòng thi + phân công coi thi | Nhập liệu, xếp phòng, phân công giám thị | — |
-| 🔄 Dạy thay | Phân công, lưu, xoá | — |
-| ☁️ Lưu trữ SharePoint, 👥 Tài khoản & Công bố | Có | — |
-| **👤 Lịch của tôi** | Xem trước lịch của bất kỳ GV nào | **TKB của mình, TKB lớp chủ nhiệm, lịch coi thi, lịch dạy thay liên quan** (xem & tải PDF/Excel) |
+| Chức năng | Quản trị (`admin`) | Quản lý TKB & dạy thay (`tkb`) | Quản lý phòng thi (`thi`) | Giáo viên (`user`) |
+|---|---|---|---|---|
+| 📅 Thời khoá biểu (toàn trường) | Toàn quyền | Nhập liệu, xếp lịch, xuất file | — | — |
+| 🔄 Dạy thay | Toàn quyền | Phân công, lưu, xoá | — | — |
+| 🪑 Phòng thi (cả thi tốt nghiệp) + coi thi | Toàn quyền | — | Nhập liệu, xếp phòng, in | — |
+| ☁️ Lưu trữ SharePoint, 👥 Tài khoản & Công bố | Có | — | — | — |
+| **👤 Lịch của tôi** | Xem lịch của bất kỳ GV nào | Có | Có | **TKB của mình, TKB lớp chủ nhiệm, lịch coi thi, lịch dạy thay liên quan** |
+
+## Thêm tài khoản ngay trên app (không cần sửa Secrets)
+Module **👥 Tài khoản & Công bố** → mục **2 – Tài khoản & phân quyền**:
+- **🔐 Tài khoản đăng nhập (tên + mật khẩu)**: thêm tài khoản (chọn vai trò), đặt lại mật khẩu,
+  đổi vai trò, tạm khoá, xoá. Tài khoản **đầu tiên phải là Quản trị**; từ lúc có tài khoản, app
+  bắt đăng nhập. Mật khẩu chỉ lưu **mã băm** (PBKDF2), lưu trên SharePoint (List `TKB_CongBo`,
+  các dòng `tai_khoan|…`) — không nằm trong bản công bố cho giáo viên.
+- **📧 Phân quyền theo email trường**: gán vai trò cho từng email (dùng khi bật đăng nhập
+  Microsoft / mã gửi qua email); ưu tiên hơn quy tắc trong Secrets.
+- Nên giữ **1 tài khoản admin dự phòng trong Secrets**: nếu SharePoint lỗi đúng lúc app khởi
+  động, tài khoản tạo trên app tạm không đọc được nhưng admin dự phòng vẫn vào được.
 
 ## Cấp quyền admin — 2 cách
 1. **Trong Secrets** (admin gốc, luôn có hiệu lực):
