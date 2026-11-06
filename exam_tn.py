@@ -522,3 +522,236 @@ def xuat_excel(kq: dict) -> bytes:
                     max(len(str(c.value or "")) for c in cot) + 2, 60)
             ws.freeze_panes = "A2"
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------
+# MÔN TỰ CHỌN THI 2 CA: mỗi học sinh thi 1 môn ở ca 1, môn còn lại ở ca 2; mỗi phòng mỗi ca 1 môn.
+# Tối ưu: mỗi môn gọn trong 1 ca (ít môn phải tách 2 ca, ít HS thi lệch ca) và ít phòng nhất
+# (phòng dùng lại được ở ca 2 -> số phòng cần = số phòng của ca đông hơn).
+# ---------------------------------------------------------------------
+UU_TIEN_MON, UU_TIEN_PHONG = "mon", "phong"
+
+
+def _toi_uu_hai_ca(cap: dict, don: dict, mon: list, phong: list, co_ds_phong: bool, uu_tien: str,
+                   gioi_han_giay: float):
+    """cap: {(a, b): số HS thi cặp a, b}; don: {môn: số HS chỉ thi 1 môn}. phong: [(tên|None, sức chứa)].
+    -> (y {cặp: số HS thi a ở ca 1}, d {môn: số HS 1 môn thi ở ca 1}, z {(loại phòng, môn, ca): số phòng},
+        loai {loại: [chỉ số phòng]}) | None."""
+    from ortools.sat.python import cp_model
+
+    tong = Counter()
+    for (a, b), k in cap.items():
+        tong[a] += k; tong[b] += k
+    for a, k in don.items():
+        tong[a] += k
+    loai = defaultdict(list)
+    for r, (t, c) in enumerate(phong):
+        loai[(c, t is None)].append(r)
+    m = cp_model.CpModel()
+    y = {p: m.NewIntVar(0, k, "") for p, k in cap.items()}
+    d = {a: m.NewIntVar(0, k, "") for a, k in don.items()}
+    n = {}
+    for a in mon:
+        ca1 = [y[p] for p in cap if p[0] == a] + [cap[p] - y[p] for p in cap if p[1] == a]
+        ca1 += [d[a]] if a in d else []
+        n[(a, 1)] = m.NewIntVar(0, tong[a], "")
+        m.Add(n[(a, 1)] == sum(ca1))
+        n[(a, 2)] = m.NewIntVar(0, tong[a], "")
+        m.Add(n[(a, 2)] == tong[a] - n[(a, 1)])
+    co = {(a, s): m.NewBoolVar("") for a in mon for s in (1, 2)}
+    lech, tren = {}, {}
+    for a in mon:
+        for s in (1, 2):
+            m.Add(n[(a, s)] <= tong[a] * co[(a, s)])
+        tren[a] = m.NewBoolVar("")
+        lech[a] = m.NewIntVar(0, tong[a], "")
+        m.Add(lech[a] >= n[(a, 1)] - tong[a] * tren[a])
+        m.Add(lech[a] >= n[(a, 2)] - tong[a] * (1 - tren[a]))
+    z = {(k, a, s): m.NewIntVar(0, len(rs), "") for k, rs in loai.items() for a in mon for s in (1, 2)}
+    w = {k: m.NewIntVar(0, len(rs), "") for k, rs in loai.items()}
+    for k in loai:
+        for s in (1, 2):
+            m.Add(sum(z[(k, a, s)] for a in mon) <= w[k])
+    for a in mon:
+        for s in (1, 2):
+            m.Add(n[(a, s)] <= sum(k[0] * z[(k, a, s)] for k in loai))
+    tu_them = sum(w[k] for k in loai if k[1])
+    so_phong = sum(w.values())
+    luot_phong = sum(z.values())
+    tach = sum(co.values())
+    hs_lech = sum(lech.values())
+    cho = sum(k[0] * v for (k, _, _), v in z.items())
+    if uu_tien == UU_TIEN_PHONG:
+        bac = [so_phong, luot_phong, tach, hs_lech, cho]
+    else:
+        bac = [tach, hs_lech, so_phong, luot_phong, cho]
+    if co_ds_phong:
+        bac.insert(0, tu_them)
+    giai = None
+    bien = list(y.values()) + list(d.values()) + list(z.values()) + list(w.values())
+    for muc_tieu in bac:   # giải lần lượt từng bậc ưu tiên, tất định (1 luồng, seed cố định)
+        m.Minimize(muc_tieu)
+        g = cp_model.CpSolver()
+        g.parameters.num_workers = 1
+        g.parameters.random_seed = 2026
+        g.parameters.max_deterministic_time = max(1.0, gioi_han_giay / len(bac))
+        st = g.Solve(m)
+        if st not in (cp_model.OPTIMAL, cp_model.FEASIBLE):
+            if giai is None:
+                return None
+            break
+        giai = g
+        m.ClearHints()
+        for v in bien:
+            m.AddHint(v, g.Value(v))
+        m.Add(muc_tieu <= int(round(g.ObjectiveValue())))
+    return ({p: giai.Value(v) for p, v in y.items()}, {a: giai.Value(v) for a, v in d.items()},
+            {key: giai.Value(v) for key, v in z.items()}, {k: giai.Value(v) for k, v in w.items()}, dict(loai))
+
+
+def xep_hai_ca(df: pd.DataFrame, suc_chua: int = 24, tien_to_sbd: str = "", so_bat_dau: int = 1,
+               phong_thi: list[tuple[str, int]] | None = None, uu_tien: str = UU_TIEN_MON,
+               gioi_han_giay: float = 10.0, sbd_cho: dict | None = None) -> dict:
+    """Môn tự chọn thi 2 ca. uu_tien = "mon": mỗi môn gọn 1 ca trước, rồi ít phòng; "phong": ít phòng trước.
+    -> {"lich_mon", "phong_ca": {1, 2}, "ds_ca": {1, 2}, "hoc_sinh", "canh_bao", "phong_trong",
+        "so_phong", "so_phong_ca": {1, 2}, "mon_tach": [...], "hs_lech"}."""
+    suc_chua = max(int(suc_chua), 1)
+    sbd = sbd_cho or sbd_theo_abc(df, tien_to_sbd, so_bat_dau)
+    hs, canh_bao = [], []
+    for idx, r in df.iterrows():
+        rec = {"ma": str(r.get(COT_MA) or "").strip(), "ten": str(r.get(COT_TEN) or "").strip(),
+               "lop": str(r.get(COT_LOP) or "").strip(), "mon": tach_mon(r.get(COT_MON)), "idx": idx}
+        if _o_trong(rec["lop"]) and _o_trong(rec["ten"]):
+            continue
+        if not rec["mon"]:
+            canh_bao.append(f"{rec['ten'] or rec['ma']} ({rec['lop']}): chưa có môn thi — không xếp.")
+            continue
+        hs.append(rec)
+    dem = Counter(m for h in hs for m in h["mon"])
+    hang = {m: i for i, (m, _) in enumerate(sorted(dem.items(), key=lambda x: (-x[1], x[0])), start=1)}
+    for h in hs:
+        if len(h["mon"]) > 2:
+            canh_bao.append(f"{h['ten'] or h['ma']} ({h['lop']}): có {len(h['mon'])} môn ({', '.join(h['mon'])}) "
+                            "— chỉ xếp 2 môn đông nhất.")
+        h["mon"] = sorted(h["mon"], key=lambda m: hang[m])[:2]
+    mon = sorted({m for h in hs for m in h["mon"]}, key=lambda m: hang[m])
+    cap_hs, don_hs = defaultdict(list), defaultdict(list)
+    for h in hs:
+        (cap_hs[tuple(h["mon"])] if len(h["mon"]) == 2 else don_hs[h["mon"][0]]).append(h)
+    n = len(hs)
+    them = (-(-n // suc_chua) + len(mon)) if hs else 0
+    kho = list(phong_thi or []) + [(None, suc_chua)] * them
+    kq = _toi_uu_hai_ca({p: len(v) for p, v in cap_hs.items()}, {a: len(v) for a, v in don_hs.items()},
+                        mon, kho, bool(phong_thi), uu_tien, gioi_han_giay) if hs else ({}, {}, {}, {}, {})
+    if kq is None:
+        return {"loi": "Không tìm được phương án trong thời gian cho phép — tăng thời gian hoặc kiểm tra dữ liệu.",
+                "canh_bao": canh_bao}
+    y, d, z, w, loai = kq
+
+    # chia học sinh vào ca (theo SBD để mỗi cặp môn tách ca ổn định)
+    def _theo_sbd(ds):
+        return sorted(ds, key=lambda h: (sbd.get(h["idx"], ""), khoa(h["ten"])))
+    for p, ds in cap_hs.items():
+        ds = _theo_sbd(ds)
+        for i, h in enumerate(ds):
+            h["ca1"], h["ca2"] = (p[0], p[1]) if i < y[p] else (p[1], p[0])
+    for a, ds in don_hs.items():
+        for i, h in enumerate(_theo_sbd(ds)):
+            h["ca1"], h["ca2"] = (a, "") if i < d[a] else ("", a)
+
+    # phòng thật dùng chung 2 ca: mỗi loại lấy w phòng đầu (theo thứ tự danh sách)
+    dung = {k: rs[:w[k]] for k, rs in loai.items()}
+    so_phong_thuc = sum(len(v) for v in dung.values())
+    tu_them = sum(len(v) for k, v in dung.items() if k[1])
+    ten = {}
+    dem_them = 0
+    for r in sorted(r for v in dung.values() for r in v):
+        t = kho[r][0]
+        if t is None:
+            dem_tu = dem_them = dem_them + 1
+            t = f"Phòng thêm {dem_tu:02d}" if phong_thi else f"Phòng {dem_tu:02d}"
+        ten[r] = t
+    if phong_thi and tu_them:
+        canh_bao.insert(0, f"Tổng sức chứa các phòng đã nhập ÍT hơn số học sinh 1 ca — đã tự thêm {tu_them} "
+                           f"phòng ({suc_chua} chỗ/phòng). Bổ sung phòng vào danh sách.")
+    dung_set = {r for v in dung.values() for r in v}
+    phong_trong = [kho[r] for r in range(len(phong_thi or [])) if r not in dung_set]
+
+    phong_ca, ds_ca, so_phong_ca, phong_mon = {}, {}, {}, defaultdict(dict)
+    for s in (1, 2):
+        cot = f"ca{s}"
+        theo_mon = defaultdict(list)
+        for h in hs:
+            if h[cot]:
+                theo_mon[h[cot]].append(h)
+        con = {k: list(v) for k, v in dung.items()}
+        dong_p, dong_d = [], []
+        for a in sorted(theo_mon, key=lambda a: (-len(theo_mon[a]), hang[a])):
+            rs = []
+            for k in loai:
+                so = z.get((k, a, s), 0)
+                rs += con[k][:so]; con[k] = con[k][so:]
+            rs.sort()
+            ds = _theo_sbd(theo_mon[a])
+            vt, con_hs = 0, len(ds)
+            for j, r in enumerate(rs):   # chia đều giữa các phòng của môn, không vượt sức chứa
+                c = kho[r][1]
+                k_ = min(c, -(-con_hs // (len(rs) - j)))
+                nhom = ds[vt:vt + k_]; vt += k_; con_hs -= k_
+                if not nhom:
+                    continue
+                dong_p.append({"Phòng": ten[r], "Sức chứa": c, "Môn": a, "Sĩ số": len(nhom),
+                               "Còn trống": c - len(nhom),
+                               "SBD": f"{sbd.get(nhom[0]['idx'], '')} → {sbd.get(nhom[-1]['idx'], '')}"})
+                phong_mon[a].setdefault(s, []).append(ten[r])
+                for stt, h in enumerate(nhom, start=1):
+                    h[f"phong{s}"], h[f"stt{s}"] = ten[r], stt
+                    dong_d.append({"Ca": f"Ca {s}", "Phòng": ten[r], "STT trong phòng": stt,
+                                   "SBD": sbd.get(h["idx"], ""), "Họ và tên": h["ten"], "Lớp": h["lop"],
+                                   "Mã HS": h["ma"], "Môn thi": a})
+        thu_tu = {t: i for i, t in enumerate(ten[r] for r in sorted(ten))}
+        dong_p.sort(key=lambda x: thu_tu[x["Phòng"]])
+        phong_ca[s] = pd.DataFrame(dong_p)
+        ds_ca[s] = (pd.DataFrame(dong_d).sort_values(["Phòng", "STT trong phòng"],
+                                                      key=lambda c: c.map(thu_tu) if c.name == "Phòng" else c)
+                    if dong_d else pd.DataFrame(dong_d))
+        so_phong_ca[s] = len(dong_p)
+
+    lich, mon_tach, hs_lech = [], [], 0
+    for a in mon:
+        n1 = sum(1 for h in hs if h["ca1"] == a)
+        n2 = sum(1 for h in hs if h["ca2"] == a)
+        if n1 and n2:
+            mon_tach.append(a); hs_lech += min(n1, n2)
+        lich.append({"Môn": a, "Tổng HS": n1 + n2, "Ca 1": n1, "Ca 2": n2,
+                     "Thi ở": "Cả 2 ca" if n1 and n2 else ("Ca 1" if n1 else "Ca 2"),
+                     "Phòng ca 1": ", ".join(phong_mon[a].get(1, [])),
+                     "Phòng ca 2": ", ".join(phong_mon[a].get(2, []))})
+    dong_hs = [{"SBD": sbd.get(h["idx"], ""), "Họ và tên": h["ten"], "Lớp": h["lop"], "Mã HS": h["ma"],
+                "Môn ca 1": h["ca1"], "Phòng ca 1": h.get("phong1", ""), "STT ca 1": h.get("stt1", ""),
+                "Môn ca 2": h["ca2"], "Phòng ca 2": h.get("phong2", ""), "STT ca 2": h.get("stt2", "")}
+               for h in hs]
+    dong_hs.sort(key=lambda x: x["SBD"])
+    return {"lich_mon": pd.DataFrame(lich), "phong_ca": phong_ca, "ds_ca": ds_ca,
+            "hoc_sinh": pd.DataFrame(dong_hs), "canh_bao": canh_bao, "phong_trong": phong_trong,
+            "so_phong": so_phong_thuc, "so_phong_ca": so_phong_ca, "mon_tach": mon_tach, "hs_lech": hs_lech}
+
+
+def xuat_excel_hai_ca(kq: dict) -> bytes:
+    """Lịch thi môn theo ca, phòng từng ca, danh sách từng ca theo phòng, danh sách học sinh."""
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as w:
+        kq["lich_mon"].to_excel(w, sheet_name="Lich_thi_theo_ca", index=False)
+        for s in (1, 2):
+            kq["phong_ca"][s].to_excel(w, sheet_name=f"Phong_ca_{s}", index=False)
+            kq["ds_ca"][s].to_excel(w, sheet_name=f"Danh_sach_ca_{s}", index=False)
+        kq["hoc_sinh"].to_excel(w, sheet_name="Hoc_sinh", index=False)
+        hs = kq["hoc_sinh"]
+        if not hs.empty:
+            hs.sort_values(["Lớp", "SBD"]).to_excel(w, sheet_name="Danh_sach_theo_lop", index=False)
+        for ws in w.book.worksheets:
+            for cot in ws.columns:
+                ws.column_dimensions[cot[0].column_letter].width = min(
+                    max(len(str(c.value or "")) for c in cot) + 2, 60)
+            ws.freeze_panes = "A2"
+    return buf.getvalue()
