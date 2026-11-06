@@ -1264,6 +1264,8 @@ def nap_ban(loai: str, bat_buoc: bool = False) -> dict | None:
                 break
     if goi:
         kho["goi"], kho["loi_nap"] = goi, ""
+    if not kho["loi_nap"]:   # đọc SharePoint được (có bản hoặc chưa có bản nào) -> lại được ghi lên SharePoint
+        kho["chi_cuc_bo"] = False
     return kho["goi"]
 
 
@@ -1361,10 +1363,22 @@ def tu_dong_luu(goi: dict):
 
 
 def nap_sharepoint_loi() -> str:
-    """Lỗi đọc bản nháp từ SharePoint (và chưa có bản nào trong bộ nhớ) -> tạm dừng tự động lưu
-    để không ghi đè dữ liệu tốt trên SharePoint bằng dữ liệu mẫu."""
+    """Lỗi đọc bản nháp từ SharePoint (và chưa có bản nào đọc được) -> KHÔNG đẩy lên SharePoint
+    để không ghi đè dữ liệu tốt trên đó; vẫn giữ bản tạm trên máy chủ (luu_tam_cuc_bo)."""
     kho = _kho_ban()["ban_nhap"]
-    return kho["loi_nap"] if (kho["loi_nap"] and kho["goi"] is None) else ""
+    return kho["loi_nap"] if (kho["loi_nap"] and (kho["goi"] is None or kho.get("chi_cuc_bo"))) else ""
+
+
+def luu_tam_cuc_bo(goi: dict):
+    """SharePoint đang lỗi đọc: vẫn giữ bản nháp trong bộ nhớ + file trên máy chủ -> tải lại trang (F5)
+    không mất dữ liệu (chỉ mất khi app khởi động lại). Không ghi lên SharePoint."""
+    kho = _kho_ban()["ban_nhap"]
+    kho["goi"], kho["chi_cuc_bo"] = goi, True
+    try:
+        LOAI_BAN["ban_nhap"]["file"].parent.mkdir(parents=True, exist_ok=True)
+        LOAI_BAN["ban_nhap"]["file"].write_text(json.dumps(goi, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
 
 
 # =======================================================================
@@ -1841,8 +1855,9 @@ with st.sidebar:
     if LA_ADMIN:
         _loi_nap_sp = nap_sharepoint_loi()
         if _loi_nap_sp:
-            st.error(f"⚠️ Chưa đọc được dữ liệu đã lưu trên SharePoint ({_loi_nap_sp}). Tự động lưu đang "
-                     "TẠM DỪNG để không ghi đè dữ liệu cũ.")
+            st.error(f"⚠️ Chưa đọc được dữ liệu đã lưu trên SharePoint ({_loi_nap_sp}). Tạm KHÔNG ghi lên "
+                     "SharePoint để không ghi đè dữ liệu cũ; thay đổi vẫn được giữ tạm trên máy chủ (tải lại trang "
+                     "không mất, nhưng MẤT khi app khởi động lại). Sửa lỗi rồi bấm Đọc lại / 💾 Lưu.")
             if st.button("🔄 Đọc lại từ SharePoint", width="stretch"):
                 nap_ban("ban_nhap", bat_buoc=True)
                 st.session_state["_ban_cong_bo_da_nap"] = None
@@ -4454,9 +4469,12 @@ if LA_ADMIN:
         _vt_tl = van_tay_goi(_goi_tl)
         if "_van_tay_da_luu" not in st.session_state:
             st.session_state["_van_tay_da_luu"] = _vt_tl
-        elif _vt_tl != st.session_state["_van_tay_da_luu"] and not nap_sharepoint_loi():
+        elif _vt_tl != st.session_state["_van_tay_da_luu"]:
             _goi_tl["nguoi_luu"] = NGUOI_DUNG["ten"]
-            tu_dong_luu(_goi_tl)
+            if nap_sharepoint_loi():   # SharePoint chưa đọc được: chỉ giữ bản tạm trên máy chủ
+                luu_tam_cuc_bo(_goi_tl)
+            else:
+                tu_dong_luu(_goi_tl)
             st.session_state["_van_tay_da_luu"] = _vt_tl
             st.session_state["_ban_cong_bo_da_nap"] = _goi_tl["thoi_gian_luu"]
     except Exception as _e_tl:  # tự động lưu lỗi không được làm sập trang
