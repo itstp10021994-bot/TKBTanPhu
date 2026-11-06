@@ -55,7 +55,7 @@ GIA_TRI_CAU_HINH = [
     "cfg_school_name", "free_depts", "exam_show_names",
     "ct_period_spread", "ct_room_capacity", "ct_order_group", "ct_dept_free_session", "ct_no_gap",
     "ct_class_compact", "nguon_hs_nam_hoc",
-    "tn_suc_chua", "tn_si_so_min", "tn_tien_to", "tn_so_bat_dau", "tn_ten_phong",
+    "tn_suc_chua", "tn_si_so_min", "tn_tien_to", "tn_so_bat_dau", "tn_ten_phong", "tn_toi_uu",
 ]
 
 
