@@ -1757,8 +1757,7 @@ CFG_DEFAULTS = dict(
     cfg_num_days=6, cfg_periods_per_day=5, cfg_morning_count=3, cfg_max_seconds=30,
     cfg_school_name="",
     tn_suc_chua=24, tn_si_so_min=12, tn_tien_to="", tn_so_bat_dau=1, tn_ten_phong="", tn_toi_uu=True,
-    tn_sbd_chung=True, tn_chia_deu=False, tn_hinh_thuc="1 ca – phòng theo môn 1",
-    tn_uu_tien_2ca="🎯 Mỗi môn gọn trong 1 ca",
+    tn_sbd_chung=True, tn_chia_deu=False, tn_uu_tien_mon="🎯 Mỗi môn chỉ thi 1 lần (số 1 hoặc số 2)",
 )
 for key, default in CFG_DEFAULTS.items():
     st.session_state[key] = st.session_state.get(key, default)
@@ -1999,81 +1998,7 @@ def _the_toan_van(ds_phong):
         )
 
 
-HINH_THUC_TC = ["1 ca – phòng theo môn 1", "2 ca – mỗi ca 1 môn"]
-UU_TIEN_2CA = {"🎯 Mỗi môn gọn trong 1 ca": tn.UU_TIEN_MON, "🚪 Ít phòng nhất": tn.UU_TIEN_PHONG}
-
-
-@st.cache_data(show_spinner="Đang tối ưu lịch thi 2 ca…", max_entries=8)
-def _giai_hai_ca(df, suc_chua, tien_to_sbd, so_bat_dau, phong_thi, uu_tien, sbd_cho):
-    return tn.xep_hai_ca(df, suc_chua=suc_chua, tien_to_sbd=tien_to_sbd, so_bat_dau=so_bat_dau,
-                         phong_thi=phong_thi, uu_tien=uu_tien, gioi_han_giay=8, sbd_cho=sbd_cho)
-
-
-def _the_hai_ca(ds_phong, sbd_chung):
-    """Môn tự chọn thi 2 ca: chọn môn nào thi ca 1 / ca 2 và phòng từng ca."""
-    ss = st.session_state
-    if ss.get("tn_uu_tien_2ca") not in UU_TIEN_2CA:
-        ss.tn_uu_tien_2ca = next(iter(UU_TIEN_2CA))
-    st.radio("Ưu tiên", list(UU_TIEN_2CA), key="tn_uu_tien_2ca", horizontal=True,
-             help="Mỗi môn gọn 1 ca: ít môn phải chia ra 2 ca nhất, ít học sinh thi lệch ca nhất, rồi mới ít phòng. "
-                  "Ít phòng nhất: số phòng ít nhất trước, rồi mới gom môn vào 1 ca.")
-    kq = _giai_hai_ca(ss.tn_hoc_sinh, int(ss.tn_suc_chua), str(ss.tn_tien_to or "").strip(), int(ss.tn_so_bat_dau),
-                      ds_phong, UU_TIEN_2CA[ss.tn_uu_tien_2ca], sbd_chung)
-    if kq.get("loi"):
-        st.error(kq["loi"])
-        return
-    lich, hs = kq["lich_mon"], kq["hoc_sinh"]
-    if hs.empty:
-        st.warning("Chưa có học sinh nào có môn thi hợp lệ.")
-        return
-    gon = lich[lich["Thi ở"] != "Cả 2 ca"]
-    hien_o_so_lieu([
-        ("sky", "🧑‍🎓", len(hs), "Học sinh dự thi", f"{len(lich)} môn tự chọn"),
-        ("mint", "🚪", kq["so_phong"], "Phòng cần dùng",
-         f"Ca 1: {kq['so_phong_ca'][1]} · Ca 2: {kq['so_phong_ca'][2]} phòng"),
-        ("coral", "🎯", f"{len(gon)}/{len(lich)}", "Môn gọn trong 1 ca",
-         ("Tách 2 ca: " + ", ".join(kq["mon_tach"])) if kq["mon_tach"] else "Không môn nào tách ca"),
-        ("yellow", "↔️", kq["hs_lech"], "HS thi lệch ca", "Ở ca ít người hơn của môn bị tách"),
-    ])
-    if kq["mon_tach"]:
-        st.info(
-            f"ℹ️ Có {len(kq['mon_tach'])} môn phải thi ở cả 2 ca ({', '.join(kq['mon_tach'])}): các cặp môn của học "
-            "sinh đan chéo nhau (VD có em thi Anh + Lí, em Anh + Địa, em Lí + Địa) nên KHÔNG thể để mọi môn chỉ "
-            "1 ca. App đã chọn cách tách ít môn và ít học sinh nhất.")
-    for cb in kq["canh_bao"][:10]:
-        st.warning(cb)
-    with the_khung():
-        section_header("4", "Lịch thi môn tự chọn theo ca",
-                       "Mỗi học sinh thi 1 môn ở <b>ca 1</b> và môn còn lại ở <b>ca 2</b>. Mỗi phòng mỗi ca chỉ "
-                       "1 môn; phòng ca 1 dùng lại cho ca 2 → số phòng cần = số phòng của ca đông hơn.")
-        st.dataframe(lich, width="stretch", hide_index=True)
-    with the_khung():
-        section_header("5", "Phòng thi từng ca",
-                       "SBD chung cả kỳ thi (theo vần ABC)." if sbd_chung else "SBD theo vần ABC.")
-        c1, c2 = st.columns(2)
-        for s, cot in ((1, c1), (2, c2)):
-            with cot:
-                st.markdown(f"**Ca {s}** — {kq['so_phong_ca'][s]} phòng")
-                st.dataframe(kq["phong_ca"][s], width="stretch", hide_index=True)
-        if kq["phong_trong"]:
-            st.caption("🚪 Phòng không dùng tới: " + ", ".join(f"{t} ({c} chỗ)" for t, c in kq["phong_trong"]))
-        x1, x2 = st.columns([1, 2])
-        with x1:
-            ca_xem = st.radio("Xem danh sách", ["Ca 1", "Ca 2", "Theo học sinh"], key="tn_2ca_xem", horizontal=True)
-        if ca_xem == "Theo học sinh":
-            st.dataframe(hs, width="stretch", hide_index=True, height=360)
-        else:
-            d = kq["ds_ca"][int(ca_xem[-1])]
-            with x2:
-                p_chon = st.selectbox("Phòng", ["(tất cả)"] + d["Phòng"].drop_duplicates().tolist(),
-                                      key="tn_2ca_xem_phong")
-            st.dataframe(d if p_chon == "(tất cả)" else d[d["Phòng"] == p_chon], width="stretch", hide_index=True,
-                         height=360)
-        st.download_button(
-            "📊 Xuất Excel lịch thi 2 ca môn tự chọn", data=tn.xuat_excel_hai_ca(kq), type="primary",
-            file_name="xep_phong_thi_tu_chon_2_ca.xlsx", key="dl_tn_2ca",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
+UU_TIEN_TC = {"🎯 Mỗi môn chỉ thi 1 lần (số 1 hoặc số 2)": tn.UU_TIEN_MON, "🚪 Ít phòng nhất": tn.UU_TIEN_PHONG}
 
 
 def module_thi_tot_nghiep():
@@ -2205,18 +2130,18 @@ def module_thi_tot_nghiep():
     with _tab_tv:
         _the_toan_van(ds_phong)
     with _tab_tc:
-        if ss.get("tn_hinh_thuc") not in HINH_THUC_TC:
-            ss.tn_hinh_thuc = HINH_THUC_TC[0]
-        st.radio("Hình thức thi môn tự chọn", HINH_THUC_TC, key="tn_hinh_thuc", horizontal=True,
-                 help="1 ca: mỗi em thi 2 môn trong cùng 1 phòng (phòng theo môn 1). 2 ca: mỗi em thi 1 môn ở ca 1, "
-                      "môn còn lại ở ca 2; mỗi phòng mỗi ca chỉ 1 môn; phòng ca 1 dùng lại cho ca 2.")
-        if ss.tn_hinh_thuc == HINH_THUC_TC[1]:
-            _the_hai_ca(ds_phong, sbd_chung)
-            return
+        if ss.get("tn_uu_tien_mon") not in UU_TIEN_TC:
+            ss.tn_uu_tien_mon = next(iter(UU_TIEN_TC))
+        st.radio("Ưu tiên khi tối ưu", list(UU_TIEN_TC), key="tn_uu_tien_mon", horizontal=True,
+                 disabled=not ss.tn_toi_uu,
+                 help="Môn 1 = môn thi số 1 (thi lần 1), môn 2 = môn thi số 2; cả 2 môn thi cùng 1 phòng. "
+                      "Mỗi môn chỉ thi 1 lần: app chọn môn thi số 1 / số 2 của từng em sao cho mỗi môn luôn là "
+                      "môn số 1 HOẶC luôn là môn số 2 (VD Sinh luôn thi lần 1) — ít môn phải thi cả 2 lần nhất, "
+                      "rồi mới ít phòng. Ít phòng nhất: số phòng ít nhất trước, rồi mới gom môn về 1 lần thi.")
         _tham_so = dict(suc_chua=int(ss.tn_suc_chua), tien_to_sbd=str(ss.tn_tien_to or "").strip(),
                         so_bat_dau=int(ss.tn_so_bat_dau), phong_thi=ds_phong)
         kq = tn.xep_phong(ss.tn_hoc_sinh, toi_uu=bool(ss.tn_toi_uu), gioi_han_giay=5, sbd_cho=sbd_chung,
-                          **_tham_so)
+                          uu_tien=UU_TIEN_TC[ss.tn_uu_tien_mon], **_tham_so)
         so_phong_thuong = len(tn.xep_phong(ss.tn_hoc_sinh, toi_uu=False, **_tham_so)["phong"]) if kq["toi_uu"] else None
         phong, tk, hs = kq["phong"], kq["thong_ke"], kq["hoc_sinh"]
         if phong.empty:
@@ -2238,11 +2163,19 @@ def module_thi_tot_nghiep():
                 + (f". Có {kq['so_doi_mon1']} học sinh được xếp phòng theo môn ít người hơn trong 2 môn của em."
                    if kq["so_doi_mon1"] else ".")
             )
+        gon = len(tk) - len(kq["mon_tach"])
+        (st.info if kq["mon_tach"] else st.success)(
+            f"🗓️ **{gon}/{len(tk)} môn chỉ thi 1 lần**"
+            + (" — " + "; ".join(f"{r['Môn']}: {r['Thi ở'].lower()}" for _, r in tk.iterrows()
+                                 if r["Thi ở"] != "Cả 2 lần") + ".")
+            + (f" Môn phải thi cả 2 lần: {', '.join(kq['mon_tach'])} ({kq['hs_lech']} học sinh thi ở lần ít người hơn)"
+               " — do các cặp môn của học sinh đan chéo nhau (VD có em Anh + Lí, em Anh + Địa, em Lí + Địa) nên "
+               "không thể để mọi môn chỉ 1 lần; app đã chọn cách tách ít nhất." if kq["mon_tach"] else ""))
         for cb in kq["canh_bao"][:10]:
             st.warning(cb)
 
         with the_khung():
-            section_header("4", "Thống kê môn thi", "Thứ hạng theo số học sinh thi — quyết định môn 1 / môn 2.")
+            section_header("4", "Thống kê môn thi", "Cột <b>Thi ở</b>: môn đó là môn thi số 1 hay số 2 (thi ở lần nào).")
             t1, t2 = st.columns([3, 2])
             with t1:
                 st.dataframe(tk, width="stretch", hide_index=True)
