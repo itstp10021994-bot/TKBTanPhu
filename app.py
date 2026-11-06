@@ -1773,8 +1773,9 @@ CFG_DEFAULTS = dict(
     cfg_num_days=6, cfg_periods_per_day=5, cfg_morning_count=3, cfg_max_seconds=30,
     cfg_school_name="",
     tn_suc_chua=24, tn_si_so_min=12, tn_tien_to="", tn_so_bat_dau=1, tn_ten_phong="", tn_toi_uu=True,
-    tn_sbd_chung=True, tn_chia_deu=True, tn_ten_truong="",
-    tn_ten_ky_thi="THI THỬ TỐT NGHIỆP THPT", tn_uu_tien_mon="🚪 Ít phòng nhất, rồi gom môn chỉ thi 1 lần tối đa",
+    tn_sbd_chung=True, tn_chia_deu=True, tn_ten_truong="TRƯỜNG TH, THCS VÀ THPT TÂN PHÚ",
+    tn_ten_ky_thi="THI THỬ TỐT NGHIỆP THPT", tn_don_vi="SỞ GIÁO DỤC VÀ ĐÀO TẠO THÀNH PHỐ HỒ CHÍ MINH",
+    tn_mon_tieu_de=False, tn_uu_tien_mon="🚪 Ít phòng nhất, rồi gom môn chỉ thi 1 lần tối đa",
     tn_cach_ca1="⚡ Tự động tối ưu", tn_ca1_cap="", tn_ghep_mon1=False, tn_max_mon2=2, tn_max_mon_ca=0, tn_max_cung_lop=0,
 )
 for key, default in CFG_DEFAULTS.items():
@@ -1987,10 +1988,13 @@ elif LA_ADMIN and module == "🪑 Xếp Phòng Thi":
 # ---------------------------------------------------------------------
 # PHÂN HỆ XẾP PHÒNG THI TỐT NGHIỆP (khối 12) — tab trong module Xếp phòng thi
 # ---------------------------------------------------------------------
-def _tieu_de_mau() -> tuple[str, str]:
+def _tieu_de_mau() -> tuple:
+    """(tên trường, tên kỳ thi, đơn vị chủ quản, ghi môn vào tiêu đề) cho mẫu in danh sách phòng."""
     ss = st.session_state
     return (str(ss.get("tn_ten_truong") or ss.get("cfg_school_name") or "").strip().upper(),
-            str(ss.get("tn_ten_ky_thi") or "").strip().upper())
+            str(ss.get("tn_ten_ky_thi") or "").strip().upper(),
+            str(ss.get("tn_don_vi") or "").strip().upper(),
+            bool(ss.get("tn_mon_tieu_de")))
 
 
 def _the_toan_van(ds_phong, kq_tc=None):
@@ -2138,13 +2142,18 @@ def module_thi_tot_nghiep():
             st.text_input("Tiền tố SBD", key="tn_tien_to", help="VD 'TP' → TP001. Để trống: 001, 002…")
         with c4:
             st.number_input("SBD bắt đầu từ", 1, 99999, step=1, key="tn_so_bat_dau")
-        t1, t2 = st.columns(2)
+        t0, t1, t2 = st.columns(3)
+        with t0:
+            st.text_input("Đơn vị chủ quản (tiêu ngữ, dòng 1)", key="tn_don_vi",
+                          help="In ở góc trái trên cùng, VD: SỞ GIÁO DỤC VÀ ĐÀO TẠO THÀNH PHỐ HỒ CHÍ MINH. Góc phải "
+                               "app tự in Quốc hiệu và “Độc lập - Tự do - Hạnh phúc”.")
         with t1:
-            st.text_input("Tên trường (in trên danh sách)", key="tn_ten_truong",
-                          placeholder=str(ss.get("cfg_school_name") or "TH-THCS-THPT TÂN PHÚ"))
+            st.text_input("Tên trường (tiêu ngữ, dòng 2 – gạch chân)", key="tn_ten_truong",
+                          placeholder=str(ss.get("cfg_school_name") or "TRƯỜNG TH, THCS VÀ THPT TÂN PHÚ"))
         with t2:
             st.text_input("Tên kỳ thi (in trên danh sách)", key="tn_ten_ky_thi",
-                          help="VD: THI THỬ THPT LẦN 1 NH 2025-2026 — app tự thêm “- MÔN …” theo từng phòng.")
+                          help="VD: KỲ KIỂM TRA GIỮA HỌC KÌ I - NĂM HỌC 2026-2027")
+        st.checkbox("Ghi tên môn vào dòng tên kỳ thi (VD “… - MÔN LÝ - HÓA”)", key="tn_mon_tieu_de")
         g1, g2 = st.columns(2)
         with g1:
             st.toggle("🔢 SBD đánh theo vần ABC cả khối", key="tn_sbd_chung",
