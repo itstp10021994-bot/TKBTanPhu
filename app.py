@@ -2028,7 +2028,7 @@ UU_TIEN_TC = {"🚪 Ít phòng nhất, rồi gom môn chỉ thi 1 lần tối đ
 CACH_CA1 = ["⚡ Tự động tối ưu", "✍️ Tự chọn môn thi ca 1 theo cặp môn"]
 
 
-@st.cache_data(show_spinner="⚡ Đang tối ưu xếp phòng…", max_entries=24)
+@st.cache_data(show_spinner="⚡ Đang tối ưu xếp phòng… (tối đa khoảng 20 giây)", max_entries=24)
 def _xep_tc(df, mon1_theo_cap=None, **kw):
     """xep_phong có nhớ kết quả (bộ giải mất vài giây) — chỉ giải lại khi dữ liệu / tuỳ chọn đổi."""
     pa = {frozenset(k.split("|")): v for k, v in (mon1_theo_cap or {}).items()} or None
@@ -2248,7 +2248,7 @@ def _the_tu_chon(ds_phong, sbd_chung):
               help="VD Lí 18 em + PL 7 em ngồi chung 1 phòng → bớt 1 phòng; phòng đó có 2 đề ở ca 1. "
                    "App chỉ ghép khi nhờ đó dùng ít phòng hơn hoặc ít môn mỗi ca hơn.")
     _tham_so = dict(suc_chua=int(ss.tn_suc_chua), tien_to_sbd=str(ss.tn_tien_to or "").strip(),
-                    so_bat_dau=int(ss.tn_so_bat_dau), phong_thi=ds_phong, gioi_han_giay=10,
+                    so_bat_dau=int(ss.tn_so_bat_dau), phong_thi=ds_phong, gioi_han_giay=12,
                     uu_tien=UU_TIEN_TC[ss.tn_uu_tien_mon], max_mon2=int(ss.tn_max_mon2),
                     max_mon_ca=int(ss.tn_max_mon_ca), max_cung_lop=int(ss.tn_max_cung_lop),
                     si_so_toi_thieu=int(ss.tn_si_so_min),
@@ -2260,7 +2260,6 @@ def _the_tu_chon(ds_phong, sbd_chung):
         st.info(f"✍️ Phương án tự chọn: **{len(kq['phong'])} phòng**, {len(kq['mon_tach'])} môn chia 2 ca, "
                 f"{kq['hs_lech']} em lệch ca. So sánh — phương án tự động: **{len(tu_dong['phong'])} phòng**, "
                 f"{len(tu_dong['mon_tach'])} môn chia 2 ca, {tu_dong['hs_lech']} em lệch ca.")
-    so_phong_thuong = len(_xep_tc(ss.tn_hoc_sinh, toi_uu=False, **_tham_so)["phong"]) if kq["toi_uu"] else None
     phong, tk, hs = kq["phong"], kq["thong_ke"], kq["hoc_sinh"]
     if phong.empty:
         st.warning("Chưa có học sinh nào có môn thi hợp lệ.")
@@ -2273,14 +2272,10 @@ def _the_tu_chon(ds_phong, sbd_chung):
          f"{int((phong['Loại phòng'] == 'Cùng môn 1').sum())} phòng cùng môn 1"),
         ("yellow", "🥇", tk.iloc[0]["Môn"], "Môn 1 đông nhất", f"{int(tk.iloc[0]['Số HS thi'])} học sinh"),
     ])
-    if so_phong_thuong is not None:
-        st.success(
-            f"⚡ Phương án tối ưu: **{len(phong)} phòng**"
-            + (f" — ít hơn {so_phong_thuong - len(phong)} phòng so với cách “môn đông hơn luôn là môn 1” "
-               f"({so_phong_thuong} phòng)" if so_phong_thuong > len(phong) else " — bằng cách xếp thường")
-            + (f". Có {kq['so_doi_mon1']} học sinh được xếp phòng theo môn ít người hơn trong 2 môn của em."
-               if kq["so_doi_mon1"] else ".")
-        )
+    if kq["toi_uu"]:
+        st.success(f"⚡ Phương án tối ưu: **{len(phong)} phòng**"
+                   + (f" — {kq['so_doi_mon1']} học sinh thi môn ít người hơn trong 2 môn của em ở ca 1."
+                      if kq["so_doi_mon1"] else "."))
     st.markdown(" ".join(
         f"<span class='chip-ca'><b>Ca {c}: {len(kq['mon_ca'][c])} môn</b> — {html.escape(', '.join(kq['mon_ca'][c]))}"
         "</span>" for c in (1, 2)) + (
