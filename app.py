@@ -1759,7 +1759,7 @@ CFG_DEFAULTS = dict(
     cfg_school_name="",
     tn_suc_chua=24, tn_si_so_min=12, tn_tien_to="", tn_so_bat_dau=1, tn_ten_phong="", tn_toi_uu=True,
     tn_sbd_chung=True, tn_chia_deu=False, tn_uu_tien_mon="🚪 Ít phòng nhất, rồi gom môn chỉ thi 1 lần tối đa",
-    tn_cach_ca1="⚡ Tự động tối ưu", tn_ca1_cap="", tn_ghep_mon1=False,
+    tn_cach_ca1="⚡ Tự động tối ưu", tn_ca1_cap="", tn_ghep_mon1=False, tn_max_mon2=2,
 )
 for key, default in CFG_DEFAULTS.items():
     st.session_state[key] = st.session_state.get(key, default)
@@ -2007,12 +2007,24 @@ UU_TIEN_TC = {"🚪 Ít phòng nhất, rồi gom môn chỉ thi 1 lần tối đ
 CACH_CA1 = ["⚡ Tự động tối ưu", "✍️ Tự chọn môn thi ca 1 theo cặp môn"]
 
 
+@st.cache_data(show_spinner="⚡ Đang tối ưu xếp phòng…", max_entries=24)
+def _xep_tc(df, mon1_theo_cap=None, **kw):
+    """xep_phong có nhớ kết quả (bộ giải mất vài giây) — chỉ giải lại khi dữ liệu / tuỳ chọn đổi."""
+    pa = {frozenset(k.split("|")): v for k, v in (mon1_theo_cap or {}).items()} or None
+    return tn.xep_phong(df, mon1_theo_cap=pa, **kw)
+
+
+def _xep_tc_pa(df, pa, **kw):
+    return _xep_tc(df, mon1_theo_cap={"|".join(sorted(k)): v for k, v in pa.items()} if pa else None, **kw)
+
+
 def _phuong_an_tu_chon(tham_so: dict, sbd_chung) -> dict:
     """Bảng cặp môn để thầy/cô chọn môn thi số 1 (ca 1) -> {frozenset(cặp): môn thi số 1}."""
     ss = st.session_state
-    if st.button("↺ Điền sẵn theo phương án tự động", key="tn_dien_tu_dong",
-                 help="Lấy môn thi số 1 mà phương án tối ưu tự động chọn cho mỗi cặp (lấy theo số đông) rồi sửa tiếp."):
-        tu_dong = tn.xep_phong(ss.tn_hoc_sinh, gioi_han_giay=5, uu_tien=UU_TIEN_TC[ss.tn_uu_tien_mon], **tham_so)
+    if st.button("⚡ Tự động xếp (điền bảng theo phương án tối ưu)", key="tn_dien_tu_dong", type="primary",
+                 help="App tìm phương án tốt nhất theo các ràng buộc ở trên (mỗi phòng 1 môn thi số 1, tối đa N môn "
+                      "thi số 2, ít phòng nhất…), mỗi cặp môn 1 hướng, rồi điền vào bảng để thầy/cô sửa tiếp."):
+        tu_dong = _xep_tc(ss.tn_hoc_sinh, khong_tach_cap=True, **tham_so)
         dem = defaultdict(Counter)
         for _, r in tu_dong["hoc_sinh"].iterrows():
             if r["Môn 2"] and " + " not in r["Môn 2"]:
@@ -2178,22 +2190,26 @@ def module_thi_tot_nghiep():
                       "Ít phòng nhất (khuyến nghị): giữ số phòng ÍT NHẤT, trong đó chọn môn số 1 / số 2 của từng em "
                       "để nhiều môn chỉ thi 1 lần nhất (VD Sinh luôn thi lần 1), môn còn phải chia 2 lần thì ít "
                       "học sinh lệch nhất. Gom môn trước: ưu tiên mỗi môn chỉ thi 1 lần, chấp nhận thêm phòng.")
+        r1, r2 = st.columns([1, 2])
+        with r1:
+            st.number_input("Tối đa số môn thi số 2 trong 1 phòng", 1, 4, step=1, key="tn_max_mon2",
+                            help="Ràng buộc: mỗi phòng chỉ 1 môn thi số 1 và không quá N môn thi số 2 (mặc định 2).")
+        with r2:
+            st.toggle("🧩 Cho phép 1 phòng có 2 môn thi số 1 (chỉ khi bớt được phòng)", key="tn_ghep_mon1",
+                      help="VD Lí 18 em + PL 7 em ngồi chung 1 phòng → bớt 1 phòng; phòng đó có 2 đề ở ca 1. "
+                           "App chỉ ghép khi nhờ đó dùng ít phòng hơn.")
         _tham_so = dict(suc_chua=int(ss.tn_suc_chua), tien_to_sbd=str(ss.tn_tien_to or "").strip(),
-                        so_bat_dau=int(ss.tn_so_bat_dau), phong_thi=ds_phong)
+                        so_bat_dau=int(ss.tn_so_bat_dau), phong_thi=ds_phong, gioi_han_giay=10,
+                        uu_tien=UU_TIEN_TC[ss.tn_uu_tien_mon], max_mon2=int(ss.tn_max_mon2),
+                        ghep_mon1=bool(ss.tn_ghep_mon1))
         pa = _phuong_an_tu_chon(_tham_so, sbd_chung) if tu_chon else None
-        st.toggle("🧩 Cho phép ghép 2 nhóm môn thi số 1 nhỏ vào chung 1 phòng (nếu vừa chỗ)", key="tn_ghep_mon1",
-                  disabled=not tu_chon,
-                  help="Chỉ dùng cho phương án tự chọn. Hai môn thi số 1 đều chưa đủ 1 phòng (VD Lí 18 em + PL 7 "
-                       "em) được ngồi chung 1 phòng nếu phòng đủ chỗ → bớt 1 phòng. Phòng đó có 2 đề ở ca 1.")
-        kq = tn.xep_phong(ss.tn_hoc_sinh, toi_uu=bool(ss.tn_toi_uu), gioi_han_giay=5, sbd_cho=sbd_chung,
-                          uu_tien=UU_TIEN_TC[ss.tn_uu_tien_mon], mon1_theo_cap=pa,
-                          ghep_mon1=bool(tu_chon and ss.tn_ghep_mon1), **_tham_so)
+        kq = _xep_tc_pa(ss.tn_hoc_sinh, pa, toi_uu=bool(ss.tn_toi_uu), sbd_cho=sbd_chung, **_tham_so)
         if tu_chon:
-            tu_dong = tn.xep_phong(ss.tn_hoc_sinh, gioi_han_giay=5, uu_tien=UU_TIEN_TC[ss.tn_uu_tien_mon], **_tham_so)
+            tu_dong = _xep_tc(ss.tn_hoc_sinh, **_tham_so)
             st.info(f"✍️ Phương án tự chọn: **{len(kq['phong'])} phòng**, {len(kq['mon_tach'])} môn chia 2 ca, "
                     f"{kq['hs_lech']} em lệch ca. So sánh — phương án tự động: **{len(tu_dong['phong'])} phòng**, "
                     f"{len(tu_dong['mon_tach'])} môn chia 2 ca, {tu_dong['hs_lech']} em lệch ca.")
-        so_phong_thuong = len(tn.xep_phong(ss.tn_hoc_sinh, toi_uu=False, **_tham_so)["phong"]) if kq["toi_uu"] else None
+        so_phong_thuong = len(_xep_tc(ss.tn_hoc_sinh, toi_uu=False, **_tham_so)["phong"]) if kq["toi_uu"] else None
         phong, tk, hs = kq["phong"], kq["thong_ke"], kq["hoc_sinh"]
         if phong.empty:
             st.warning("Chưa có học sinh nào có môn thi hợp lệ.")
