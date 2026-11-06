@@ -435,6 +435,10 @@ class DongBoList:
         "tạo List '{ten}' trên SharePoint với 1 cột tên 'NoiDung' kiểu Nhiều dòng văn bản "
         "(văn bản thuần, TẮT định dạng văn bản đa dạng thức)")
 
+    def dia_chi_site(self) -> tuple[str, str] | None:
+        """(địa chỉ site, tên site) mà kết nối đang đọc/ghi List. Lớp con ghi đè."""
+        return None
+
     def _tao_list(self, ten: str):
         """Tạo List trống (mẫu Danh sách tuỳ chỉnh). Lớp con ghi đè."""
         raise LoiLuuTru("kết nối này không tạo được List")
@@ -454,8 +458,13 @@ class DongBoList:
             try:
                 self._tao_list(ten)
             except (LoiLuuTru, requests.RequestException) as e:
+                try:
+                    site = self.dia_chi_site()
+                except Exception:
+                    site = None
                 raise LoiLuuTru(f"Chưa có List '{ten}' và app không tự tạo được ({e}) — hãy "
-                                + self.HUONG_DAN_TAO_CONG_BO.format(ten=ten) + ".")
+                                + self.HUONG_DAN_TAO_CONG_BO.format(ten=ten)
+                                + (f" — site: {site[0]}" if site else "") + ".")
             ref = self._tim_list(ten)
             if ref is None:
                 raise LoiLuuTru(f"Chưa có List '{ten}' (app đã thử tạo nhưng chưa thấy) — hãy "
@@ -745,6 +754,12 @@ class GraphSharePoint(DongBoList):
         if r.status_code not in (200, 201):
             raise LoiLuuTru(f"Graph trả lỗi {r.status_code} (cần quyền Sites.Manage.All): {r.text[:200]}")
 
+    def dia_chi_site(self) -> tuple[str, str] | None:
+        r = self._goi("GET", f"/sites/{self._site()}?$select=webUrl,displayName")
+        if r.status_code != 200:
+            return None
+        return r.json().get("webUrl", ""), r.json().get("displayName", "")
+
     def _tao_list(self, ten: str):
         r = self._goi("POST", f"/sites/{self._site()}/lists",
                       json={"displayName": ten, "list": {"template": "genericList"},
@@ -1030,11 +1045,27 @@ class PowerAutomate(DongBoList):
         if not any(khoa_cot(c["displayName"]) == k for c in self._cot_list(ten)):
             raise LoiLuuTru(self.LOI_FLOW_CHUA_SUA_CAU_TRUC)
 
+    def _list_neo(self) -> str | None:
+        """1 List CÓ SẴN của app trên site (để đi qua ParentWeb)."""
+        return next((t for t in [self.ten_list(b) for b in LIST_MAC_DINH]
+                     if self._tim_list(t) is not None), None)
+
+    def dia_chi_site(self) -> tuple[str, str] | None:
+        """Hỏi flow: getbytitle('<List có sẵn>')/ParentWeb -> địa chỉ & tên site (ô Site Address của flow)."""
+        neo = self._list_neo()
+        if neo is None:
+            return None
+        data = self._doc(neo, "ParentWeb?$select=Url,Title").json()
+        if isinstance(data, str):
+            data = json.loads(data)
+        if isinstance(data, dict) and isinstance(data.get("d"), dict):
+            data = data["d"]
+        return (str(data.get("Url") or ""), str(data.get("Title") or "")) if isinstance(data, dict) else None
+
     def _tao_list(self, ten: str):
         """Flow chỉ gọi được _api/web/lists/getbytitle('<list>')/<duong_dan> -> đi qua 1 List ĐÃ CÓ của site:
         getbytitle('<List có sẵn>')/ParentWeb/Lists  (= _api/web/lists) rồi POST để tạo List mới."""
-        neo = next((t for t in [self.ten_list(b) for b in LIST_MAC_DINH if b != "cong_bo"]
-                    if self._tim_list(t) is not None), None)
+        neo = self._list_neo()
         if neo is None:
             raise LoiLuuTru("site chưa có List nào của app để làm điểm tựa tạo List mới")
         self._gui_cau_truc(neo, "POST", "ParentWeb/Lists", {
