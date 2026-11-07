@@ -1149,3 +1149,104 @@ def xuat_mau_phong(trang: list[dict], ten_truong: str = "", ten_ky_thi: str = ""
     buf = io.BytesIO()
     wb.save(buf)
     return _ve_duong_ke(buf.getvalue(), dong_dau)
+
+
+# ---------------------------------------------------------------------
+# SƠ ĐỒ CHỖ NGỒI (thi tốt nghiệp): xếp theo SBD, trái → phải, hàng gần bảng trước
+# ---------------------------------------------------------------------
+def luoi_cho_ngoi(hs: list, so_cot: int) -> list[list]:
+    """hs: [(sbd, họ tên, lớp, {môn thi})] -> các hàng ghế (mỗi ô 1 học sinh hoặc None)."""
+    so_cot = max(int(so_cot), 1)
+    ds = sorted(hs, key=lambda h: str(h[0]))
+    hang = [list(ds[i:i + so_cot]) for i in range(0, len(ds), so_cot)]
+    if hang:
+        hang[-1] += [None] * (so_cot - len(hang[-1]))
+    return hang
+
+
+def xuat_so_do(trang: list[dict], so_cot: int = 4, ten_truong: str = "", ten_ky_thi: str = "", don_vi: str = "",
+               hien_ten: bool = False) -> bytes:
+    """Sơ đồ chỗ ngồi để in: mỗi phòng 1 trang A4 — tiêu ngữ, SƠ ĐỒ CHỖ NGỒI, kỳ thi, phòng, môn; dải
+    BẢNG / BÀN GIÁM THỊ; lưới chỗ ngồi (mỗi ô: SBD, [họ tên], lớp · môn) theo thứ tự SBD."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter as cot
+    from openpyxl.utils.indexed_list import IndexedList
+    from openpyxl.worksheet.pagebreak import Break
+
+    so_cot = max(int(so_cot), 1)
+    wb = Workbook()
+    wb._fonts = IndexedList([Font(name="Times New Roman", size=12)])
+    ws = wb.active
+    ws.title = "So_do_cho_ngoi"
+    mong = Side(style="thin")
+    tnr = lambda sz=12, b=False, i=False, mau=None: Font(name="Times New Roman", size=sz, bold=b, italic=i,   # noqa
+                                                         color=mau)
+    giua = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    # cột: lề | ghế | lối đi | ghế | … (ghế rộng, lối đi hẹp)
+    rong_ghe = max(10.0, min(22.0, 100.0 / so_cot))
+    ws.column_dimensions["A"].width = 2
+    for k in range(so_cot):
+        ws.column_dimensions[cot(2 + 2 * k)].width = rong_ghe
+        ws.column_dimensions[cot(3 + 2 * k)].width = 2.5
+    cuoi = 1 + 2 * so_cot
+    nen_ghe = PatternFill("solid", fgColor="FFE7F3FE")
+    r = 1
+    for t in trang:
+        nua = max(2, cuoi // 2)
+        ws.row_dimensions[r].height = 36
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=nua)
+        ws.cell(r, 1, f"{don_vi}\n{ten_truong}").font = tnr(10, True)
+        ws.merge_cells(start_row=r, start_column=nua + 1, end_row=r, end_column=cuoi)
+        ws.cell(r, nua + 1, f"{QUOC_HIEU}\n{TIEU_NGU}").font = tnr(10, True)
+        for c in (1, nua + 1):
+            ws.cell(r, c).alignment = giua
+        phong_ten = str(t["phong"]).upper()
+        for k, (v, f) in enumerate(((f"SƠ ĐỒ CHỖ NGỒI", tnr(15, True)), (ten_ky_thi, tnr(12, True)),
+                                    ((phong_ten if phong_ten.startswith("PHÒNG") else f"PHÒNG {phong_ten}")
+                                     + " · MÔN " + " - ".join(_TEN_NGAN.get(m, m.upper()) for m in t["mon"]),
+                                     tnr(12, True))), start=2):
+            ws.merge_cells(start_row=r + k - 1, start_column=1, end_row=r + k - 1, end_column=cuoi)
+            x = ws.cell(r + k - 1, 1, v)
+            x.font, x.alignment = f, giua
+            ws.row_dimensions[r + k - 1].height = 22
+        rb = r + 5   # dải bảng / bàn giám thị
+        ws.merge_cells(start_row=rb, start_column=2, end_row=rb, end_column=cuoi - 1)
+        x = ws.cell(rb, 2, "BẢNG  ·  BÀN GIÁM THỊ")
+        x.font, x.alignment = tnr(11, True, mau="FFFFFFFF"), giua
+        x.fill = PatternFill("solid", fgColor="FF22385E")
+        ws.row_dimensions[rb].height = 22
+        rr = rb + 2
+        so_dong_o = 3 if hien_ten else 2
+        for hang in luoi_cho_ngoi(t["hs"], so_cot):
+            for k, o in enumerate(hang):
+                c = 2 + 2 * k
+                gia_tri = ([str(o[0]), str(o[1]), f"{o[2]} · " + " - ".join(_TEN_NGAN.get(m, m) for m in t["mon"]
+                                                                            if m in o[3])]
+                           if o else ["", "", ""])
+                if not hien_ten:
+                    gia_tri = [gia_tri[0], gia_tri[2]]
+                for j in range(so_dong_o):
+                    x = ws.cell(rr + j, c, gia_tri[j] if o else None)
+                    x.alignment = giua
+                    x.font = tnr(14, True) if j == 0 else tnr(10)
+                    x.border = Border(left=mong, right=mong, top=mong if j == 0 else None,
+                                      bottom=mong if j == so_dong_o - 1 else None)
+                    if o:
+                        x.fill = nen_ghe
+            for j in range(so_dong_o):
+                ws.row_dimensions[rr + j].height = 22 if j == 0 else 16
+            ws.row_dimensions[rr + so_dong_o].height = 8   # lối đi giữa các hàng
+            rr += so_dong_o + 1
+        ws.cell(rr, 2, f"Tổng: {len(t['hs'])} thí sinh  ·  xếp theo số báo danh, từ trái sang phải, hàng gần bảng trước"
+                ).font = tnr(10, i=True)
+        ws.row_breaks.append(Break(id=rr + 1))
+        r = rr + 2
+    ws.page_setup.orientation, ws.page_setup.paperSize = "portrait", ws.PAPERSIZE_A4
+    ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, 0
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_margins.left = ws.page_margins.right = 0.3
+    ws.print_options.horizontalCentered = True
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
