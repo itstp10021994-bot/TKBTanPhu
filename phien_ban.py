@@ -1,10 +1,14 @@
 """Phiên bản ứng dụng — TĂNG mỗi lần cập nhật (x.y.z: x đổi lớn, y thêm tính năng, z sửa lỗi)
 và ghi 1 dòng vào LICH_SU (mới nhất ở đầu). Hiện ở cuối thanh bên + mục "Có gì mới"."""
 
-PHIEN_BAN = "2.0.0"
+PHIEN_BAN = "2.1.0"
 NGAY_PHAT_HANH = "07/11/2026"
 
 LICH_SU = [
+    ("2.1.0", "07/11/2026", [
+        "Thi tốt nghiệp: sơ đồ chỗ ngồi từng phòng (xem trên app + in Excel mỗi phòng 1 trang) cho môn tự chọn "
+        "và Toán – Ngữ văn; chỉnh số dãy bàn, hiện / ẩn họ tên.",
+    ]),
     ("2.0.0", "07/11/2026", [
         "Nhập liệu bằng form: sửa / thêm / xoá nhiều dòng rồi bấm Lưu 1 lần — app không còn nhảy sau mỗi ô.",
         "Lưu SharePoint nhanh hơn: dữ liệu được nén trước khi gửi, mỗi mục chứa nhiều hơn → ít lượt ghi / đọc.",

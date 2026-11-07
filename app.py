@@ -181,6 +181,8 @@ a{ color:var(--chinh-d) !important; }
 .seat.filled{ background:var(--chinh-50); border:1.5px solid var(--chinh); }
 .seat.empty{ background:var(--line-2); border:1.5px dashed var(--line); }
 .seat-sbd{ font-weight:900; color:var(--navy) !important; font-size:1.02rem; letter-spacing:.3px; }
+.seat-sub{ font-size:.72rem; color:var(--text-2) !important; line-height:1.25; }
+.seat.tn{ width:150px; }
 
 /* ---------- Thanh bên: trắng, mục chọn = viên bạc hà ---------- */
 section[data-testid="stSidebar"]{ background:#fff; border-right:none; box-shadow:4px 0 24px -16px rgba(34,56,94,.35); }
@@ -780,6 +782,47 @@ def ve_so_do_cho_ngoi_html(hang_ghe: list[list]) -> str:
         + "".join(hang_html) +
         '</div>'
     )
+
+
+def ve_so_do_tn_html(trang_phong: dict, so_cot: int, hien_ten: bool) -> str:
+    """Sơ đồ chỗ ngồi 1 phòng thi tốt nghiệp (theo SBD): mỗi ô SBD, [họ tên], lớp · môn."""
+    hang_html = []
+    for hang in tn.luoi_cho_ngoi(trang_phong["hs"], so_cot):
+        o_html = []
+        for o in hang:
+            if o is None:
+                o_html.append('<div class="seat tn empty"></div>')
+                continue
+            mon = " - ".join(tn._TEN_NGAN.get(m, m) for m in trang_phong["mon"] if m in o[3])
+            o_html.append(
+                '<div class="seat tn filled">'
+                f'<div class="seat-sbd">{html.escape(str(o[0]))}</div>'
+                + (f'<div class="seat-sub"><b>{html.escape(str(o[1]))}</b></div>' if hien_ten else "")
+                + f'<div class="seat-sub">{html.escape(str(o[2]))} · {html.escape(mon)}</div></div>')
+        hang_html.append(f'<div class="seat-row">{"".join(o_html)}</div>')
+    return ('<div class="seating-chart"><div class="board-label">BẢNG · BÀN GIÁM THỊ</div>'
+            + "".join(hang_html) + "</div>")
+
+
+def _xem_phong_tn(kq: dict, trang: list[dict], khoa: str):
+    """Chọn 1 phòng: tab Danh sách + tab Sơ đồ chỗ ngồi; '(tất cả)': danh sách toàn bộ."""
+    ss = st.session_state
+    hs, phong = kq["hoc_sinh"], kq["phong"]
+    p_chon = st.selectbox("Xem phòng", ["(tất cả)"] + phong["Phòng"].tolist(), key=khoa)
+    if p_chon == "(tất cả)":
+        st.dataframe(hs, width="stretch", hide_index=True, height=360)
+        st.caption("Chọn 1 phòng để xem sơ đồ chỗ ngồi.")
+        return
+    t_ds, t_sd = st.tabs(["📋 Danh sách", "🪑 Sơ đồ chỗ ngồi"])
+    with t_ds:
+        st.dataframe(hs[hs["Phòng"] == p_chon], width="stretch", hide_index=True, height=360)
+    with t_sd:
+        tp = next((t for t in trang if t["phong"] == p_chon), None)
+        if tp:
+            st.markdown(ve_so_do_tn_html(tp, int(ss.get("tn_so_cot", 4)), bool(ss.get("tn_so_do_ten"))),
+                        unsafe_allow_html=True)
+            st.caption("Xếp theo số báo danh, trái → phải, hàng gần bảng trước. Đổi số dãy bàn / hiện họ tên ở "
+                       "bước ②; in ở bước ⑤.")
 
 
 def ngay_dau_tuan_mac_dinh() -> date:
@@ -2021,7 +2064,7 @@ CFG_DEFAULTS = dict(
     tn_suc_chua=24, tn_si_so_min=12, tn_tien_to="", tn_so_bat_dau=1, tn_ten_phong="", tn_toi_uu=True,
     tn_sbd_chung=True, tn_chia_deu=True, tn_ten_truong="TRƯỜNG TH, THCS VÀ THPT TÂN PHÚ",
     tn_ten_ky_thi="THI THỬ TỐT NGHIỆP THPT", tn_don_vi="SỞ GIÁO DỤC VÀ ĐÀO TẠO THÀNH PHỐ HỒ CHÍ MINH",
-    tn_mon_tieu_de=False, tn_uu_tien_mon="🚪 Ít phòng nhất, rồi gom môn chỉ thi 1 lần tối đa",
+    tn_mon_tieu_de=False, tn_so_cot=4, tn_so_do_ten=False, tn_uu_tien_mon="🚪 Ít phòng nhất, rồi gom môn chỉ thi 1 lần tối đa",
     tn_cach_ca1="⚡ Tự động tối ưu", tn_ca1_cap="", tn_ghep_mon1=False, tn_max_mon2=2, tn_max_mon_ca=0, tn_max_cung_lop=0,
 )
 for key, default in CFG_DEFAULTS.items():
@@ -2263,9 +2306,7 @@ def _the_toan_van(ds_phong, kq_tc=None):
         st.dataframe(phong, width="stretch", hide_index=True)
         if kq["phong_trong"]:
             st.caption("🚪 Phòng không dùng tới: " + ", ".join(f"{t} ({c} chỗ)" for t, c in kq["phong_trong"]))
-        p_chon = st.selectbox("Xem danh sách phòng", ["(tất cả)"] + phong["Phòng"].tolist(), key="tn_tv_xem_phong")
-        st.dataframe(hs if p_chon == "(tất cả)" else hs[hs["Phòng"] == p_chon], width="stretch", hide_index=True,
-                     height=360)
+        _xem_phong_tn(kq, tn.trang_toan_van(kq), "tn_tv_xem_phong")
     return kq
 
 
@@ -2455,6 +2496,15 @@ def _buoc_thiet_lap():
         with the_khung():
             section_header("2b", "Phòng tự tạo", "Dùng khi chưa nhập danh sách phòng hoặc danh sách thiếu chỗ.")
             st.number_input("Sức chứa 1 phòng (khi tự tạo phòng)", 1, 60, step=1, key="tn_suc_chua")
+        with the_khung():
+            section_header("2d", "Sơ đồ chỗ ngồi", "Học sinh ngồi theo số báo danh, trái → phải, hàng gần bảng trước.")
+            a, b = st.columns(2)
+            with a:
+                st.number_input("Số dãy bàn (cột) mỗi phòng", 1, 8, step=1, key="tn_so_cot",
+                                help="VD phòng 24 chỗ, 4 dãy → 6 hàng.")
+            with b:
+                st.toggle("Hiện họ tên trên sơ đồ", key="tn_so_do_ten",
+                          help="Tắt: chỉ SBD, lớp, môn (dán cửa phòng). Bật: thêm họ tên (cho giám thị).")
     with c2:
         with the_khung():
             section_header("2c", "Tiêu ngữ trên danh sách in",
@@ -2470,6 +2520,7 @@ def _buoc_thiet_lap():
 
 def _buoc_xuat(kq_tc, kq_tv):
     """Bước 5: tải các file in / tổng hợp."""
+    ss = st.session_state
     xlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     with the_khung():
         section_header("5a", "Danh sách phòng thi theo mẫu (in)",
@@ -2488,6 +2539,24 @@ def _buoc_xuat(kq_tc, kq_tv):
                 f"📘 Toán – Ngữ văn — {len(kq_tv['phong']) if ok_tv else 0} phòng", type="primary", width="stretch",
                 data=tn.xuat_mau_phong(tn.trang_toan_van(kq_tv), *_tieu_de_mau()) if ok_tv else b"",
                 disabled=not ok_tv, file_name="danh_sach_phong_thi_toan_van.xlsx", key="dl_tn_tv_mau", mime=xlsx)
+    with the_khung():
+        section_header("5c", "Sơ đồ chỗ ngồi (in)",
+                       "Mỗi phòng 1 trang A4: tiêu ngữ, phòng, môn, dải BẢNG · BÀN GIÁM THỊ và lưới chỗ ngồi theo SBD. "
+                       "Số dãy bàn / hiện họ tên chỉnh ở bước ②.")
+        z1, z2 = st.columns(2)
+        _sd = dict(so_cot=int(ss.get("tn_so_cot", 4)), hien_ten=bool(ss.get("tn_so_do_ten")))
+        _td = _tieu_de_mau()
+        _td = dict(ten_truong=_td[0], ten_ky_thi=_td[1], don_vi=_td[2])
+        with z1:
+            ok = kq_tc is not None and not kq_tc["phong"].empty
+            st.download_button("🪑 Sơ đồ — Môn tự chọn", width="stretch", disabled=not ok,
+                               data=tn.xuat_so_do(tn.trang_tu_chon(kq_tc), **_sd, **_td) if ok else b"",
+                               file_name="so_do_cho_ngoi_mon_tu_chon.xlsx", key="dl_tn_sodo_tc", mime=xlsx)
+        with z2:
+            ok_tv = kq_tv is not None and not kq_tv["phong"].empty
+            st.download_button("🪑 Sơ đồ — Toán – Ngữ văn", width="stretch", disabled=not ok_tv,
+                               data=tn.xuat_so_do(tn.trang_toan_van(kq_tv), **_sd, **_td) if ok_tv else b"",
+                               file_name="so_do_cho_ngoi_toan_van.xlsx", key="dl_tn_sodo_tv", mime=xlsx)
     with the_khung():
         section_header("5b", "Bảng tổng hợp (Excel)", "Danh sách theo phòng, theo lớp, thống kê môn — để kiểm tra, "
                                                         "tra cứu, gửi giáo viên chủ nhiệm.")
@@ -2670,9 +2739,7 @@ def _the_tu_chon(ds_phong, sbd_chung):
         st.dataframe(phong, width="stretch", hide_index=True)
         if kq["phong_trong"]:
             st.caption("🚪 Phòng không dùng tới: " + ", ".join(f"{t} ({c} chỗ)" for t, c in kq["phong_trong"]))
-        p_chon = st.selectbox("Xem danh sách phòng", ["(tất cả)"] + phong["Phòng"].tolist(), key="tn_xem_phong")
-        st.dataframe(hs if p_chon == "(tất cả)" else hs[hs["Phòng"] == p_chon], width="stretch", hide_index=True,
-                     height=360)
+        _xem_phong_tn(kq, tn.trang_tu_chon(kq), "tn_xem_phong")
     return kq
 
 
