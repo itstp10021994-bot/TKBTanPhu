@@ -2536,7 +2536,8 @@ def _buoc_xuat(kq_tc, kq_tv):
             ok = kq_tc is not None and not kq_tc["phong"].empty
             st.download_button(
                 f"🧪 Môn tự chọn — {len(kq_tc['phong']) if ok else 0} phòng", type="primary", width="stretch",
-                data=tn.xuat_mau_phong(tn.trang_tu_chon(kq_tc), *_tieu_de_mau()) if ok else b"", disabled=not ok,
+                data=tn.xuat_mau_phong(tn.trang_tu_chon(kq_tc), *_tieu_de_mau(), ngang=True) if ok else b"",
+                disabled=not ok,
                 file_name="danh_sach_phong_thi_mon_tu_chon.xlsx", key="dl_tn_mau", mime=xlsx)
         with x2:
             ok_tv = kq_tv is not None and not kq_tv["phong"].empty
