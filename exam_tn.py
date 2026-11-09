@@ -983,6 +983,24 @@ _DUONG_KE_MAU = [   # (cột từ, lệch từ, cột đến, lệch đến, l�
 _DONG_MOI_TRANG = 39
 
 
+def _ti_le_in(ws, so_cot: int, khoi: list[tuple[int, int]], ngang: bool, le: tuple) -> int:
+    """Tỉ lệ in CỐ ĐỊNH (%) để mỗi khối dòng (1 phòng) vừa 1 trang và đủ chiều ngang. Không dùng 'Fit to'
+    vì khi bật Fit to, Excel BỎ QUA dấu ngắt trang -> các phòng dồn nối nhau qua trang."""
+    from openpyxl.utils import get_column_letter as cot
+    rong = 0.0
+    for j in range(1, so_cot + 1):
+        k = cot(j)
+        w = ws.column_dimensions[k].width if k in ws.column_dimensions and ws.column_dimensions[k].width else 8.43
+        rong += (w * 7.5 + 5) * 0.75          # font mặc định Times New Roman 12 (mẫu trường in 90 % vừa trang)
+    mac_dinh = ws.sheet_format.defaultRowHeight or 15
+    cao = max([sum((ws.row_dimensions[x].height if x in ws.row_dimensions and ws.row_dimensions[x].height
+                    else mac_dinh) for x in range(a, b + 1)) for a, b in khoi] or [1])
+    trang_w, trang_h = (842, 595) if ngang else (595, 842)   # A4, điểm
+    trang_w -= (le[0] + le[1]) * 72
+    trang_h -= (le[2] + le[3]) * 72
+    return max(10, min(100, int(min(trang_w / rong, trang_h / cao) * 100 * 0.95)))
+
+
 def _ve_duong_ke(du_lieu: bytes, dong_dau: list[int], lech_phai: int = 0) -> bytes:
     """Chèn các đường kẻ (connector) của mẫu vào đầu mỗi trang (openpyxl không tự vẽ được hình)."""
     import zipfile
@@ -1051,7 +1069,7 @@ def xuat_mau_phong(trang: list[dict], ten_truong: str = "", ten_ky_thi: str = ""
     ws = wb.active
     ws.title = "Danh_sach_phong"
     # khổ ngang: dòng thấp hơn để mỗi phòng vẫn vừa 1 trang A4 ngang
-    cao_dong = 17.0 if ngang else 20.1
+    cao_dong = 15.5 if ngang else 20.1
     ws.sheet_format.defaultRowHeight, ws.sheet_format.customHeight = cao_dong, True
     mong, manh = Side(style="thin"), Side(style="hair")
     vien = Border(left=mong, right=mong, top=mong, bottom=mong)
@@ -1081,7 +1099,7 @@ def xuat_mau_phong(trang: list[dict], ten_truong: str = "", ten_ky_thi: str = ""
             x.border = bien
         return x
 
-    r, dong_dau = 1, []
+    r, dong_dau, khoi, so_cot_max = 1, [], [], 9
     for t in trang:
         so_mon = max(len(t["mon"]), 1)
         cuoi = b0 - 1 + 2 * so_mon       # cột cuối của bảng
@@ -1152,22 +1170,19 @@ def xuat_mau_phong(trang: list[dict], ten_truong: str = "", ten_ky_thi: str = ""
         _o(f0 + 5, 1, "( Ký và ghi rõ họ tên )", tnr(12), giua_1_dong)
         _o(f0 + 4, gt2, "GIÁM THỊ 2", tnr(12, True), giua_1_dong)
         _o(f0 + 5, gt2, "( Ký và ghi rõ họ tên )", tnr(12), giua_1_dong)
-        het = max(r + _DONG_MOI_TRANG - 1, f0 + 8)   # mỗi phòng 1 trang (39 dòng như mẫu)
+        # mỗi phòng 1 trang (khổ dọc: 39 dòng như mẫu; khổ ngang: vừa đủ nội dung)
+        het = f0 + 6 if ngang else max(r + _DONG_MOI_TRANG - 1, f0 + 8)
         ws.row_breaks.append(Break(id=het))
+        khoi.append((r, f0 + 6))
+        so_cot_max = max(so_cot_max, rong)
         r = het + 1
     ws.page_setup.orientation = "landscape" if ngang else "portrait"
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
-    if ngang:   # vừa chiều ngang, và mỗi phòng 1 trang (số trang = số phòng)
-        ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, max(len(trang), 1)
-        ws.sheet_properties.pageSetUpPr.fitToPage = True
-        ws.print_options.horizontalCentered = True
-    elif so_mon_max <= 2:
-        ws.page_setup.scale = 90
-    else:   # nhiều môn hơn mẫu: thu vừa 1 trang ngang
-        ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, 0
-        ws.sheet_properties.pageSetUpPr.fitToPage = True
-    ws.page_margins.left, ws.page_margins.right = 0.2362204724409449, 0.17
-    ws.page_margins.top, ws.page_margins.bottom = (0.35, 0.25) if ngang else (0.5118110236220472, 0.2362204724409449)
+    le = (0.2362204724409449, 0.17) + ((0.35, 0.25) if ngang else (0.5118110236220472, 0.2362204724409449))
+    ws.page_margins.left, ws.page_margins.right, ws.page_margins.top, ws.page_margins.bottom = le
+    ti_le = _ti_le_in(ws, so_cot_max, khoi, ngang, le)
+    ws.page_setup.scale = ti_le if (ngang or so_mon_max > 2) else min(90, ti_le)   # mẫu dọc: 90 %
+    ws.print_options.horizontalCentered = True
     buf = io.BytesIO()
     wb.save(buf)
     return _ve_duong_ke(buf.getvalue(), dong_dau, b0 - 6)
@@ -1213,7 +1228,7 @@ def xuat_so_do(trang: list[dict], so_cot: int = 4, ten_truong: str = "", ten_ky_
         ws.column_dimensions[cot(3 + 2 * k)].width = 2.5
     cuoi = 1 + 2 * so_cot
     nen_ghe = PatternFill("solid", fgColor="FFE7F3FE")
-    r = 1
+    r, khoi = 1, []
     for t in trang:
         nua = max(2, cuoi // 2)
         ws.row_dimensions[r].height = 36
@@ -1266,11 +1281,12 @@ def xuat_so_do(trang: list[dict], so_cot: int = 4, ten_truong: str = "", ten_ky_
         ws.cell(rr, 2, f"Tổng: {len(t['hs'])} thí sinh  ·  xếp theo số báo danh, từ trái sang phải, hàng gần bảng trước"
                 ).font = tnr(10, i=True)
         ws.row_breaks.append(Break(id=rr + 1))
+        khoi.append((r, rr + 1))
         r = rr + 2
     ws.page_setup.orientation, ws.page_setup.paperSize = "portrait", ws.PAPERSIZE_A4
-    ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, 0
-    ws.sheet_properties.pageSetUpPr.fitToPage = True
-    ws.page_margins.left = ws.page_margins.right = 0.3
+    le = (0.3, 0.3, 0.5, 0.4)
+    ws.page_margins.left, ws.page_margins.right, ws.page_margins.top, ws.page_margins.bottom = le
+    ws.page_setup.scale = _ti_le_in(ws, cuoi, khoi, False, le)   # mỗi phòng 1 trang (không dùng Fit to)
     ws.print_options.horizontalCentered = True
     buf = io.BytesIO()
     wb.save(buf)
