@@ -2540,6 +2540,24 @@ def _buoc_xuat(kq_tc, kq_tv):
                 data=tn.xuat_mau_phong(tn.trang_toan_van(kq_tv), *_tieu_de_mau()) if ok_tv else b"",
                 disabled=not ok_tv, file_name="danh_sach_phong_thi_toan_van.xlsx", key="dl_tn_tv_mau", mime=xlsx)
     with the_khung():
+        section_header("5d", "Danh sách theo lớp: SBD & phòng thi cả 4 môn",
+                       "Mỗi học sinh 1 dòng: SBD (dùng chung cả kỳ thi), phòng Ngữ văn, phòng Toán, môn & phòng 2 môn "
+                       "tự chọn. File Excel có sheet toàn trường + mỗi lớp 1 sheet (gửi GVCN, dán bảng tin).")
+        b4 = tn.bang_4_mon(kq_tc, kq_tv)
+        if b4.empty:
+            st.info("Chưa có kết quả xếp phòng.")
+        else:
+            l1, l2 = st.columns([1, 2])
+            with l1:
+                lop_xem = st.selectbox("Xem lớp", ["(tất cả)"] + sorted(b4["Lớp"].unique().tolist()), key="tn_4mon_lop")
+            with l2:
+                _td4 = _tieu_de_mau()
+                st.download_button("📋 Tải danh sách theo lớp (Excel)", type="primary", width="stretch",
+                                   data=tn.xuat_4_mon(b4, ten_truong=_td4[0], ten_ky_thi=_td4[1], don_vi=_td4[2]),
+                                   file_name="danh_sach_sbd_phong_thi_theo_lop.xlsx", key="dl_tn_4mon", mime=xlsx)
+            st.dataframe(b4 if lop_xem == "(tất cả)" else b4[b4["Lớp"] == lop_xem], width="stretch",
+                         hide_index=True, height=360)
+    with the_khung():
         section_header("5c", "Sơ đồ chỗ ngồi (in)",
                        "Mỗi phòng 1 trang A4: tiêu ngữ, phòng, môn, dải BẢNG · BÀN GIÁM THỊ và lưới chỗ ngồi theo SBD. "
                        "Số dãy bàn / hiện họ tên chỉnh ở bước ②.")
