@@ -1250,3 +1250,123 @@ def xuat_so_do(trang: list[dict], so_cot: int = 4, ten_truong: str = "", ten_ky_
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------
+# DANH SÁCH THEO LỚP: SBD + môn + phòng của cả 4 môn (Văn, Toán, 2 môn tự chọn)
+# ---------------------------------------------------------------------
+COT_4_MON = ["SBD", "Họ và tên", "Lớp", "Ngữ văn – Phòng", "Toán – Phòng",
+             "Môn tự chọn 1 (ca 1)", "Phòng môn 1", "Môn tự chọn 2 (ca 2)", "Phòng môn 2"]
+
+
+def bang_4_mon(kq_tc: dict | None, kq_tv: dict | None) -> pd.DataFrame:
+    """Mỗi học sinh 1 dòng: SBD (chung cả kỳ thi), họ tên, lớp, phòng Văn / Toán, môn & phòng 2 môn tự chọn.
+    Sắp theo lớp, rồi vần ABC."""
+    tv = kq_tv["hoc_sinh"] if kq_tv is not None and not kq_tv["hoc_sinh"].empty else pd.DataFrame()
+    tc = kq_tc["hoc_sinh"] if kq_tc is not None and not kq_tc["hoc_sinh"].empty else pd.DataFrame()
+    theo_sbd = {str(r["SBD"]): r for _, r in tc.iterrows()} if not tc.empty else {}
+    dong, da_co = [], set()
+    nguon = tv if not tv.empty else tc
+    for _, r in nguon.iterrows():
+        sbd = str(r["SBD"])
+        t = theo_sbd.get(sbd)
+        da_co.add(sbd)
+        dong.append({"SBD": sbd, "Họ và tên": r["Họ và tên"], "Lớp": r["Lớp"],
+                     "Ngữ văn – Phòng": r["Phòng"] if not tv.empty else "",
+                     "Toán – Phòng": r["Phòng"] if not tv.empty else "",
+                     "Môn tự chọn 1 (ca 1)": t["Môn 1"] if t is not None else "",
+                     "Phòng môn 1": t["Phòng"] if t is not None else "",
+                     "Môn tự chọn 2 (ca 2)": t["Môn 2"] if t is not None else "",
+                     "Phòng môn 2": t["Phòng"] if t is not None else ""})
+    for sbd, t in theo_sbd.items():   # có môn tự chọn nhưng không có trong danh sách Toán – Văn
+        if sbd not in da_co:
+            dong.append({"SBD": sbd, "Họ và tên": t["Họ và tên"], "Lớp": t["Lớp"], "Ngữ văn – Phòng": "",
+                         "Toán – Phòng": "", "Môn tự chọn 1 (ca 1)": t["Môn 1"], "Phòng môn 1": t["Phòng"],
+                         "Môn tự chọn 2 (ca 2)": t["Môn 2"], "Phòng môn 2": t["Phòng"]})
+    df = pd.DataFrame(dong, columns=COT_4_MON)
+    if df.empty:
+        return df
+    df["_k"] = df["Họ và tên"].map(khoa_ten_vn)
+    return df.sort_values(["Lớp", "_k", "SBD"], kind="stable").drop(columns="_k").reset_index(drop=True)
+
+
+def xuat_4_mon(df: pd.DataFrame, ten_truong: str = "", ten_ky_thi: str = "", don_vi: str = "") -> bytes:
+    """Excel: sheet 'Toan_truong' + mỗi lớp 1 sheet. Mỗi sheet: tiêu ngữ, tiêu đề, bảng 2 tầng tiêu đề
+    (Ngữ văn | Toán | Môn tự chọn 1 | Môn tự chọn 2), cột STT; in A4 ngang vừa 1 trang."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter as cot
+    from openpyxl.utils.indexed_list import IndexedList
+
+    wb = Workbook()
+    wb._fonts = IndexedList([Font(name="Times New Roman", size=12)])
+    wb.remove(wb.active)
+    mong = Side(style="thin")
+    vien = Border(left=mong, right=mong, top=mong, bottom=mong)
+    tnr = lambda sz=12, b=False, i=False: Font(name="Times New Roman", size=sz, bold=b, italic=i)   # noqa: E731
+    giua = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    trai = Alignment(horizontal="left", vertical="center")
+    nen = PatternFill("solid", fgColor="FFE7F3FE")
+    # STT | SBD | Họ và tên | Lớp | Văn: Phòng | Toán: Phòng | TC1: Môn, Phòng | TC2: Môn, Phòng
+    rong = [5, 11, 28, 8, 10, 10, 14, 10, 14, 10]
+
+    def _sheet(ten_sheet: str, tieu_de: str, d: pd.DataFrame):
+        ws = wb.create_sheet(ten_sheet[:31])
+        for j, w in enumerate(rong, start=1):
+            ws.column_dimensions[cot(j)].width = w
+        cuoi = len(rong)
+        ws.row_dimensions[1].height = 36
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=4)
+        ws.cell(1, 1, f"{don_vi}\n{ten_truong}").font = tnr(11, True)
+        ws.merge_cells(start_row=1, start_column=5, end_row=1, end_column=cuoi)
+        ws.cell(1, 5, f"{QUOC_HIEU}\n{TIEU_NGU}").font = tnr(11, True)
+        for c in (1, 5):
+            ws.cell(1, c).alignment = giua
+        for r, (v, f) in enumerate(((tieu_de, tnr(14, True)), (ten_ky_thi, tnr(12, True))), start=3):
+            ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=cuoi)
+            x = ws.cell(r, 1, v)
+            x.font, x.alignment = f, giua
+        h1, h2 = 6, 7
+        nhom = [(1, 1, "STT"), (2, 2, "SBD"), (3, 3, "Họ và tên"), (4, 4, "Lớp")]
+        for c1, c2, chu in nhom:
+            ws.merge_cells(start_row=h1, start_column=c1, end_row=h2, end_column=c2)
+            ws.cell(h1, c1, chu)
+        for c1, c2, chu, con in ((5, 5, "Ngữ văn", ["Phòng"]), (6, 6, "Toán", ["Phòng"]),
+                                 (7, 8, "Môn tự chọn 1 (ca 1)", ["Môn", "Phòng"]),
+                                 (9, 10, "Môn tự chọn 2 (ca 2)", ["Môn", "Phòng"])):
+            if c2 > c1:
+                ws.merge_cells(start_row=h1, start_column=c1, end_row=h1, end_column=c2)
+            ws.cell(h1, c1, chu)
+            for k, chu2 in enumerate(con):
+                ws.cell(h2, c1 + k, chu2)
+        for rr in (h1, h2):
+            ws.row_dimensions[rr].height = 20
+            for c in range(1, cuoi + 1):
+                x = ws.cell(rr, c)
+                x.font, x.alignment, x.border, x.fill = tnr(11, True), giua, vien, nen
+        for i, (_, r) in enumerate(d.iterrows(), start=1):
+            rr = h2 + i
+            sbd = r["SBD"]
+            gia_tri = [i, int(sbd) if str(sbd).isdigit() and not str(sbd).startswith("0") else sbd, r["Họ và tên"],
+                       r["Lớp"], r["Ngữ văn – Phòng"], r["Toán – Phòng"], r["Môn tự chọn 1 (ca 1)"],
+                       r["Phòng môn 1"], r["Môn tự chọn 2 (ca 2)"], r["Phòng môn 2"]]
+            for c, v in enumerate(gia_tri, start=1):
+                x = ws.cell(rr, c, v)
+                x.font, x.border = tnr(12), vien
+                x.alignment = trai if c == 3 else giua
+        ws.cell(h2 + len(d) + 2, 1, f"Danh sách có {len(d)} học sinh.").font = tnr(11, i=True)
+        ws.print_title_rows = f"{h1}:{h2}"
+        ws.freeze_panes = ws.cell(h2 + 1, 4)
+        ws.page_setup.orientation, ws.page_setup.paperSize = "landscape", ws.PAPERSIZE_A4
+        ws.page_setup.fitToWidth, ws.page_setup.fitToHeight = 1, 0
+        ws.sheet_properties.pageSetUpPr.fitToPage = True
+        ws.page_margins.left = ws.page_margins.right = 0.3
+        ws.print_options.horizontalCentered = True
+
+    _sheet("Toan_truong", "DANH SÁCH SỐ BÁO DANH VÀ PHÒNG THI", df)
+    for lop, d in df.groupby("Lớp", sort=True):
+        _sheet(re.sub(r"[\[\]:*?/\\]", "-", str(lop) or "Khac"),
+               f"DANH SÁCH SỐ BÁO DANH VÀ PHÒNG THI — LỚP {str(lop).upper()}", d)
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
