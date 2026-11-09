@@ -1,10 +1,12 @@
 """Phiên bản ứng dụng — TĂNG mỗi lần cập nhật (x.y.z: x đổi lớn, y thêm tính năng, z sửa lỗi)
 và ghi 1 dòng vào LICH_SU (mới nhất ở đầu). Hiện ở cuối thanh bên + mục "Có gì mới"."""
 
-PHIEN_BAN = "2.3.1"
+PHIEN_BAN = "2.3.2"
 NGAY_PHAT_HANH = "09/11/2026"
 
 LICH_SU = [
+    ("2.3.2", "09/11/2026", ["Sửa in: mỗi phòng đúng 1 trang trong Excel (danh sách phòng ngang / dọc, sơ đồ "
+                             "chỗ ngồi) — dùng tỉ lệ in cố định thay cho 'Fit to' (Excel bỏ qua ngắt trang)."]),
     ("2.3.1", "09/11/2026", ["Danh sách phòng môn tự chọn in khổ A4 NGANG, mỗi phòng 1 trang."]),
     ("2.3.0", "09/11/2026", [
         "Thi tốt nghiệp — danh sách phòng môn tự chọn ghi rõ từng em: cột Môn 1 (ca 1), Môn 2 (ca 2); tiêu đề "
