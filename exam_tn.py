@@ -954,8 +954,11 @@ def trang_tu_chon(kq: dict) -> list[dict]:
         dong = []
         for _, h in hs[hs["Phòng"] == p["Phòng"]].iterrows():
             thi = {h["Môn 1"]} | {m for m in str(h["Môn 2"] or "").split(" + ") if m}
-            dong.append((h["SBD"], h["Họ và tên"], h["Lớp"], thi))
-        trang.append({"phong": p["Phòng"], "mon": mon, "hs": dong})
+            dong.append((h["SBD"], h["Họ và tên"], h["Lớp"], thi, (h["Môn 1"], str(h["Môn 2"] or ""))))
+        mon1 = {m for m in str(p.get("Môn 1") or "").split(", ") if m}
+        mon2 = {m for m in str(p.get("Môn 2") or "").split(", ") if m}
+        ca = {m: ("ca 1, 2" if m in mon1 and m in mon2 else "ca 1" if m in mon1 else "ca 2") for m in mon}
+        trang.append({"phong": p["Phòng"], "mon": mon, "hs": dong, "ca": ca})
     return trang
 
 
@@ -980,13 +983,15 @@ _DUONG_KE_MAU = [   # (cột từ, lệch từ, cột đến, lệch đến, l�
 _DONG_MOI_TRANG = 39
 
 
-def _ve_duong_ke(du_lieu: bytes, dong_dau: list[int]) -> bytes:
+def _ve_duong_ke(du_lieu: bytes, dong_dau: list[int], lech_phai: int = 0) -> bytes:
     """Chèn các đường kẻ (connector) của mẫu vào đầu mỗi trang (openpyxl không tự vẽ được hình)."""
     import zipfile
 
     neo, so = [], 2
     for r0 in dong_dau:
-        for c1, o1, c2, o2, dy in _DUONG_KE_MAU:
+        for j, (c1, o1, c2, o2, dy) in enumerate(_DUONG_KE_MAU):
+            if j == 1:   # đường kẻ dưới tiêu ngữ bên phải dời theo khối bên phải
+                c1, c2 = c1 + lech_phai, c2 + lech_phai
             neo.append(
                 f'<xdr:twoCellAnchor><xdr:from><xdr:col>{c1}</xdr:col><xdr:colOff>{o1}</xdr:colOff>'
                 f'<xdr:row>{r0 - 1}</xdr:row><xdr:rowOff>{dy}</xdr:rowOff></xdr:from><xdr:to><xdr:col>{c2}</xdr:col>'
@@ -1053,11 +1058,16 @@ def xuat_mau_phong(trang: list[dict], ten_truong: str = "", ten_ky_thi: str = ""
     giua = Alignment(horizontal="center", vertical="center", wrap_text=True)
     trai = Alignment(horizontal="left", vertical="center")
     so_mon_max = max([len(t["mon"]) for t in trang] or [2])
+    # môn tự chọn: thêm 2 cột "Môn 1 (ca 1)", "Môn 2 (ca 2)" sau cột Lớp -> cột môn bắt đầu từ cột H
+    co_ca = any(len(h) > 4 for t in trang for h in t["hs"])
+    b0 = 8 if co_ca else 6
     for j, w in enumerate(_RONG_COT_MAU, start=1):
         ws.column_dimensions[cot(j)].width = w
+    if co_ca:
+        ws.column_dimensions["F"].width = ws.column_dimensions["G"].width = 11.5
     for k in range(max(so_mon_max, 2)):
         w1, w2 = _RONG_MON_MAU[min(k, 1)]
-        ws.column_dimensions[cot(6 + 2 * k)].width, ws.column_dimensions[cot(7 + 2 * k)].width = w1, w2
+        ws.column_dimensions[cot(b0 + 2 * k)].width, ws.column_dimensions[cot(b0 + 1 + 2 * k)].width = w1, w2
 
     def _o(rr, c, v=None, font=None, can=None, bien=None):
         x = ws.cell(rr, c) if v is None else ws.cell(rr, c, v)
@@ -1072,15 +1082,15 @@ def xuat_mau_phong(trang: list[dict], ten_truong: str = "", ten_ky_thi: str = ""
     r, dong_dau = 1, []
     for t in trang:
         so_mon = max(len(t["mon"]), 1)
-        cuoi = 5 + 2 * so_mon            # cột cuối của bảng
-        rong = max(cuoi, 9)              # tiêu đề trải tối thiểu A..I như mẫu
+        cuoi = b0 - 1 + 2 * so_mon       # cột cuối của bảng
+        rong = max(cuoi, b0 + 3)         # tiêu đề trải tối thiểu tới hết khối tiêu ngữ bên phải
         dong_dau.append(r)
         # --- tiêu ngữ (dòng cao 51) ---
         ws.row_dimensions[r].height = 51
         ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=5)
         _o(r, 1, f"{don_vi}\n{ten_truong}", tnr(12, True), giua)
-        ws.merge_cells(start_row=r, start_column=6, end_row=r, end_column=9)
-        _o(r, 6, f"{QUOC_HIEU}\n{TIEU_NGU}", tnr(12, True), giua)
+        ws.merge_cells(start_row=r, start_column=b0, end_row=r, end_column=b0 + 3)
+        _o(r, b0, f"{QUOC_HIEU}\n{TIEU_NGU}", tnr(12, True), giua)
         tieu_de = ten_ky_thi + (" - MÔN " + " - ".join(_TEN_NGAN.get(m, m.upper()) for m in t["mon"])
                                 if ghi_mon_tieu_de else "")
         phong_ten = str(t["phong"]).upper()
@@ -1089,19 +1099,21 @@ def xuat_mau_phong(trang: list[dict], ten_truong: str = "", ten_ky_thi: str = ""
             _o(r + k, 1, v, tnr(12, True), giua)
         # --- tiêu đề bảng ---
         h1, h2 = r + 4, r + 5
-        for c1, c2, chu in ((1, 1, "STT"), (2, 2, "SBD"), (3, 4, "Họ và tên học sinh"), (5, 5, "Lớp")):
+        for c1, c2, chu in ((1, 1, "STT"), (2, 2, "SBD"), (3, 4, "Họ và tên học sinh"), (5, 5, "Lớp")) + (
+                ((6, 6, "Môn 1\n(ca 1)"), (7, 7, "Môn 2\n(ca 2)")) if co_ca else ()):
             ws.merge_cells(start_row=h1, start_column=c1, end_row=h2, end_column=c2)
             _o(h1, c1, chu)
         for k, m in enumerate(t["mon"]):
-            c = 6 + 2 * k
+            c = b0 + 2 * k
             ws.merge_cells(start_row=h1, start_column=c, end_row=h1, end_column=c + 1)
-            _o(h1, c, m)
+            _o(h1, c, f"{m} ({t['ca'][m]})" if t.get("ca", {}).get(m) else m)
             _o(h2, c, "M.đề"); _o(h2, c + 1, "Ký tên")
         for rr in (h1, h2):
             for c in range(1, cuoi + 1):
                 _o(rr, c, None, tnr(10, True), giua, vien)
         # --- học sinh ---
-        for stt, (sbd, ten, lop, thi) in enumerate(t["hs"], start=1):
+        for stt, h in enumerate(t["hs"], start=1):
+            sbd, ten, lop, thi = h[:4]
             rr = h2 + stt
             sbd_o = int(sbd) if str(sbd).isdigit() and not str(sbd).startswith("0") else sbd
             tach = str(ten).split()
@@ -1109,8 +1121,12 @@ def xuat_mau_phong(trang: list[dict], ten_truong: str = "", ten_ky_thi: str = ""
                 _o(rr, c, v, tnr(12), trai if c in (3, 4) else giua, vien)
             _o(rr, 3, None, bien=Border(left=mong, top=mong, bottom=mong))
             _o(rr, 4, None, bien=Border(right=mong, top=mong, bottom=mong))
+            if co_ca:
+                m1, m2 = h[4] if len(h) > 4 else ("", "")
+                _o(rr, 6, m1, tnr(12, True), giua, vien)
+                _o(rr, 7, m2, tnr(12), giua, vien)
             for k, m in enumerate(t["mon"]):
-                for c in (6 + 2 * k, 7 + 2 * k):
+                for c in (b0 + 2 * k, b0 + 1 + 2 * k):
                     x = _o(rr, c, None, tnr(12), giua, vien)
                     if m not in thi:   # không thi môn này -> gạch chéo
                         x.fill = gach
@@ -1148,7 +1164,7 @@ def xuat_mau_phong(trang: list[dict], ten_truong: str = "", ten_ky_thi: str = ""
     ws.page_margins.top, ws.page_margins.bottom = 0.5118110236220472, 0.2362204724409449
     buf = io.BytesIO()
     wb.save(buf)
-    return _ve_duong_ke(buf.getvalue(), dong_dau)
+    return _ve_duong_ke(buf.getvalue(), dong_dau, b0 - 6)
 
 
 # ---------------------------------------------------------------------
@@ -1221,9 +1237,12 @@ def xuat_so_do(trang: list[dict], so_cot: int = 4, ten_truong: str = "", ten_ky_
         for hang in luoi_cho_ngoi(t["hs"], so_cot):
             for k, o in enumerate(hang):
                 c = 2 + 2 * k
-                gia_tri = ([str(o[0]), str(o[1]), f"{o[2]} · " + " - ".join(_TEN_NGAN.get(m, m) for m in t["mon"]
-                                                                            if m in o[3])]
-                           if o else ["", "", ""])
+                if o and len(o) > 4:   # môn tự chọn: ghi rõ môn ca 1 / ca 2
+                    dong3 = (f"{o[2]} · Ca 1: {_TEN_NGAN.get(o[4][0], o[4][0])} · Ca 2: "
+                             + " + ".join(_TEN_NGAN.get(m, m) for m in str(o[4][1]).split(" + ") if m))
+                elif o:
+                    dong3 = f"{o[2]} · " + " - ".join(_TEN_NGAN.get(m, m) for m in t["mon"] if m in o[3])
+                gia_tri = [str(o[0]), str(o[1]), dong3] if o else ["", "", ""]
                 if not hien_ten:
                     gia_tri = [gia_tri[0], gia_tri[2]]
                 for j in range(so_dong_o):
