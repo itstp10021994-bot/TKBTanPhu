@@ -1204,7 +1204,7 @@ def luoi_cho_ngoi(hs: list, so_cot: int) -> list[list]:
 def xuat_so_do(trang: list[dict], so_cot: int = 4, ten_truong: str = "", ten_ky_thi: str = "", don_vi: str = "",
                hien_ten: bool = False) -> bytes:
     """Sơ đồ chỗ ngồi để in: mỗi phòng 1 trang A4 — tiêu ngữ, SƠ ĐỒ CHỖ NGỒI, kỳ thi, phòng, môn; dải
-    BẢNG / BÀN GIÁM THỊ; lưới chỗ ngồi (mỗi ô: SBD, [họ tên], lớp · môn) theo thứ tự SBD."""
+    BẢNG / BÀN GIÁM THỊ; lưới chỗ ngồi — mỗi ô CHỈ ghi số báo danh, theo thứ tự SBD. hien_ten: không dùng."""
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter as cot
@@ -1254,30 +1254,16 @@ def xuat_so_do(trang: list[dict], so_cot: int = 4, ten_truong: str = "", ten_ky_
         x.fill = PatternFill("solid", fgColor="FF22385E")
         ws.row_dimensions[rb].height = 22
         rr = rb + 2
-        so_dong_o = 3 if hien_ten else 2
-        for hang in luoi_cho_ngoi(t["hs"], so_cot):
+        for hang in luoi_cho_ngoi(t["hs"], so_cot):   # mỗi ô CHỈ ghi số báo danh
             for k, o in enumerate(hang):
-                c = 2 + 2 * k
-                if o and len(o) > 4:   # môn tự chọn: ghi rõ môn ca 1 / ca 2
-                    dong3 = (f"{o[2]} · Ca 1: {_TEN_NGAN.get(o[4][0], o[4][0])} · Ca 2: "
-                             + " + ".join(_TEN_NGAN.get(m, m) for m in str(o[4][1]).split(" + ") if m))
-                elif o:
-                    dong3 = f"{o[2]} · " + " - ".join(_TEN_NGAN.get(m, m) for m in t["mon"] if m in o[3])
-                gia_tri = [str(o[0]), str(o[1]), dong3] if o else ["", "", ""]
-                if not hien_ten:
-                    gia_tri = [gia_tri[0], gia_tri[2]]
-                for j in range(so_dong_o):
-                    x = ws.cell(rr + j, c, gia_tri[j] if o else None)
-                    x.alignment = giua
-                    x.font = tnr(14, True) if j == 0 else tnr(10)
-                    x.border = Border(left=mong, right=mong, top=mong if j == 0 else None,
-                                      bottom=mong if j == so_dong_o - 1 else None)
-                    if o:
-                        x.fill = nen_ghe
-            for j in range(so_dong_o):
-                ws.row_dimensions[rr + j].height = 22 if j == 0 else 16
-            ws.row_dimensions[rr + so_dong_o].height = 8   # lối đi giữa các hàng
-            rr += so_dong_o + 1
+                x = ws.cell(rr, 2 + 2 * k, str(o[0]) if o else None)
+                x.alignment, x.font = giua, tnr(16, True)
+                x.border = Border(left=mong, right=mong, top=mong, bottom=mong)
+                if o:
+                    x.fill = nen_ghe
+            ws.row_dimensions[rr].height = 34
+            ws.row_dimensions[rr + 1].height = 10   # lối đi giữa các hàng
+            rr += 2
         ws.cell(rr, 2, f"Tổng: {len(t['hs'])} thí sinh  ·  xếp theo số báo danh, từ trái sang phải, hàng gần bảng trước"
                 ).font = tnr(10, i=True)
         ws.row_breaks.append(Break(id=rr + 1))

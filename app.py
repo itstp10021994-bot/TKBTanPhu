@@ -784,25 +784,13 @@ def ve_so_do_cho_ngoi_html(hang_ghe: list[list]) -> str:
     )
 
 
-def ve_so_do_tn_html(trang_phong: dict, so_cot: int, hien_ten: bool) -> str:
-    """Sơ đồ chỗ ngồi 1 phòng thi tốt nghiệp (theo SBD): mỗi ô SBD, [họ tên], lớp · môn."""
+def ve_so_do_tn_html(trang_phong: dict, so_cot: int, hien_ten: bool = False) -> str:
+    """Sơ đồ chỗ ngồi 1 phòng thi tốt nghiệp (theo SBD) — mỗi ô CHỈ ghi số báo danh."""
     hang_html = []
     for hang in tn.luoi_cho_ngoi(trang_phong["hs"], so_cot):
-        o_html = []
-        for o in hang:
-            if o is None:
-                o_html.append('<div class="seat tn empty"></div>')
-                continue
-            if len(o) > 4:   # môn tự chọn: ghi rõ môn ca 1 / ca 2
-                mon = (f"Ca 1: {tn._TEN_NGAN.get(o[4][0], o[4][0])} · Ca 2: "
-                       + " + ".join(tn._TEN_NGAN.get(m, m) for m in str(o[4][1]).split(" + ") if m))
-            else:
-                mon = " - ".join(tn._TEN_NGAN.get(m, m) for m in trang_phong["mon"] if m in o[3])
-            o_html.append(
-                '<div class="seat tn filled">'
-                f'<div class="seat-sbd">{html.escape(str(o[0]))}</div>'
-                + (f'<div class="seat-sub"><b>{html.escape(str(o[1]))}</b></div>' if hien_ten else "")
-                + f'<div class="seat-sub">{html.escape(str(o[2]))} · {html.escape(mon)}</div></div>')
+        o_html = [('<div class="seat empty"></div>' if o is None else
+                   f'<div class="seat filled"><div class="seat-sbd">{html.escape(str(o[0]))}</div></div>')
+                  for o in hang]
         hang_html.append(f'<div class="seat-row">{"".join(o_html)}</div>')
     return ('<div class="seating-chart"><div class="board-label">BẢNG · BÀN GIÁM THỊ</div>'
             + "".join(hang_html) + "</div>")
@@ -824,9 +812,9 @@ def _xem_phong_tn(kq: dict, trang: list[dict], khoa: str):
     with t_sd:
         tp = next((t for t in trang if t["phong"] == p_chon), None)
         if tp:
-            st.markdown(ve_so_do_tn_html(tp, int(ss.get("tn_so_cot", 4)), bool(ss.get("tn_so_do_ten"))),
+            st.markdown(ve_so_do_tn_html(tp, int(ss.get("tn_so_cot", 4))),
                         unsafe_allow_html=True)
-            st.caption("Xếp theo số báo danh, trái → phải, hàng gần bảng trước. Đổi số dãy bàn / hiện họ tên ở "
+            st.caption("Xếp theo số báo danh, trái → phải, hàng gần bảng trước. Đổi số dãy bàn ở "
                        "bước ②; in ở bước ⑤.")
 
 
@@ -2503,13 +2491,8 @@ def _buoc_thiet_lap():
             st.number_input("Sức chứa 1 phòng (khi tự tạo phòng)", 1, 60, step=1, key="tn_suc_chua")
         with the_khung():
             section_header("2d", "Sơ đồ chỗ ngồi", "Học sinh ngồi theo số báo danh, trái → phải, hàng gần bảng trước.")
-            a, b = st.columns(2)
-            with a:
-                st.number_input("Số dãy bàn (cột) mỗi phòng", 1, 8, step=1, key="tn_so_cot",
-                                help="VD phòng 24 chỗ, 4 dãy → 6 hàng.")
-            with b:
-                st.toggle("Hiện họ tên trên sơ đồ", key="tn_so_do_ten",
-                          help="Tắt: chỉ SBD, lớp, môn (dán cửa phòng). Bật: thêm họ tên (cho giám thị).")
+            st.number_input("Số dãy bàn (cột) mỗi phòng", 1, 8, step=1, key="tn_so_cot",
+                            help="VD phòng 24 chỗ, 4 dãy → 6 hàng. Mỗi ô trên sơ đồ chỉ ghi số báo danh.")
     with c2:
         with the_khung():
             section_header("2c", "Tiêu ngữ trên danh sách in",
@@ -2566,9 +2549,9 @@ def _buoc_xuat(kq_tc, kq_tv):
     with the_khung():
         section_header("5c", "Sơ đồ chỗ ngồi (in)",
                        "Mỗi phòng 1 trang A4: tiêu ngữ, phòng, môn, dải BẢNG · BÀN GIÁM THỊ và lưới chỗ ngồi theo SBD. "
-                       "Số dãy bàn / hiện họ tên chỉnh ở bước ②.")
+                       "Mỗi ô chỉ ghi số báo danh; số dãy bàn chỉnh ở bước ②.")
         z1, z2 = st.columns(2)
-        _sd = dict(so_cot=int(ss.get("tn_so_cot", 4)), hien_ten=bool(ss.get("tn_so_do_ten")))
+        _sd = dict(so_cot=int(ss.get("tn_so_cot", 4)))
         _td = _tieu_de_mau()
         _td = dict(ten_truong=_td[0], ten_ky_thi=_td[1], don_vi=_td[2])
         with z1:
