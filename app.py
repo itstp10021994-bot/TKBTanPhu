@@ -793,7 +793,11 @@ def ve_so_do_tn_html(trang_phong: dict, so_cot: int, hien_ten: bool) -> str:
             if o is None:
                 o_html.append('<div class="seat tn empty"></div>')
                 continue
-            mon = " - ".join(tn._TEN_NGAN.get(m, m) for m in trang_phong["mon"] if m in o[3])
+            if len(o) > 4:   # môn tự chọn: ghi rõ môn ca 1 / ca 2
+                mon = (f"Ca 1: {tn._TEN_NGAN.get(o[4][0], o[4][0])} · Ca 2: "
+                       + " + ".join(tn._TEN_NGAN.get(m, m) for m in str(o[4][1]).split(" + ") if m))
+            else:
+                mon = " - ".join(tn._TEN_NGAN.get(m, m) for m in trang_phong["mon"] if m in o[3])
             o_html.append(
                 '<div class="seat tn filled">'
                 f'<div class="seat-sbd">{html.escape(str(o[0]))}</div>'
@@ -807,7 +811,8 @@ def ve_so_do_tn_html(trang_phong: dict, so_cot: int, hien_ten: bool) -> str:
 def _xem_phong_tn(kq: dict, trang: list[dict], khoa: str):
     """Chọn 1 phòng: tab Danh sách + tab Sơ đồ chỗ ngồi; '(tất cả)': danh sách toàn bộ."""
     ss = st.session_state
-    hs, phong = kq["hoc_sinh"], kq["phong"]
+    hs = kq["hoc_sinh"].rename(columns={"Môn 1": "Môn 1 (ca 1)", "Môn 2": "Môn 2 (ca 2)"})
+    phong = kq["phong"]
     p_chon = st.selectbox("Xem phòng", ["(tất cả)"] + phong["Phòng"].tolist(), key=khoa)
     if p_chon == "(tất cả)":
         st.dataframe(hs, width="stretch", hide_index=True, height=360)

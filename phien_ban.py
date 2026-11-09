@@ -1,10 +1,14 @@
 """Phiên bản ứng dụng — TĂNG mỗi lần cập nhật (x.y.z: x đổi lớn, y thêm tính năng, z sửa lỗi)
 và ghi 1 dòng vào LICH_SU (mới nhất ở đầu). Hiện ở cuối thanh bên + mục "Có gì mới"."""
 
-PHIEN_BAN = "2.2.0"
+PHIEN_BAN = "2.3.0"
 NGAY_PHAT_HANH = "09/11/2026"
 
 LICH_SU = [
+    ("2.3.0", "09/11/2026", [
+        "Thi tốt nghiệp — danh sách phòng môn tự chọn ghi rõ từng em: cột Môn 1 (ca 1), Môn 2 (ca 2); tiêu đề "
+        "cột môn ghi kèm ca; sơ đồ chỗ ngồi ghi 'Ca 1: …  Ca 2: …'.",
+    ]),
     ("2.2.0", "09/11/2026", [
         "Thi tốt nghiệp: danh sách theo lớp — SBD và phòng thi cả 4 môn (Ngữ văn, Toán, 2 môn tự chọn); "
         "xem theo lớp trên app, Excel có sheet toàn trường + mỗi lớp 1 sheet.",
